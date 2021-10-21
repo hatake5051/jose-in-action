@@ -1,46 +1,85 @@
 'use strict';
 
-// -------------------------------- utility function
-function UTF8(STRING) {
-    const encoder = new TextEncoder();
-    return encoder.encode(STRING);
-}
-function UTF8_DECODE(OCTETS) {
-    const decoder = new TextDecoder();
-    return decoder.decode(OCTETS);
-}
-function BASE64URL(OCTETS) {
-    // window 組み込みの base64 encode 関数
-    // 組み込みの関数は引数としてバイナリ文字列を要求するため
-    // Uint8Array をバイナリ文字列へと変換する
-    const b_str = String.fromCharCode(...OCTETS);
-    const base64_encode = window.btoa(b_str);
-    return base64_encode
-        // 文字「+」は全て「-」へ変換する
-        .replaceAll("+", "-")
-        // 文字「/」は全て「_」へ変換する
-        .replaceAll("/", "_")
-        // 4の倍数にするためのパディング文字は全て消去
-        .replaceAll("=", "");
-}
-function BASE64URL_DECODE(STRING) {
-    const url_decode = STRING
-        // URL-safe にするために変換した文字たちを戻す
-        .replaceAll("-", "+")
-        .replaceAll("_", "/")
-        // 文字列長が4の倍数になるように padding文字で埋める
-        .padEnd(Math.ceil(STRING.length / 4) * 4, "=");
-    // window 組み込みの base64 decode 関数
-    // この関数はデコードの結果をバイナリ文字列として出力する
-    const b_str = window.atob(url_decode);
-    // バイナリ文字列を Uint8Array に変換する
-    const b = new Uint8Array(b_str.length);
-    for (let i = 0; i < b_str.length; i++) {
-        b[i] = b_str.charCodeAt(i);
+const isCommonJWKParams = (arg) => {
+    if (typeof arg !== 'object')
+        return false;
+    if (arg == null)
+        return false;
+    return 'kty' in arg;
+};
+
+const rsaPublicKeyParams = ['n', 'e'];
+const isRSAPublicKey = (arg) => {
+    if (!isCommonJWKParams(arg) || arg.kty !== 'RSA')
+        return false;
+    return rsaPublicKeyParams.every((s) => s in arg);
+};
+const isRSAPrivateKey = (arg) => {
+    if (!isCommonJWKParams(arg) || arg.kty !== 'RSA')
+        return false;
+    return 'd' in arg;
+};
+
+async function test() {
+    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
+    const urlList = [
+        '3_1.ec_public_key.json',
+        '3_2.ec_private_key.json',
+        '3_3.rsa_public_key.json',
+        '3_4.rsa_private_key.json',
+        '3_5.symmetric_key_mac_computation.json',
+        '3_6.symmetric_key_encryption.json',
+    ];
+    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
+    let allGreen = true;
+    let log = 'RSA鍵かどうか判定します。\n';
+    for (const path of urlList) {
+        log += `TEST NAME: ${path}: `;
+        const data = await fetchData(path);
+        if (!path.includes('rsa')) {
+            if (!isCommonJWKParams(data)) {
+                log += 'JWK鍵と判定できていない\n';
+                allGreen = false;
+            }
+            else if (isRSAPublicKey(data) || isRSAPrivateKey(data)) {
+                log += 'RSA鍵ではないはずが、RSA鍵だと識別されている。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'RSA鍵ではないと判定できた(OK)\n';
+            }
+        }
+        else if (path === '3_3.rsa_public_key.json') {
+            if (!isRSAPublicKey(data)) {
+                console.log(data);
+                log += 'RSA公開鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'RSA公開鍵と判定できた(OK)\n';
+            }
+            continue;
+        }
+        else if (path === '3_4.rsa_private_key.json') {
+            if (!isRSAPrivateKey(data)) {
+                log += 'RSA秘密鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'RSA秘密鍵と判定できた(OK)\n';
+            }
+        }
+        else {
+            log += '想定していないテストケース';
+            allGreen = false;
+        }
     }
-    return b;
+    return { log, allGreen };
 }
 
 // ------------------------------------ entry point
-const header = { alg: 'HS256', typ: 'JWT' };
-console.log(UTF8_DECODE(BASE64URL_DECODE(BASE64URL(UTF8(JSON.stringify(header))))));
+(async () => {
+    const { log, allGreen } = await test();
+    console.log(allGreen);
+    console.log(log);
+})();
