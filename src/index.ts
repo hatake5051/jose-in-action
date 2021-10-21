@@ -1,4 +1,4 @@
-import { test } from './jwk/rsa.test';
+import { test } from './jwk/ec.test';
 
 // ------------------------------------ entry point
 (async () => {

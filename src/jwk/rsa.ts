@@ -69,12 +69,10 @@ const isRSAPublicKey = (arg: unknown): arg is RSAPublicKey => {
   if (!isCommonJWKParams(arg) || arg.kty !== 'RSA') return false;
   return rsaPublicKeyParams.every((s) => s in arg);
 };
-type RSAPrivateKey = CommomJWKParams<'RSA'> &
-  Partial<RSAPrivateKeyParams> &
-  RSAPrivateKeyParams;
+type RSAPrivateKey = RSAPublicKey & RSAPrivateKeyParams;
 
 const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey => {
-  if (!isCommonJWKParams(arg) || arg.kty !== 'RSA') return false;
+  if (!isRSAPublicKey(arg)) return false;
   return 'd' in arg;
 };
 

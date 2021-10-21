@@ -12,6 +12,20 @@ type KeyUse = 'sig' | 'enc';
 /**
  * JSON Web Key Operations を列挙する。
  */
-type KeyOps = 'sign' | 'verify' | 'encrypt' | 'decrypt' | 'wrapKey' | 'unwrapKey' | 'deriveKey' | 'deriveBits';
+type KeyOps =
+  | 'sign'
+  | 'verify'
+  | 'encrypt'
+  | 'decrypt'
+  | 'wrapKey'
+  | 'unwrapKey'
+  | 'deriveKey'
+  | 'deriveBits';
 
-export { Kty, KeyUse, KeyOps };
+/**
+ * JSON Web Key Elliptic Curve を列挙する。
+ * Ed25519, Ed448, X25519, X448, secp256k1 は未実装である。
+ */
+type Crv = 'P-256' | 'P-384' | 'P-521';
+
+export { Kty, KeyUse, KeyOps, Crv };
