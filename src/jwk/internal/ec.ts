@@ -1,5 +1,5 @@
-import { Crv } from '../iana';
-import { BASE64URL_DECODE } from '../util';
+import { Crv } from '../../iana';
+import { BASE64URL_DECODE } from '../../util';
 import { CommomJWKParams, isCommonJWKParams } from './common';
 
 /**

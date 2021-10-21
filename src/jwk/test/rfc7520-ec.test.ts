@@ -1,7 +1,10 @@
-import { isCommonJWKParams } from './common';
-import { isECPrivateKey, isECPublicKey } from './ec';
+import { isJWK, isJWKPriv, isJWKPub } from '../index';
 
-async function test(): Promise<{ log: string; allGreen: boolean }> {
+async function test(): Promise<{
+  title: string;
+  log: string;
+  allGreen: boolean;
+}> {
   const baseURL =
     'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
   const urlList = [
@@ -16,23 +19,23 @@ async function test(): Promise<{ log: string; allGreen: boolean }> {
   const fetchData = async (path: string): Promise<unknown> =>
     await (await fetch(baseURL + path)).json();
   let allGreen = true;
-  let log = 'EC鍵かどうか判定します。\n';
+  const title = 'RFC7520#3 check EC key;';
+  let log = '';
   for (const path of urlList) {
     log += `TEST NAME: ${path}: `;
     const data = await fetchData(path);
     if (!path.includes('ec')) {
-      if (!isCommonJWKParams(data)) {
+      if (!isJWK(data)) {
         log += 'JWK鍵と判定できていない\n';
         allGreen = false;
-      } else if (isECPublicKey(data) || isECPrivateKey(data)) {
+      } else if (isJWKPub('EC', data) || isJWKPriv('EC', data)) {
         log += 'EC鍵ではないはずが、EC鍵だと識別されている。\n';
         allGreen = false;
       } else {
         log += 'EC鍵ではないと判定できた(OK)\n';
       }
     } else if (path === '3_1.ec_public_key.json') {
-      if (!isECPublicKey(data)) {
-        console.log(data);
+      if (!isJWKPub('EC', data)) {
         log += 'EC公開鍵の判定に失敗。\n';
         allGreen = false;
       } else {
@@ -40,7 +43,7 @@ async function test(): Promise<{ log: string; allGreen: boolean }> {
       }
       continue;
     } else if (path === '3_2.ec_private_key.json') {
-      if (!isECPrivateKey(data)) {
+      if (!isJWKPriv('EC', data)) {
         log += 'EC秘密鍵の判定に失敗。\n';
         allGreen = false;
       } else {
@@ -51,7 +54,7 @@ async function test(): Promise<{ log: string; allGreen: boolean }> {
       allGreen = false;
     }
   }
-  return { log, allGreen };
+  return { title, log, allGreen };
 }
 
 export { test };

@@ -3,6 +3,8 @@
  * 'OKP' は未実装である。
  */
 type Kty = 'EC' | 'RSA' | 'oct';
+type KtySym = 'oct';
+type KtyAsym = 'EC' | 'RSA';
 
 /**
  * KeyUse は JSON Web Key Use を列挙する。
@@ -28,4 +30,4 @@ type KeyOps =
  */
 type Crv = 'P-256' | 'P-384' | 'P-521';
 
-export { Kty, KeyUse, KeyOps, Crv };
+export { Kty, KtySym, KtyAsym, KeyUse, KeyOps, Crv };

@@ -1,10 +1,4 @@
-import { KeyOps, KeyUse, Kty } from '../iana';
-
-/**
- * RFC7517#4
- * JSON Web Key は暗号鍵を表現する JSON オブジェクト。
- */
-type JWK<K extends Kty> = CommomJWKParams<K>;
+import { KeyOps, KeyUse, Kty } from '../../iana';
 
 type CommomJWKParams<K extends Kty> = {
   /**
@@ -78,25 +72,6 @@ const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams<Kty> => {
   if (typeof arg !== 'object') return false;
   if (arg == null) return false;
   return 'kty' in arg;
-};
-
-/**
- * RFC7517#5
- * JWK Set は複数の JWK を表現する JSON オブジェクトである。
- */
-type JWKSet = {
-  /**
-   * RFC7517#5.1
-   * keys parameter は JWK の配列を値としてもつ。
-   * デフォルトでは、 JWK の順序は鍵の優先順位を表していないが、アプリケーションによっては持たせても良い。
-   */
-  keys: JWK<Kty>[];
-};
-
-const isJWKSet = (arg: unknown): arg is JWKSet => {
-  if (typeof arg !== 'object') return false;
-  if (arg == null) return false;
-  return 'keys' in arg && Array.isArray((arg as JWKSet).keys);
 };
 
 export { CommomJWKParams, isCommonJWKParams };

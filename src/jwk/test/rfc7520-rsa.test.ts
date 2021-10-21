@@ -1,7 +1,10 @@
-import { isCommonJWKParams } from './common';
-import { isOctKey } from './oct';
+import { isJWK, isJWKPriv, isJWKPub } from '../index';
 
-async function test(): Promise<{ log: string; allGreen: boolean }> {
+async function test(): Promise<{
+  title: string;
+  log: string;
+  allGreen: boolean;
+}> {
   const baseURL =
     'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
   const urlList = [
@@ -16,42 +19,42 @@ async function test(): Promise<{ log: string; allGreen: boolean }> {
   const fetchData = async (path: string): Promise<unknown> =>
     await (await fetch(baseURL + path)).json();
   let allGreen = true;
-  let log = '対称鍵かどうか判定します。\n';
+  const title = 'RFC7520#3 check RSA key;';
+  let log = '';
   for (const path of urlList) {
     log += `TEST NAME: ${path}: `;
     const data = await fetchData(path);
-    if (!path.includes('symmetric_key')) {
-      if (!isCommonJWKParams(data)) {
+    if (!path.includes('rsa')) {
+      if (!isJWK(data)) {
         log += 'JWK鍵と判定できていない\n';
         allGreen = false;
-      } else if (isOctKey(data)) {
-        log += 'oct鍵ではないはずが、oct鍵だと識別されている。\n';
+      } else if (isJWKPub('RSA', data) || isJWKPriv('RSA', data)) {
+        log += 'RSA鍵ではないはずが、RSA鍵だと識別されている。\n';
         allGreen = false;
       } else {
-        log += 'oct鍵ではないと判定できた(OK)\n';
+        log += 'RSA鍵ではないと判定できた(OK)\n';
       }
-    } else if (path === '3_5.symmetric_key_mac_computation.json') {
-      if (!isOctKey(data)) {
-        console.log(data);
-        log += 'oct鍵の判定に失敗。\n';
+    } else if (path === '3_3.rsa_public_key.json') {
+      if (!isJWKPub('RSA', data)) {
+        log += 'RSA公開鍵の判定に失敗。\n';
         allGreen = false;
       } else {
-        log += 'oct鍵と判定できた(OK)\n';
+        log += 'RSA公開鍵と判定できた(OK)\n';
       }
       continue;
-    } else if (path === '3_6.symmetric_key_encryption.json') {
-      if (!isOctKey(data)) {
-        log += 'oct鍵の判定に失敗。\n';
+    } else if (path === '3_4.rsa_private_key.json') {
+      if (!isJWKPriv('RSA', data)) {
+        log += 'RSA秘密鍵の判定に失敗。\n';
         allGreen = false;
       } else {
-        log += 'oct鍵と判定できた(OK)\n';
+        log += 'RSA秘密鍵と判定できた(OK)\n';
       }
     } else {
       log += '想定していないテストケース';
       allGreen = false;
     }
   }
-  return { log, allGreen };
+  return { title, log, allGreen };
 }
 
 export { test };
