@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "es6",
+    "strict": true,
+    "outDir": "./build",
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "mode_modules"
+  ],
+}
