@@ -1,4 +1,4 @@
-import { test } from './jwk/ec.test';
+import { test } from './jwk/oct.test';
 
 // ------------------------------------ entry point
 (async () => {
