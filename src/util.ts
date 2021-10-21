@@ -1,4 +1,3 @@
-
 // -------------------------------- utility function
 
 export function UTF8(STRING: string) {
@@ -25,23 +24,24 @@ export function BASE64URL(OCTETS: Uint8Array) {
   // Uint8Array をバイナリ文字列へと変換する
   const b_str = String.fromCharCode(...OCTETS);
   const base64_encode = window.btoa(b_str);
-  return base64_encode
-    // 文字「+」は全て「-」へ変換する
-    .replaceAll("+", "-")
-    // 文字「/」は全て「_」へ変換する
-    .replaceAll("/", "_")
-    // 4の倍数にするためのパディング文字は全て消去
-    .replaceAll("=", "");
+  return (
+    base64_encode
+      // 文字「+」は全て「-」へ変換する
+      .replaceAll('+', '-')
+      // 文字「/」は全て「_」へ変換する
+      .replaceAll('/', '_')
+      // 4の倍数にするためのパディング文字は全て消去
+      .replaceAll('=', '')
+  );
 }
-
 
 export function BASE64URL_DECODE(STRING: string) {
   const url_decode = STRING
     // URL-safe にするために変換した文字たちを戻す
-    .replaceAll("-", "+")
-    .replaceAll("_", "/")
+    .replaceAll('-', '+')
+    .replaceAll('_', '/')
     // 文字列長が4の倍数になるように padding文字で埋める
-    .padEnd(Math.ceil(STRING.length / 4) * 4, "=");
+    .padEnd(Math.ceil(STRING.length / 4) * 4, '=');
   // window 組み込みの base64 decode 関数
   // この関数はデコードの結果をバイナリ文字列として出力する
   const b_str = window.atob(url_decode);
@@ -52,7 +52,6 @@ export function BASE64URL_DECODE(STRING: string) {
   }
   return b;
 }
-
 
 export function CONCAT(A: Uint8Array, B: Uint8Array) {
   const ans = new Uint8Array(A.length + B.length);
