@@ -2,7 +2,14 @@
  * Kty は JSON Web Key Types を列挙する。
  * 'OKP' は未実装である。
  */
-type Kty = 'EC' | 'RSA' | 'oct';
+const ktyList = ['EC', 'RSA', 'oct'] as const;
+type Kty = typeof ktyList[number];
+const isKty = (arg: unknown): arg is Kty => {
+  if (typeof arg == 'string') {
+    return ktyList.some((k) => k === arg);
+  }
+  return false;
+};
 type KtySym = 'oct';
 type KtyAsym = 'EC' | 'RSA';
 
@@ -30,4 +37,4 @@ type KeyOps =
  */
 type Crv = 'P-256' | 'P-384' | 'P-521';
 
-export { Kty, KtySym, KtyAsym, KeyUse, KeyOps, Crv };
+export { Kty, isKty, KtySym, KtyAsym, KeyUse, KeyOps, Crv };

@@ -13,6 +13,10 @@ import {
   RSAPrivateKey,
   RSAPublicKey,
 } from './internal/rsa';
+import {
+  parseX509BASE64EncodedDER,
+  validateSelfSignedCert,
+} from './internal/x509';
 
 export {
   JWK,
@@ -25,6 +29,7 @@ export {
   isJWKSym,
   isJWKPub,
   isJWKPriv,
+  validX5CinJWKPub,
 };
 
 /**
@@ -58,6 +63,46 @@ const isJWKPub = <K extends KtyAsym>(
       return isRSAPublicKey(arg);
   }
 };
+
+async function validX5CinJWKPub<K extends KtyAsym>(
+  jwk: JWKPub<K>
+): Promise<boolean> {
+  if (jwk.x5c == null) return true;
+  if (jwk.x5c.length > 1)
+    throw EvalError(
+      '証明書チェーンが１の長さで、かつ自己署名の場合のみ実装している'
+    );
+  const crt = parseX509BASE64EncodedDER(jwk.x5c[0]);
+  if (!(await validateSelfSignedCert(crt))) {
+    return false;
+  }
+  // X.509 crt と jwk の値の比較をする
+  if (jwk.kty === 'RSA') {
+    let keyAlg;
+    if (crt.sigAlg.join('.') === '1.2.840.113549.1.1.5') {
+      // sha1-with-rsa-signature とか sha1WithRSAEncryption
+      keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' };
+    } else if (crt.sigAlg.join('.') === '1.2.840.113549.1.1.11') {
+      // sha256WithRSAEncryption
+      keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
+    } else {
+      throw EvalError(`validateSelfSignedCert の実装よりここには到達しない`);
+    }
+    const pubkey = await window.crypto.subtle.importKey(
+      'spki',
+      crt.tbs.spki,
+      keyAlg,
+      true,
+      ['verify']
+    );
+    const crt_jwk = await window.crypto.subtle.exportKey('jwk', pubkey);
+    return jwk.n === crt_jwk.n && jwk.e === crt_jwk.e;
+  }
+  if (jwk.kty === 'EC') {
+    throw EvalError(`EC鍵を持つ x509crt の検証は未実装`);
+  }
+  return false;
+}
 
 type JWKPriv<K extends KtyAsym> = K extends 'EC'
   ? ECPrivateKey

@@ -1,4 +1,4 @@
-import { KeyOps, KeyUse, Kty } from '../../iana';
+import { isKty, KeyOps, KeyUse, Kty } from '../../iana';
 
 type CommomJWKParams<K extends Kty> = {
   /**
@@ -37,6 +37,7 @@ type CommomJWKParams<K extends Kty> = {
   /**
    * RFC7517#4.6
    * X.509 URL parameter は X.509 公開鍵証明書もしくは証明書チェーンのリソースを参照する URI である。
+   * 使われている例を見たことがない...
    */
   x5u?: string;
   /**
@@ -69,9 +70,11 @@ const commonJWKParams = [
 ];
 
 const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams<Kty> => {
-  if (typeof arg !== 'object') return false;
-  if (arg == null) return false;
-  return 'kty' in arg;
+  if (typeof arg !== 'object' || arg == null) return false;
+  if ('kty' in arg) {
+    return isKty((arg as { kty: unknown }).kty);
+  }
+  return false;
 };
 
 export { CommomJWKParams, isCommonJWKParams };
