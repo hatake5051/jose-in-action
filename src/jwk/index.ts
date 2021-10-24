@@ -1,22 +1,11 @@
+// --------------------BEGIN JWK definition --------------------
+
 import { Kty } from '../iana';
 import { isCommonJWKParams } from './internal/common';
-import {
-  ECPrivateKey,
-  ECPublicKey,
-  isECPrivateKey,
-  isECPublicKey,
-} from './internal/ec';
+import { ECPrivateKey, ECPublicKey, isECPrivateKey, isECPublicKey } from './internal/ec';
 import { isOctKey, octKey } from './internal/oct';
-import {
-  isRSAPrivateKey,
-  isRSAPublicKey,
-  RSAPrivateKey,
-  RSAPublicKey,
-} from './internal/rsa';
-import {
-  parseX509BASE64EncodedDER,
-  validateSelfSignedCert,
-} from './internal/x509';
+import { isRSAPrivateKey, isRSAPublicKey, RSAPrivateKey, RSAPublicKey } from './internal/rsa';
+import { parseX509BASE64EncodedDER, validateSelfSignedCert } from './internal/x509';
 
 export { JWK, JWKSet, isJWKSet, isJWK, validJWK };
 
@@ -64,8 +53,7 @@ function isJWK<K extends Kty, A extends AsymKty>(
       if (asym === 'Pub') return isECPublicKey(arg);
       return isECPrivateKey(arg);
     case 'RSA':
-      if (asym === undefined)
-        return isRSAPublicKey(arg) || isRSAPrivateKey(arg);
+      if (asym === undefined) return isRSAPublicKey(arg) || isRSAPrivateKey(arg);
       if (asym === 'Pub') return isRSAPublicKey(arg);
       return isRSAPrivateKey(arg);
     default:
@@ -127,14 +115,10 @@ async function validJWK<K extends Kty, A extends AsymKty>(
   return true;
 }
 
-async function validX5C<K extends Kty>(
-  jwk: JWK<K, 'Pub' | 'Priv'>
-): Promise<boolean> {
+async function validX5C<K extends Kty>(jwk: JWK<K, 'Pub' | 'Priv'>): Promise<boolean> {
   if (jwk.x5c == null) return true;
   if (jwk.x5c.length > 1)
-    throw EvalError(
-      '証明書チェーンが１の長さで、かつ自己署名の場合のみ実装している'
-    );
+    throw EvalError('証明書チェーンが１の長さで、かつ自己署名の場合のみ実装している');
   const crt = parseX509BASE64EncodedDER(jwk.x5c[0]);
   if (!(await validateSelfSignedCert(crt))) {
     return false;
@@ -151,13 +135,9 @@ async function validX5C<K extends Kty>(
     } else {
       throw EvalError(`validateSelfSignedCert の実装よりここには到達しない`);
     }
-    const pubkey = await window.crypto.subtle.importKey(
-      'spki',
-      crt.tbs.spki,
-      keyAlg,
-      true,
-      ['verify']
-    );
+    const pubkey = await window.crypto.subtle.importKey('spki', crt.tbs.spki, keyAlg, true, [
+      'verify',
+    ]);
     const crt_jwk = await window.crypto.subtle.exportKey('jwk', pubkey);
     return jwk.n === crt_jwk.n && jwk.e === crt_jwk.e;
   }
@@ -166,3 +146,5 @@ async function validX5C<K extends Kty>(
   }
   return false;
 }
+
+// --------------------END JWK definition --------------------

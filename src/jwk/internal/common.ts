@@ -1,4 +1,8 @@
+// --------------------BEGIN JWK common parameters --------------------
+
 import { isKty, KeyOps, KeyUse, Kty } from '../../iana';
+
+export { CommomJWKParams, isCommonJWKParams };
 
 type CommomJWKParams<K extends Kty> = {
   /**
@@ -57,17 +61,7 @@ type CommomJWKParams<K extends Kty> = {
    */
   'x5t#S256'?: string;
 };
-const commonJWKParams = [
-  'kty',
-  'use',
-  'key_ops',
-  'alg',
-  'kid',
-  'x5u',
-  'x5c',
-  'x5t',
-  'x5t#S256',
-];
+const commonJWKParams = ['kty', 'use', 'key_ops', 'alg', 'kid', 'x5u', 'x5c', 'x5t', 'x5t#S256'];
 
 const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams<Kty> => {
   if (typeof arg !== 'object' || arg == null) return false;
@@ -77,4 +71,4 @@ const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams<Kty> => {
   return false;
 };
 
-export { CommomJWKParams, isCommonJWKParams };
+// --------------------END JWK common parameters --------------------

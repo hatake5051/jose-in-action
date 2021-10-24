@@ -1,4 +1,8 @@
+// --------------------BEGIN JWK oct parameters --------------------
+
 import { CommomJWKParams, isCommonJWKParams } from './common';
+
+export { octKey, isOctKey };
 
 /**
  * RFC7518#6.4
@@ -20,4 +24,4 @@ const isOctKey = (arg: unknown): arg is octKey => {
   return 'k' in arg;
 };
 
-export { octKey, isOctKey };
+// --------------------END JWK oct parameters --------------------

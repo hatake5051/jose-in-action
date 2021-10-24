@@ -1,16 +1,25 @@
-// -------------------------------- utility function
+// --------------------BEGIN util functions --------------------
 
-export function UTF8(STRING: string) {
+/**
+ * 文字列を UTF8 バイトエンコードする。(string to Uint8Array)
+ */
+export function UTF8(STRING: string): Uint8Array {
   const encoder = new TextEncoder();
   return encoder.encode(STRING);
 }
 
-export function UTF8_DECODE(OCTETS: Uint8Array) {
+/**
+ * 文字列に UTF8 バイトデコードする (Uint8Array to string)
+ */
+export function UTF8_DECODE(OCTETS: Uint8Array): string {
   const decoder = new TextDecoder();
   return decoder.decode(OCTETS);
 }
 
-export function ASCII(STRING: string) {
+/**
+ * 文字列を ASCII バイトエンコードする。 (string to Uint8Array)
+ */
+export function ASCII(STRING: string): Uint8Array {
   const b = new Uint8Array(STRING.length);
   for (let i = 0; i < STRING.length; i++) {
     b[i] = STRING.charCodeAt(i);
@@ -18,7 +27,10 @@ export function ASCII(STRING: string) {
   return b;
 }
 
-export function BASE64URL(OCTETS: Uint8Array) {
+/**
+ * バイト列を BASE64URL エンコードする (Uint8Array to string)
+ */
+export function BASE64URL(OCTETS: Uint8Array): string {
   // window 組み込みの base64 encode 関数
   // 組み込みの関数は引数としてバイナリ文字列を要求するため
   // Uint8Array をバイナリ文字列へと変換する
@@ -35,6 +47,9 @@ export function BASE64URL(OCTETS: Uint8Array) {
   );
 }
 
+/**
+ * バイト列に BASE64URL デコードする (string to Uint8Array)
+ */
 export function BASE64URL_DECODE(STRING: string) {
   const url_decode = STRING
     // URL-safe にするために変換した文字たちを戻す
@@ -53,9 +68,14 @@ export function BASE64URL_DECODE(STRING: string) {
   return b;
 }
 
+/**
+ * ２つのバイト列を結合する
+ */
 export function CONCAT(A: Uint8Array, B: Uint8Array) {
   const ans = new Uint8Array(A.length + B.length);
   ans.set(A);
   ans.set(B, A.length);
   return ans;
 }
+
+// --------------------END util functions --------------------

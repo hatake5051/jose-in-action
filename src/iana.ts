@@ -1,3 +1,7 @@
+// --------------------BEGIN iana constants --------------------
+
+export { Kty, isKty, KeyUse, KeyOps, Crv };
+
 /**
  * Kty は JSON Web Key Types を列挙する。
  * 'OKP' は未実装である。
@@ -10,8 +14,6 @@ const isKty = (arg: unknown): arg is Kty => {
   }
   return false;
 };
-type KtySym = 'oct';
-type KtyAsym = 'EC' | 'RSA';
 
 /**
  * KeyUse は JSON Web Key Use を列挙する。
@@ -37,4 +39,4 @@ type KeyOps =
  */
 type Crv = 'P-256' | 'P-384' | 'P-521';
 
-export { Kty, isKty, KtySym, KtyAsym, KeyUse, KeyOps, Crv };
+// --------------------END iana constants --------------------

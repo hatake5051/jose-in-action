@@ -1,6 +1,10 @@
+// --------------------BEGIN JWK EC parameters --------------------
+
 import { Crv } from '../../iana';
 import { BASE64URL_DECODE } from '../../util';
 import { CommomJWKParams, isCommonJWKParams } from './common';
+
+export { ECPublicKey, isECPublicKey, ECPrivateKey, isECPrivateKey };
 
 /**
  * RFC7518#6.2.1
@@ -43,10 +47,7 @@ function validECPublicKeyParams(p: ECPublicKeyParams): boolean {
       key_len = 66;
       break;
   }
-  return (
-    BASE64URL_DECODE(p.x).length === key_len &&
-    BASE64URL_DECODE(p.y).length === key_len
-  );
+  return BASE64URL_DECODE(p.x).length === key_len && BASE64URL_DECODE(p.y).length === key_len;
 }
 
 /**
@@ -96,4 +97,4 @@ const isECPrivateKey = (arg: unknown): arg is ECPrivateKey => {
   return validECPrivateKeyParams(crv, arg as ECPrivateKey);
 };
 
-export { ECPublicKey, isECPublicKey, ECPrivateKey, isECPrivateKey };
+// --------------------END JWK EC parameters --------------------

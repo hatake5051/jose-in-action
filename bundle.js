@@ -1,5 +1,6 @@
 'use strict';
 
+// --------------------BEGIN iana constants --------------------
 /**
  * Kty は JSON Web Key Types を列挙する。
  * 'OKP' は未実装である。
@@ -11,7 +12,9 @@ const isKty = (arg) => {
     }
     return false;
 };
+// --------------------END iana constants --------------------
 
+// --------------------BEGIN JWK common parameters --------------------
 const isCommonJWKParams = (arg) => {
     if (typeof arg !== 'object' || arg == null)
         return false;
@@ -20,8 +23,12 @@ const isCommonJWKParams = (arg) => {
     }
     return false;
 };
+// --------------------END JWK common parameters --------------------
 
-// -------------------------------- utility function
+// --------------------BEGIN util functions --------------------
+/**
+ * バイト列に BASE64URL デコードする (string to Uint8Array)
+ */
 function BASE64URL_DECODE(STRING) {
     const url_decode = STRING
         // URL-safe にするために変換した文字たちを戻す
@@ -39,7 +46,9 @@ function BASE64URL_DECODE(STRING) {
     }
     return b;
 }
+// --------------------END util functions --------------------
 
+// --------------------BEGIN JWK EC parameters --------------------
 const ecPublicKeyParams = ['crv', 'x', 'y'];
 function validECPublicKeyParams(p) {
     let key_len;
@@ -54,8 +63,7 @@ function validECPublicKeyParams(p) {
             key_len = 66;
             break;
     }
-    return (BASE64URL_DECODE(p.x).length === key_len &&
-        BASE64URL_DECODE(p.y).length === key_len);
+    return BASE64URL_DECODE(p.x).length === key_len && BASE64URL_DECODE(p.y).length === key_len;
 }
 function validECPrivateKeyParams(crv, p) {
     let key_len;
@@ -87,13 +95,17 @@ const isECPrivateKey = (arg) => {
         return false;
     return validECPrivateKeyParams(crv, arg);
 };
+// --------------------END JWK EC parameters --------------------
 
+// --------------------BEGIN JWK oct parameters --------------------
 const isOctKey = (arg) => {
     if (!isCommonJWKParams(arg) || arg.kty !== 'oct')
         return false;
     return 'k' in arg;
 };
+// --------------------END JWK oct parameters --------------------
 
+// --------------------BEGIN JWK RSA parameters --------------------
 const rsaPublicKeyParams = ['n', 'e'];
 const isRSAPublicKey = (arg) => {
     if (!isCommonJWKParams(arg) || arg.kty !== 'RSA')
@@ -105,7 +117,9 @@ const isRSAPrivateKey = (arg) => {
         return false;
     return 'd' in arg;
 };
+// --------------------END JWK RSA parameters --------------------
 
+// --------------------BEGIN X.509 DER praser --------------------
 const TAG_SEQUENCE = 16;
 const TAG_BITSTRING = 3;
 const TAG_OBJECTIDENTIFIER = 6;
@@ -145,9 +159,7 @@ async function validateSelfSignedCert(crt) {
 }
 function parseX509DER(der_raw) {
     const der = DER_DECODE(der_raw);
-    if (der.class !== 'Universal' ||
-        der.pc !== 'Constructed' ||
-        der.tag !== TAG_SEQUENCE) {
+    if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
         throw EvalError('X509Cert DER フォーマットを満たしていない');
     }
     const tbs_der = DER_DECODE(der.value);
@@ -165,9 +177,7 @@ function parseX509DER(der_raw) {
  */
 function parseX509TBSCert(der) {
     // TBSCert は SEQUENCE で表される
-    if (der.class !== 'Universal' ||
-        der.pc !== 'Constructed' ||
-        der.tag !== TAG_SEQUENCE) {
+    if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
         throw EvalError('X509TBSCert DER フォーマットを満たしていない');
     }
     // 一番初めは Version
@@ -196,9 +206,7 @@ function parseX509TBSCert(der) {
  * DER で表現された BITString からバイナリを取り出す
  */
 function extractBytesFromBITSTRING(der) {
-    if (der.class !== 'Universal' ||
-        der.pc !== 'Primitive' ||
-        der.tag !== TAG_BITSTRING) {
+    if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_BITSTRING) {
         throw EvalError('BITSTRING ではない DER format を扱おうとしている');
     }
     const v = der.value;
@@ -206,9 +214,7 @@ function extractBytesFromBITSTRING(der) {
     if (v[0] === 0x00)
         return v.slice(1);
     // 先頭のオクテットが０でないときは、その数だけ padding 処理を行う
-    const contentWithPadEnd = v
-        .slice(1)
-        .reduce((sum, i) => sum + i.toString(2).padStart(8, '0'), '');
+    const contentWithPadEnd = v.slice(1).reduce((sum, i) => sum + i.toString(2).padStart(8, '0'), '');
     const content = contentWithPadEnd.slice(0, contentWithPadEnd.length - v[0]);
     const contentWithPadStart = '0'.repeat(v[0]) + content;
     const ans = new Uint8Array(contentWithPadStart.length / 8);
@@ -221,9 +227,7 @@ function extractBytesFromBITSTRING(der) {
  * OID の DER 表現から Object Identifier のドット表記をパースする。
  */
 function convertDotNotationFromOID(der) {
-    if (der.class !== 'Universal' ||
-        der.pc !== 'Primitive' ||
-        der.tag !== TAG_OBJECTIDENTIFIER) {
+    if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_OBJECTIDENTIFIER) {
         throw EvalError('OID ではない DER format を扱おうとしている');
     }
     const v = der.value;
@@ -350,7 +354,9 @@ function BASE64_DECODE(STRING) {
     }
     return b;
 }
+// --------------------END X.509 DER parser --------------------
 
+// --------------------BEGIN JWK definition --------------------
 /**
  * 引数が JWK オブジェクトであるかどうか確認する。
  * kty を指定するとその鍵タイプの JWK 形式を満たすか確認する。
@@ -358,6 +364,7 @@ function BASE64_DECODE(STRING) {
  */
 function isJWK(arg, kty, asym) {
     switch (kty) {
+        // kty を指定しないときは、最低限 JWK が持つべき情報を持っているか確認する
         case undefined:
             return isCommonJWKParams(arg);
         case 'oct':
@@ -438,7 +445,9 @@ async function validX5C(jwk) {
         else {
             throw EvalError(`validateSelfSignedCert の実装よりここには到達しない`);
         }
-        const pubkey = await window.crypto.subtle.importKey('spki', crt.tbs.spki, keyAlg, true, ['verify']);
+        const pubkey = await window.crypto.subtle.importKey('spki', crt.tbs.spki, keyAlg, true, [
+            'verify',
+        ]);
         const crt_jwk = await window.crypto.subtle.exportKey('jwk', pubkey);
         return jwk.n === crt_jwk.n && jwk.e === crt_jwk.e;
     }
@@ -447,7 +456,9 @@ async function validX5C(jwk) {
     }
     return false;
 }
+// --------------------END JWK definition --------------------
 
+// --------------------BEGIN RFC7517 appendix.A test --------------------
 async function test$4() {
     let allGreen = true;
     const title = 'RFC7517#A Example JSON Web Key Sets;';
@@ -571,7 +582,9 @@ const a3 = {
         },
     ],
 };
+// --------------------END RFC7517 appendix.A test --------------------
 
+// --------------------BEGIN RFC7517 appendix.B test --------------------
 async function test$3() {
     let allGreen = true;
     const title = 'RFC7517#B.Example Use of "x5c" Parameter;';
@@ -634,7 +647,9 @@ const b = {
         'MIIDQjCCAiqgAwIBAgIGATz/FuLiMA0GCSqGSIb3DQEBBQUAMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDAeFw0xMzAyMjEyMzI5MTVaFw0xODA4MTQyMjI5MTVaMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAL64zn8/QnHYMeZ0LncoXaEde1fiLm1jHjmQsF/449IYALM9if6amFtPDy2yvz3YlRij66s5gyLCyO7ANuVRJx1NbgizcAblIgjtdf/u3WG7K+IiZhtELto/A7Fck9Ws6SQvzRvOE8uSirYbgmj6He4iO8NCyvaK0jIQRMMGQwsU1quGmFgHIXPLfnpnfajr1rVTAwtgV5LEZ4Iel+W1GC8ugMhyr4/p1MtcIM42EA8BzE6ZQqC7VPqPvEjZ2dbZkaBhPbiZAS3YeYBRDWm1p1OZtWamT3cEvqqPpnjL1XyW+oyVVkaZdklLQp2Btgt9qr21m42f4wTw+Xrp6rCKNb0CAwEAATANBgkqhkiG9w0BAQUFAAOCAQEAh8zGlfSlcI0o3rYDPBB07aXNswb4ECNIKG0CETTUxmXl9KUL+9gGlqCz5iWLOgWsnrcKcY0vXPG9J1r9AqBNTqNgHq2G03X09266X5CpOe1zFo+Owb1zxtp3PehFdfQJ610CDLEaS9V9Rqp17hCyybEpOGVwe8fnk+fbEL2Bo3UPGrpsHzUoaGpDftmWssZkhpBJKVMJyf/RuP2SmmaIzmnw9JiSlYhzo4tpzd5rFXhjRbg4zW9C+2qok+2+qDM1iJ684gPHMIY8aLWrdgQTxkumGmTqgawR+N5MDtdPTEQ0XfIBc2cJEUyMTY5MPvACWpkA6SdS4xSvdXK3IVfOWA==',
     ],
 };
+// --------------------END RFC7517 appendix.B test --------------------
 
+// --------------------BEGIN RFC7520 Section.3 for EC test --------------------
 async function test$2() {
     const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
     const urlList = [
@@ -687,7 +702,9 @@ async function test$2() {
     }
     return { title, log, allGreen };
 }
+// --------------------END RFC7520 Section.3 for EC test --------------------
 
+// --------------------BEGIN RFC7520 Section.3 for oct test --------------------
 async function test$1() {
     const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
     const urlList = [
@@ -741,7 +758,9 @@ async function test$1() {
     }
     return { title, log, allGreen };
 }
+// --------------------END RFC7520 Section.3 for oct test --------------------
 
+// --------------------BEGIN RFC7520 Section.3 for RSA test --------------------
 async function test() {
     const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
     const urlList = [
@@ -794,8 +813,9 @@ async function test() {
     }
     return { title, log, allGreen };
 }
+// --------------------END RFC7520 Section.3 for RSA test --------------------
 
-// ------------------------------------ entry point
+// --------------------BEGIN entry point --------------------
 (async () => {
     for (const test$5 of [test$4, test$3, test$2, test$1, test]) {
         const { title, log, allGreen } = await test$5();
@@ -804,3 +824,4 @@ async function test() {
         console.groupEnd();
     }
 })();
+// --------------------END entry point --------------------

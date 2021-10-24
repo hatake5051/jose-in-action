@@ -1,4 +1,8 @@
+// --------------------BEGIN JWK RSA parameters --------------------
+
 import { CommomJWKParams, isCommonJWKParams } from './common';
+
+export { RSAPublicKey, isRSAPublicKey, RSAPrivateKey, isRSAPrivateKey };
 
 /**
  * RFC7518#6.3.1
@@ -76,4 +80,4 @@ const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey => {
   return 'd' in arg;
 };
 
-export { RSAPublicKey, isRSAPublicKey, RSAPrivateKey, isRSAPrivateKey };
+// --------------------END JWK RSA parameters --------------------

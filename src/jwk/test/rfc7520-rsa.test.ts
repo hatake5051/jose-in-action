@@ -1,12 +1,15 @@
+// --------------------BEGIN RFC7520 Section.3 for RSA test --------------------
+
 import { isJWK } from '../index';
+
+export { test };
 
 async function test(): Promise<{
   title: string;
   log: string;
   allGreen: boolean;
 }> {
-  const baseURL =
-    'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
+  const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
   const urlList = [
     '3_1.ec_public_key.json',
     '3_2.ec_private_key.json',
@@ -54,4 +57,4 @@ async function test(): Promise<{
   return { title, log, allGreen };
 }
 
-export { test };
+// --------------------END RFC7520 Section.3 for RSA test --------------------

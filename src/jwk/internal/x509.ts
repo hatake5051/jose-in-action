@@ -1,3 +1,7 @@
+// --------------------BEGIN X.509 DER praser --------------------
+
+export { X509Cert, parseX509BASE64EncodedDER, validateSelfSignedCert };
+
 type Class = 'Universal' | 'Application' | 'ContentSpecific' | 'Private';
 const TAG_SEQUENCE = 16;
 const TAG_BITSTRING = 3;
@@ -44,13 +48,7 @@ async function validateSelfSignedCert(crt: X509Cert): Promise<boolean> {
     } else {
       throw EvalError(`unimplemented rsa alg(${alg})`);
     }
-    const pubkey = await crypto.subtle.importKey(
-      'spki',
-      crt.tbs.spki,
-      keyAlg,
-      false,
-      ['verify']
-    );
+    const pubkey = await crypto.subtle.importKey('spki', crt.tbs.spki, keyAlg, false, ['verify']);
     return crypto.subtle.verify(verifyAlg, pubkey, crt.sig, crt.tbs.raw);
   }
   throw EvalError(`unimplemented alg(${alg})`);
@@ -62,23 +60,15 @@ type X509AlgId = number[];
 
 function parseX509DER(der_raw: Uint8Array): X509Cert {
   const der = DER_DECODE(der_raw);
-  if (
-    der.class !== 'Universal' ||
-    der.pc !== 'Constructed' ||
-    der.tag !== TAG_SEQUENCE
-  ) {
+  if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
     throw EvalError('X509Cert DER フォーマットを満たしていない');
   }
   const tbs_der = DER_DECODE(der.value);
 
   const sigalg_der = DER_DECODE(der.value.slice(tbs_der.entireLen));
-  const sigAlg: X509AlgId = convertDotNotationFromOID(
-    DER_DECODE(sigalg_der.value)
-  );
+  const sigAlg: X509AlgId = convertDotNotationFromOID(DER_DECODE(sigalg_der.value));
 
-  const sig_der = DER_DECODE(
-    der.value.slice(tbs_der.entireLen + sigalg_der.entireLen)
-  );
+  const sig_der = DER_DECODE(der.value.slice(tbs_der.entireLen + sigalg_der.entireLen));
 
   return {
     tbs: parseX509TBSCert(tbs_der),
@@ -112,11 +102,7 @@ type X509TBSCert = {
  */
 function parseX509TBSCert(der: DER): X509TBSCert {
   // TBSCert は SEQUENCE で表される
-  if (
-    der.class !== 'Universal' ||
-    der.pc !== 'Constructed' ||
-    der.tag !== TAG_SEQUENCE
-  ) {
+  if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
     throw EvalError('X509TBSCert DER フォーマットを満たしていない');
   }
   // 一番初めは Version
@@ -147,20 +133,14 @@ function parseX509TBSCert(der: DER): X509TBSCert {
  * DER で表現された BITString からバイナリを取り出す
  */
 function extractBytesFromBITSTRING(der: DER): Uint8Array {
-  if (
-    der.class !== 'Universal' ||
-    der.pc !== 'Primitive' ||
-    der.tag !== TAG_BITSTRING
-  ) {
+  if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_BITSTRING) {
     throw EvalError('BITSTRING ではない DER format を扱おうとしている');
   }
   const v = der.value;
   // 先頭のオクテットはbit-length を８の倍数にするためにケツに追加した 0-padding の数を表現する
   if (v[0] === 0x00) return v.slice(1);
   // 先頭のオクテットが０でないときは、その数だけ padding 処理を行う
-  const contentWithPadEnd = v
-    .slice(1)
-    .reduce((sum, i) => sum + i.toString(2).padStart(8, '0'), '');
+  const contentWithPadEnd = v.slice(1).reduce((sum, i) => sum + i.toString(2).padStart(8, '0'), '');
   const content = contentWithPadEnd.slice(0, contentWithPadEnd.length - v[0]);
   const contentWithPadStart = '0'.repeat(v[0]) + content;
   const ans = new Uint8Array(contentWithPadStart.length / 8);
@@ -174,11 +154,7 @@ function extractBytesFromBITSTRING(der: DER): Uint8Array {
  * OID の DER 表現から Object Identifier のドット表記をパースする。
  */
 function convertDotNotationFromOID(der: DER): number[] {
-  if (
-    der.class !== 'Universal' ||
-    der.pc !== 'Primitive' ||
-    der.tag !== TAG_OBJECTIDENTIFIER
-  ) {
+  if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_OBJECTIDENTIFIER) {
     throw EvalError('OID ではない DER format を扱おうとしている');
   }
   const v = der.value;
@@ -251,10 +227,7 @@ type DER = {
 function DER_DECODE(ber: Uint8Array): DER {
   const { tag, typeFieldLen } = parseTagNum(ber);
   const { len, lengthFieldLen } = parseLength(ber.slice(typeFieldLen));
-  const value = ber.slice(
-    typeFieldLen + lengthFieldLen,
-    typeFieldLen + lengthFieldLen + len
-  );
+  const value = ber.slice(typeFieldLen + lengthFieldLen, typeFieldLen + lengthFieldLen + len);
   return {
     class: parseClass(ber),
     pc: parsePC(ber),
@@ -359,4 +332,5 @@ function BASE64_DECODE(STRING: string) {
   }
   return b;
 }
-export { X509Cert, parseX509BASE64EncodedDER, validateSelfSignedCert };
+
+// --------------------END X.509 DER parser --------------------

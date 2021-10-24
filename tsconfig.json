@@ -4,7 +4,8 @@
     "module": "es6",
     "strict": true,
     "outDir": "./build",
-    "moduleResolution": "Node"
+    "moduleResolution": "Node",
+    "removeComments": false
   },
   "include": ["src/**/*"]
 }

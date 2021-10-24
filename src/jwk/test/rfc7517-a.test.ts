@@ -1,4 +1,8 @@
+// --------------------BEGIN RFC7517 appendix.A test --------------------
+
 import { isJWK, isJWKSet } from '../index';
+
+export { test };
 
 async function test(): Promise<{
   title: string;
@@ -64,7 +68,6 @@ async function test(): Promise<{
   }
   return { title, log, allGreen };
 }
-export { test };
 
 const a1 = {
   keys: [
@@ -125,3 +128,5 @@ const a3 = {
     },
   ],
 };
+
+// --------------------END RFC7517 appendix.A test --------------------
