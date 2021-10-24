@@ -1,5 +1,5 @@
-import { Kty, KtyAsym } from '../iana';
-import { CommomJWKParams, isCommonJWKParams } from './internal/common';
+import { Kty } from '../iana';
+import { isCommonJWKParams } from './internal/common';
 import {
   ECPrivateKey,
   ECPublicKey,
@@ -18,54 +18,117 @@ import {
   validateSelfSignedCert,
 } from './internal/x509';
 
-export {
-  JWK,
-  JWKSym,
-  JWKPriv,
-  JWKPub,
-  JWKSet,
-  isJWKSet,
-  isJWK,
-  isJWKSym,
-  isJWKPub,
-  isJWKPriv,
-  validX5CinJWKPub,
-};
+export { JWK, JWKSet, isJWKSet, isJWK, validJWK };
+
+type AsymKty = 'Pub' | 'Priv';
 
 /**
  * RFC7517#4
  * JSON Web Key は暗号鍵を表現する JSON オブジェクト。
+ * Kty がなんであるか、また非対称暗号鍵の場合は公開鍵か秘密鍵かで具体的な型を指定できる
  */
-type JWK<K extends Kty> = CommomJWKParams<K>;
-
-const isJWK = (arg: unknown): arg is JWK<Kty> => isCommonJWKParams(arg);
-
-type JWKSym = octKey;
-
-const isJWKSym = (arg: unknown): arg is JWKSym => isOctKey(arg);
-
-type JWKPub<K extends KtyAsym> = K extends 'EC'
-  ? ECPublicKey
+type JWK<K extends Kty, A extends AsymKty> = K extends 'oct'
+  ? octKey
+  : K extends 'EC'
+  ? A extends 'Pub'
+    ? ECPublicKey
+    : A extends 'Priv'
+    ? ECPrivateKey
+    : ECPublicKey | ECPrivateKey
   : K extends 'RSA'
-  ? RSAPublicKey
+  ? A extends 'Pub'
+    ? RSAPublicKey
+    : A extends 'Priv'
+    ? RSAPrivateKey
+    : RSAPublicKey | RSAPrivateKey
   : never;
 
-const isJWKPub = <K extends KtyAsym>(
-  kty: K,
-  arg: unknown
-): arg is JWKPub<K> => {
-  if (!isJWK(arg)) return false;
-  if (kty !== arg.kty) return false;
-  switch (arg.kty) {
+/**
+ * 引数が JWK オブジェクトであるかどうか確認する。
+ * kty を指定するとその鍵タイプの JWK 形式を満たすか確認する。
+ * asym を指定すると非対称暗号鍵のうち指定した鍵（公開鍵か秘密鍵）かであるかも確認する。
+ */
+function isJWK<K extends Kty, A extends AsymKty>(
+  arg: unknown,
+  kty?: K,
+  asym?: A
+): arg is JWK<K, A> {
+  switch (kty) {
+    // kty を指定しないときは、最低限 JWK が持つべき情報を持っているか確認する
+    case undefined:
+      return isCommonJWKParams(arg);
+    case 'oct':
+      return isOctKey(arg);
     case 'EC':
-      return isECPublicKey(arg);
+      if (asym === undefined) return isECPublicKey(arg) || isECPrivateKey(arg);
+      if (asym === 'Pub') return isECPublicKey(arg);
+      return isECPrivateKey(arg);
     case 'RSA':
-      return isRSAPublicKey(arg);
+      if (asym === undefined)
+        return isRSAPublicKey(arg) || isRSAPrivateKey(arg);
+      if (asym === 'Pub') return isRSAPublicKey(arg);
+      return isRSAPrivateKey(arg);
+    default:
+      return false;
   }
+}
+
+/**
+ * RFC7517#5
+ * JWK Set は複数の JWK を表現する JSON オブジェクトである。
+ */
+type JWKSet = {
+  /**
+   * RFC7517#5.1
+   * keys parameter は JWK の配列を値としてもつ。
+   * デフォルトでは、 JWK の順序は鍵の優先順位を表していないが、アプリケーションによっては持たせても良い。
+   */
+  keys: JWK<Kty, AsymKty>[];
 };
 
-async function validX5CinJWKPub<K extends KtyAsym>(
-  jwk: JWKPub<K>
+/**
+ * 引数が JWK Set かどうか判定する.
+ * keys パラメータが存在して、その値が JWK の配列なら OK
+ */
+const isJWKSet = (arg: unknown): arg is JWKSet => {
+  if (typeof arg !== 'object') return false;
+  if (arg == null) return false;
+  if ('keys' in arg) {
+    const a = arg as { keys: unknown };
+    if (Array.isArray(a.keys)) {
+      const l = a.keys as Array<unknown>;
+      for (const k of l) {
+        if (!isJWK(k)) return false;
+      }
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * options に渡された条件を jwk が満たすか確認する
+ * options.x5c を渡すことで、 jwk.x5c があればそれを検証する。
+ * options.x5c.selfSigned = true にすると、x5t が自己署名証明書だけを持つか確認し、
+ * 署名が正しいか確認する。また jwk パラメータと同じ内容が書かれているか確認する。
+ */
+async function validJWK<K extends Kty, A extends AsymKty>(
+  jwk: JWK<K, A>,
+  options: {
+    x5c?: {
+      selfSigned?: boolean;
+    };
+  }
+): Promise<boolean> {
+  if (options == null) return true;
+  if (options.x5c != null) {
+    if (options.x5c.selfSigned && !validX5C(jwk)) return false;
+  }
+  return true;
+}
+
+async function validX5C<K extends Kty>(
+  jwk: JWK<K, 'Pub' | 'Priv'>
 ): Promise<boolean> {
   if (jwk.x5c == null) return true;
   if (jwk.x5c.length > 1)
@@ -103,42 +166,3 @@ async function validX5CinJWKPub<K extends KtyAsym>(
   }
   return false;
 }
-
-type JWKPriv<K extends KtyAsym> = K extends 'EC'
-  ? ECPrivateKey
-  : K extends 'RSA'
-  ? RSAPrivateKey
-  : never;
-
-const isJWKPriv = <K extends KtyAsym>(
-  kty: K,
-  arg: unknown
-): arg is JWKPriv<K> => {
-  if (!isJWK(arg)) return false;
-  if (kty !== arg.kty) return false;
-  switch (arg.kty) {
-    case 'EC':
-      return isECPrivateKey(arg);
-    case 'RSA':
-      return isRSAPrivateKey(arg);
-  }
-};
-
-/**
- * RFC7517#5
- * JWK Set は複数の JWK を表現する JSON オブジェクトである。
- */
-type JWKSet = {
-  /**
-   * RFC7517#5.1
-   * keys parameter は JWK の配列を値としてもつ。
-   * デフォルトでは、 JWK の順序は鍵の優先順位を表していないが、アプリケーションによっては持たせても良い。
-   */
-  keys: JWK<Kty>[];
-};
-
-const isJWKSet = (arg: unknown): arg is JWKSet => {
-  if (typeof arg !== 'object') return false;
-  if (arg == null) return false;
-  return 'keys' in arg && Array.isArray((arg as JWKSet).keys);
-};

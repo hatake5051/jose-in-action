@@ -1,4 +1,4 @@
-import { isJWK, isJWKPriv, isJWKPub } from '../index';
+import { isJWK } from '../index';
 
 async function test(): Promise<{
   title: string;
@@ -25,17 +25,14 @@ async function test(): Promise<{
     log += `TEST NAME: ${path}: `;
     const data = await fetchData(path);
     if (!path.includes('rsa')) {
-      if (!isJWK(data)) {
-        log += 'JWK鍵と判定できていない\n';
-        allGreen = false;
-      } else if (isJWKPub('RSA', data) || isJWKPriv('RSA', data)) {
+      if (isJWK(data, 'RSA')) {
         log += 'RSA鍵ではないはずが、RSA鍵だと識別されている。\n';
         allGreen = false;
       } else {
         log += 'RSA鍵ではないと判定できた(OK)\n';
       }
     } else if (path === '3_3.rsa_public_key.json') {
-      if (!isJWKPub('RSA', data)) {
+      if (!isJWK(data, 'RSA', 'Pub')) {
         log += 'RSA公開鍵の判定に失敗。\n';
         allGreen = false;
       } else {
@@ -43,7 +40,7 @@ async function test(): Promise<{
       }
       continue;
     } else if (path === '3_4.rsa_private_key.json') {
-      if (!isJWKPriv('RSA', data)) {
+      if (!isJWK(data, 'RSA', 'Priv')) {
         log += 'RSA秘密鍵の判定に失敗。\n';
         allGreen = false;
       } else {

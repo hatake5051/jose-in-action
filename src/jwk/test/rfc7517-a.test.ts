@@ -1,4 +1,4 @@
-import { isJWKPriv, isJWKPub, isJWKSet, isJWKSym } from '../index';
+import { isJWK, isJWKSet } from '../index';
 
 async function test(): Promise<{
   title: string;
@@ -15,7 +15,7 @@ async function test(): Promise<{
   } else {
     log += 'JWK Set と判定できた\n';
     // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
-    if (isJWKPub('EC', a1.keys[0]) && isJWKPub('RSA', a1.keys[1])) {
+    if (isJWK(a1.keys[0], 'EC', 'Pub') && isJWK(a1.keys[1], 'RSA', 'Pub')) {
       log += '1つ目の鍵はEC公開鍵で、２つ目の鍵はRSA公開鍵と判定できた\n';
     } else {
       log += 'JWK Set に含まれる公開鍵の種類の判定に失敗\n';
@@ -41,7 +41,7 @@ async function test(): Promise<{
   } else {
     log += 'JWK Set と判定できた\n';
     // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
-    if (isJWKPriv('EC', a2.keys[0]) && isJWKPriv('RSA', a2.keys[1])) {
+    if (isJWK(a2.keys[0], 'EC', 'Priv') && isJWK(a2.keys[1], 'RSA', 'Priv')) {
       log += '1つ目の鍵はEC秘密鍵で、２つ目の鍵はRSA秘密鍵と判定できた\n';
     } else {
       log += 'JWK Set に含まれる秘密鍵の種類の判定に失敗\n';
@@ -55,7 +55,7 @@ async function test(): Promise<{
   } else {
     log += 'JWK Set と判定できた\n';
     // JWK Set contains two symmetric keys represented as JWKs:
-    if (isJWKSym(a3.keys[0]) && isJWKSym(a3.keys[1])) {
+    if (isJWK(a3.keys[0], 'oct') && isJWK(a3.keys[1], 'oct')) {
       log += '２つの対称鍵が含まれていることを確認\n';
     } else {
       log += 'JWK Set に含まれる対称鍵の種類の判定に失敗\n';

@@ -1,4 +1,4 @@
-import { isJWK, isJWKSym } from '../index';
+import { isJWK } from '../index';
 
 async function test(): Promise<{
   title: string;
@@ -25,17 +25,14 @@ async function test(): Promise<{
     log += `TEST NAME: ${path}: `;
     const data = await fetchData(path);
     if (!path.includes('symmetric_key')) {
-      if (!isJWK(data)) {
-        log += 'JWK鍵と判定できていない\n';
-        allGreen = false;
-      } else if (isJWKSym(data)) {
+      if (isJWK(data, 'oct')) {
         log += 'oct鍵ではないはずが、oct鍵だと識別されている。\n';
         allGreen = false;
       } else {
         log += 'oct鍵ではないと判定できた(OK)\n';
       }
     } else if (path === '3_5.symmetric_key_mac_computation.json') {
-      if (!isJWKSym(data)) {
+      if (!isJWK(data, 'oct')) {
         console.log(data);
         log += 'oct鍵の判定に失敗。\n';
         allGreen = false;
@@ -44,7 +41,7 @@ async function test(): Promise<{
       }
       continue;
     } else if (path === '3_6.symmetric_key_encryption.json') {
-      if (!isJWKSym(data)) {
+      if (!isJWK(data, 'oct')) {
         log += 'oct鍵の判定に失敗。\n';
         allGreen = false;
       } else {

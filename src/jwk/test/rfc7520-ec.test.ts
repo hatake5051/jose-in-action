@@ -1,4 +1,4 @@
-import { isJWK, isJWKPriv, isJWKPub } from '../index';
+import { isJWK } from '../index';
 
 async function test(): Promise<{
   title: string;
@@ -25,17 +25,14 @@ async function test(): Promise<{
     log += `TEST NAME: ${path}: `;
     const data = await fetchData(path);
     if (!path.includes('ec')) {
-      if (!isJWK(data)) {
-        log += 'JWK鍵と判定できていない\n';
-        allGreen = false;
-      } else if (isJWKPub('EC', data) || isJWKPriv('EC', data)) {
+      if (isJWK(data, 'EC')) {
         log += 'EC鍵ではないはずが、EC鍵だと識別されている。\n';
         allGreen = false;
       } else {
         log += 'EC鍵ではないと判定できた(OK)\n';
       }
     } else if (path === '3_1.ec_public_key.json') {
-      if (!isJWKPub('EC', data)) {
+      if (!isJWK(data, 'EC', 'Pub')) {
         log += 'EC公開鍵の判定に失敗。\n';
         allGreen = false;
       } else {
@@ -43,7 +40,7 @@ async function test(): Promise<{
       }
       continue;
     } else if (path === '3_2.ec_private_key.json') {
-      if (!isJWKPriv('EC', data)) {
+      if (!isJWK(data, 'EC', 'Priv')) {
         log += 'EC秘密鍵の判定に失敗。\n';
         allGreen = false;
       } else {

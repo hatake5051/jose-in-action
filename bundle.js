@@ -351,21 +351,71 @@ function BASE64_DECODE(STRING) {
     return b;
 }
 
-const isJWK = (arg) => isCommonJWKParams(arg);
-const isJWKSym = (arg) => isOctKey(arg);
-const isJWKPub = (kty, arg) => {
-    if (!isJWK(arg))
-        return false;
-    if (kty !== arg.kty)
-        return false;
-    switch (arg.kty) {
+/**
+ * 引数が JWK オブジェクトであるかどうか確認する。
+ * kty を指定するとその鍵タイプの JWK 形式を満たすか確認する。
+ * asym を指定すると非対称暗号鍵のうち指定した鍵（公開鍵か秘密鍵）かであるかも確認する。
+ */
+function isJWK(arg, kty, asym) {
+    switch (kty) {
+        case undefined:
+            return isCommonJWKParams(arg);
+        case 'oct':
+            return isOctKey(arg);
         case 'EC':
-            return isECPublicKey(arg);
+            if (asym === undefined)
+                return isECPublicKey(arg) || isECPrivateKey(arg);
+            if (asym === 'Pub')
+                return isECPublicKey(arg);
+            return isECPrivateKey(arg);
         case 'RSA':
-            return isRSAPublicKey(arg);
+            if (asym === undefined)
+                return isRSAPublicKey(arg) || isRSAPrivateKey(arg);
+            if (asym === 'Pub')
+                return isRSAPublicKey(arg);
+            return isRSAPrivateKey(arg);
+        default:
+            return false;
     }
+}
+/**
+ * 引数が JWK Set かどうか判定する.
+ * keys パラメータが存在して、その値が JWK の配列なら OK
+ */
+const isJWKSet = (arg) => {
+    if (typeof arg !== 'object')
+        return false;
+    if (arg == null)
+        return false;
+    if ('keys' in arg) {
+        const a = arg;
+        if (Array.isArray(a.keys)) {
+            const l = a.keys;
+            for (const k of l) {
+                if (!isJWK(k))
+                    return false;
+            }
+            return true;
+        }
+    }
+    return false;
 };
-async function validX5CinJWKPub(jwk) {
+/**
+ * options に渡された条件を jwk が満たすか確認する
+ * options.x5c を渡すことで、 jwk.x5c があればそれを検証する。
+ * options.x5c.selfSigned = true にすると、x5t が自己署名証明書だけを持つか確認し、
+ * 署名が正しいか確認する。また jwk パラメータと同じ内容が書かれているか確認する。
+ */
+async function validJWK(jwk, options) {
+    if (options == null)
+        return true;
+    if (options.x5c != null) {
+        if (options.x5c.selfSigned && !validX5C(jwk))
+            return false;
+    }
+    return true;
+}
+async function validX5C(jwk) {
     if (jwk.x5c == null)
         return true;
     if (jwk.x5c.length > 1)
@@ -397,25 +447,6 @@ async function validX5CinJWKPub(jwk) {
     }
     return false;
 }
-const isJWKPriv = (kty, arg) => {
-    if (!isJWK(arg))
-        return false;
-    if (kty !== arg.kty)
-        return false;
-    switch (arg.kty) {
-        case 'EC':
-            return isECPrivateKey(arg);
-        case 'RSA':
-            return isRSAPrivateKey(arg);
-    }
-};
-const isJWKSet = (arg) => {
-    if (typeof arg !== 'object')
-        return false;
-    if (arg == null)
-        return false;
-    return 'keys' in arg && Array.isArray(arg.keys);
-};
 
 async function test$4() {
     let allGreen = true;
@@ -429,7 +460,7 @@ async function test$4() {
     else {
         log += 'JWK Set と判定できた\n';
         // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
-        if (isJWKPub('EC', a1.keys[0]) && isJWKPub('RSA', a1.keys[1])) {
+        if (isJWK(a1.keys[0], 'EC', 'Pub') && isJWK(a1.keys[1], 'RSA', 'Pub')) {
             log += '1つ目の鍵はEC公開鍵で、２つ目の鍵はRSA公開鍵と判定できた\n';
         }
         else {
@@ -459,7 +490,7 @@ async function test$4() {
     else {
         log += 'JWK Set と判定できた\n';
         // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
-        if (isJWKPriv('EC', a2.keys[0]) && isJWKPriv('RSA', a2.keys[1])) {
+        if (isJWK(a2.keys[0], 'EC', 'Priv') && isJWK(a2.keys[1], 'RSA', 'Priv')) {
             log += '1つ目の鍵はEC秘密鍵で、２つ目の鍵はRSA秘密鍵と判定できた\n';
         }
         else {
@@ -475,7 +506,7 @@ async function test$4() {
     else {
         log += 'JWK Set と判定できた\n';
         // JWK Set contains two symmetric keys represented as JWKs:
-        if (isJWKSym(a3.keys[0]) && isJWKSym(a3.keys[1])) {
+        if (isJWK(a3.keys[0], 'oct') && isJWK(a3.keys[1], 'oct')) {
             log += '２つの対称鍵が含まれていることを確認\n';
         }
         else {
@@ -555,8 +586,8 @@ async function test$3() {
         allGreen = false;
     }
     log += 'TEST NAME: Validate JWK.x5c: ';
-    if (isJWKPub('RSA', b)) {
-        if (await validX5CinJWKPub(b)) {
+    if (isJWK(b, 'RSA', 'Pub')) {
+        if (await validJWK(b, { x5c: { selfSigned: true } })) {
             log += 'JWK.x5c の検証と整合性の確認に成功\n';
         }
         else {
@@ -576,8 +607,8 @@ async function test$3() {
     }
     else {
         for (const key of data.keys) {
-            if (isJWKPub('RSA', key)) {
-                if (await validX5CinJWKPub(key)) {
+            if (isJWK(key, 'RSA', 'Pub')) {
+                if (await validJWK(key, { x5c: { selfSigned: true } })) {
                     log += 'JWK.x5c の検証と整合性の確認に成功\n';
                 }
                 else {
@@ -622,11 +653,7 @@ async function test$2() {
         log += `TEST NAME: ${path}: `;
         const data = await fetchData(path);
         if (!path.includes('ec')) {
-            if (!isJWK(data)) {
-                log += 'JWK鍵と判定できていない\n';
-                allGreen = false;
-            }
-            else if (isJWKPub('EC', data) || isJWKPriv('EC', data)) {
+            if (isJWK(data, 'EC')) {
                 log += 'EC鍵ではないはずが、EC鍵だと識別されている。\n';
                 allGreen = false;
             }
@@ -635,7 +662,7 @@ async function test$2() {
             }
         }
         else if (path === '3_1.ec_public_key.json') {
-            if (!isJWKPub('EC', data)) {
+            if (!isJWK(data, 'EC', 'Pub')) {
                 log += 'EC公開鍵の判定に失敗。\n';
                 allGreen = false;
             }
@@ -645,7 +672,7 @@ async function test$2() {
             continue;
         }
         else if (path === '3_2.ec_private_key.json') {
-            if (!isJWKPriv('EC', data)) {
+            if (!isJWK(data, 'EC', 'Priv')) {
                 log += 'EC秘密鍵の判定に失敗。\n';
                 allGreen = false;
             }
@@ -679,11 +706,7 @@ async function test$1() {
         log += `TEST NAME: ${path}: `;
         const data = await fetchData(path);
         if (!path.includes('symmetric_key')) {
-            if (!isJWK(data)) {
-                log += 'JWK鍵と判定できていない\n';
-                allGreen = false;
-            }
-            else if (isJWKSym(data)) {
+            if (isJWK(data, 'oct')) {
                 log += 'oct鍵ではないはずが、oct鍵だと識別されている。\n';
                 allGreen = false;
             }
@@ -692,7 +715,7 @@ async function test$1() {
             }
         }
         else if (path === '3_5.symmetric_key_mac_computation.json') {
-            if (!isJWKSym(data)) {
+            if (!isJWK(data, 'oct')) {
                 console.log(data);
                 log += 'oct鍵の判定に失敗。\n';
                 allGreen = false;
@@ -703,7 +726,7 @@ async function test$1() {
             continue;
         }
         else if (path === '3_6.symmetric_key_encryption.json') {
-            if (!isJWKSym(data)) {
+            if (!isJWK(data, 'oct')) {
                 log += 'oct鍵の判定に失敗。\n';
                 allGreen = false;
             }
@@ -737,11 +760,7 @@ async function test() {
         log += `TEST NAME: ${path}: `;
         const data = await fetchData(path);
         if (!path.includes('rsa')) {
-            if (!isJWK(data)) {
-                log += 'JWK鍵と判定できていない\n';
-                allGreen = false;
-            }
-            else if (isJWKPub('RSA', data) || isJWKPriv('RSA', data)) {
+            if (isJWK(data, 'RSA')) {
                 log += 'RSA鍵ではないはずが、RSA鍵だと識別されている。\n';
                 allGreen = false;
             }
@@ -750,7 +769,7 @@ async function test() {
             }
         }
         else if (path === '3_3.rsa_public_key.json') {
-            if (!isJWKPub('RSA', data)) {
+            if (!isJWK(data, 'RSA', 'Pub')) {
                 log += 'RSA公開鍵の判定に失敗。\n';
                 allGreen = false;
             }
@@ -760,7 +779,7 @@ async function test() {
             continue;
         }
         else if (path === '3_4.rsa_private_key.json') {
-            if (!isJWKPriv('RSA', data)) {
+            if (!isJWK(data, 'RSA', 'Priv')) {
                 log += 'RSA秘密鍵の判定に失敗。\n';
                 allGreen = false;
             }

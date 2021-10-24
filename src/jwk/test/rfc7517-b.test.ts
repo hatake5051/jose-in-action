@@ -1,4 +1,4 @@
-import { isJWKPub, isJWKSet, validX5CinJWKPub } from '../index';
+import { isJWK, isJWKSet, validJWK } from '../index';
 import {
   parseX509BASE64EncodedDER,
   validateSelfSignedCert,
@@ -22,8 +22,8 @@ async function test(): Promise<{
   }
 
   log += 'TEST NAME: Validate JWK.x5c: ';
-  if (isJWKPub('RSA', b)) {
-    if (await validX5CinJWKPub(b)) {
+  if (isJWK(b, 'RSA', 'Pub')) {
+    if (await validJWK(b, { x5c: { selfSigned: true } })) {
       log += 'JWK.x5c の検証と整合性の確認に成功\n';
     } else {
       log += 'JWK.x5c の検証に失敗\n';
@@ -43,8 +43,8 @@ async function test(): Promise<{
     allGreen = false;
   } else {
     for (const key of data.keys) {
-      if (isJWKPub('RSA', key)) {
-        if (await validX5CinJWKPub(key)) {
+      if (isJWK(key, 'RSA', 'Pub')) {
+        if (await validJWK(key, { x5c: { selfSigned: true } })) {
           log += 'JWK.x5c の検証と整合性の確認に成功\n';
         } else {
           log += 'JWK.x5c の検証に失敗\n';
