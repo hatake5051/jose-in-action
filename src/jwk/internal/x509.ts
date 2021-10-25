@@ -531,6 +531,9 @@ function parseLength(lengthField: Uint8Array): {
   return { len, lengthFieldLen: 1 + additionalLengthFieldLen };
 }
 
+/**
+ * バイナリに文字列を BASE64 デコードする
+ */
 function BASE64_DECODE(STRING: string) {
   const b_str = window.atob(STRING);
   // バイナリ文字列を Uint8Array に変換する

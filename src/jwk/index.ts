@@ -10,8 +10,6 @@ import { isX509SPKI, parseX509BASE64EncodedDER, validateSelfSignedCert } from '.
 
 export { JWK, JWKSet, isJWKSet, isJWK, validJWK };
 
-type AsymKty = 'Pub' | 'Priv';
-
 /**
  * RFC7517#4
  * JSON Web Key は暗号鍵を表現する JSON オブジェクト。
@@ -94,6 +92,11 @@ const isJWKSet = (arg: unknown): arg is JWKSet => {
   }
   return false;
 };
+
+/**
+ * JWK が非対称鍵の場合、公開鍵か秘密鍵かのいずれかであるかを表す。
+ */
+type AsymKty = 'Pub' | 'Priv';
 
 /**
  * options に渡された条件を jwk が満たすか確認する

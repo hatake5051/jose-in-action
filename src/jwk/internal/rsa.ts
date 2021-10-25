@@ -5,6 +5,34 @@ import { CommomJWKParams, isCommonJWKParams } from './common';
 export { RSAPublicKey, isRSAPublicKey, RSAPrivateKey, isRSAPrivateKey };
 
 /**
+ * RSA 公開鍵は JWK 共通パラメータと RSA 公開鍵パラメータからなる。
+ */
+type RSAPublicKey = CommomJWKParams<'RSA'> & RSAPublicKeyParams;
+
+/**
+ * 引数が RSA 公開鍵かどうか確認する。
+ * kty == RSA かどうか、 n,e をパラメータとしてもつか確認する。
+ */
+const isRSAPublicKey = (arg: unknown): arg is RSAPublicKey => {
+  if (!isCommonJWKParams(arg) || arg.kty !== 'RSA') return false;
+  return rsaPublicKeyParams.every((s) => s in arg);
+};
+
+/**
+ * RSA 秘密鍵は RSA 公開鍵に RSA 秘密鍵パラメータを加えたもの
+ */
+type RSAPrivateKey = RSAPublicKey & RSAPrivateKeyParams;
+
+/**
+ * 引数が RSA 秘密鍵かどうか確認する。
+ * RSA 公開鍵であるか、また d をパラメータとして持つか確認する。
+ */
+const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey => {
+  if (!isRSAPublicKey(arg)) return false;
+  return 'd' in arg;
+};
+
+/**
  * RFC7518#6.3.1
  * RSA 公開鍵が持つパラメータを定義する。
  */
@@ -64,20 +92,6 @@ type RSAPrivateKeyParams = {
    * 値は BASE64URLUint エンコードされている
    */
   qi?: string;
-};
-const rsaPrivateKeyParams = ['d', 'p', 'q', 'dp', 'dq', 'di'];
-
-type RSAPublicKey = CommomJWKParams<'RSA'> & RSAPublicKeyParams;
-
-const isRSAPublicKey = (arg: unknown): arg is RSAPublicKey => {
-  if (!isCommonJWKParams(arg) || arg.kty !== 'RSA') return false;
-  return rsaPublicKeyParams.every((s) => s in arg);
-};
-type RSAPrivateKey = RSAPublicKey & RSAPrivateKeyParams;
-
-const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey => {
-  if (!isRSAPublicKey(arg)) return false;
-  return 'd' in arg;
 };
 
 // --------------------END JWK RSA parameters --------------------

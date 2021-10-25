@@ -4,6 +4,9 @@ import { isKty, KeyOps, KeyUse, Kty } from '../../iana';
 
 export { CommomJWKParams, isCommonJWKParams };
 
+/**
+ * JWK が持つ共通パラメータを表す。
+ */
 type CommomJWKParams<K extends Kty> = {
   /**
    * RFC7517#4.1
@@ -61,8 +64,11 @@ type CommomJWKParams<K extends Kty> = {
    */
   'x5t#S256'?: string;
 };
-const commonJWKParams = ['kty', 'use', 'key_ops', 'alg', 'kid', 'x5u', 'x5c', 'x5t', 'x5t#S256'];
 
+/**
+ * 共通パラメータのうち JWK として必須なものを引数が持っているか確認する。
+ * RFC7517 では kty が必須とされている。
+ */
 const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams<Kty> => {
   if (typeof arg !== 'object' || arg == null) return false;
   if ('kty' in arg) {

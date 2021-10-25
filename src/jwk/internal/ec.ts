@@ -7,6 +7,37 @@ import { CommomJWKParams, isCommonJWKParams } from './common';
 export { ECPublicKey, isECPublicKey, ECPrivateKey, isECPrivateKey };
 
 /**
+ * EC 公開鍵は JWK 共通パラメータと EC 公開鍵用パラメータからなる
+ */
+type ECPublicKey = CommomJWKParams<'EC'> & ECPublicKeyParams;
+
+/**
+ * 引数が EC公開鍵の JWK 表現か確認する。
+ * kty == EC かどうか、 crv に適した x,y のサイズとなっているかどうか。
+ */
+const isECPublicKey = (arg: unknown): arg is ECPublicKey => {
+  if (!isCommonJWKParams(arg) || arg.kty !== 'EC') return false;
+  if (!ecPublicKeyParams.every((key) => key in arg)) return false;
+  return validECPublicKeyParams(arg as ECPublicKey);
+};
+
+/**
+ * EC 秘密鍵は EC 公開鍵に EC 秘密鍵用パラメータを加えたもの
+ */
+type ECPrivateKey = ECPublicKey & ECPrivateKeyParams;
+
+/**
+ * 引数が EC 秘密鍵の JWK 表現か確認する。
+ * EC 公開鍵であり、かつ d をパラメータとして持っていれば。
+ */
+const isECPrivateKey = (arg: unknown): arg is ECPrivateKey => {
+  if (!isECPublicKey(arg)) return false;
+  const crv = arg.crv;
+  if (!('d' in arg)) return false;
+  return validECPrivateKeyParams(crv, arg as ECPrivateKey);
+};
+
+/**
  * RFC7518#6.2.1
  * EC 公開鍵が持つパラメータを定義する。
  */
@@ -34,6 +65,9 @@ type ECPublicKeyParams = {
 };
 const ecPublicKeyParams = ['crv', 'x', 'y'];
 
+/**
+ * EC 公開鍵パラメータが矛盾した値になってないか確認する
+ */
 function validECPublicKeyParams(p: ECPublicKeyParams): boolean {
   let key_len;
   switch (p.crv) {
@@ -64,6 +98,9 @@ type ECPrivateKeyParams = {
   d: string;
 };
 
+/**
+ * EC 秘密鍵パラメータが引数で与えた crv のものか確認する。
+ */
 function validECPrivateKeyParams(crv: Crv, p: ECPrivateKeyParams): boolean {
   let key_len;
   switch (crv) {
@@ -79,22 +116,5 @@ function validECPrivateKeyParams(crv: Crv, p: ECPrivateKeyParams): boolean {
   }
   return BASE64URL_DECODE(p.d).length === key_len;
 }
-
-type ECPublicKey = CommomJWKParams<'EC'> & ECPublicKeyParams;
-
-const isECPublicKey = (arg: unknown): arg is ECPublicKey => {
-  if (!isCommonJWKParams(arg) || arg.kty !== 'EC') return false;
-  if (!ecPublicKeyParams.every((key) => key in arg)) return false;
-  return validECPublicKeyParams(arg as ECPublicKey);
-};
-
-type ECPrivateKey = ECPublicKey & ECPrivateKeyParams;
-
-const isECPrivateKey = (arg: unknown): arg is ECPrivateKey => {
-  if (!isECPublicKey(arg)) return false;
-  const crv = arg.crv;
-  if (!('d' in arg)) return false;
-  return validECPrivateKeyParams(crv, arg as ECPrivateKey);
-};
 
 // --------------------END JWK EC parameters --------------------
