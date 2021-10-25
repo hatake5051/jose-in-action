@@ -146,10 +146,17 @@ const isRSAPrivateKey = (arg) => {
 // --------------------END JWK RSA parameters --------------------
 
 // --------------------BEGIN X.509 DER praser --------------------
+/**
+ * 自己署名証明書の X.509 証明書を受け取って、有効性の検証を行う。
+ * ここで行う有効性の検証は TBSCertificate.signature に書かれてあるアルゴリズムを使って、
+ * TBSCertificate.subjectPublicKeyInfo の公開鍵を用いて Certificate.signatureValue
+ * の検証ができるかのみを行う。
+ * validity の検証など必要な様々な検証が未実装である。
+ */
 async function validateSelfSignedCert(crt) {
     // alg を識別する
-    const alg = crt.sigAlg.join('.');
-    if (alg !== crt.tbs.alg.join('.')) {
+    const alg = crt.sigAlg;
+    if (alg !== crt.tbs.alg) {
         throw EvalError('signatureAlgorithm !== TBSCertificate.signature エラー');
     }
     // for Public-Key Cryptography Standards (PKCS) OID
@@ -227,16 +234,14 @@ function parseX509DER(der_raw) {
     const sigAlg = convertDotNotationFromOID(alg_der);
     const sig_der = seq[2];
     let sig;
-    switch (sigAlg.join('.')) {
+    switch (sigAlg) {
         // shaXXXWithRSAEncryption
         case '1.2.840.113549.1.1.5':
         case '1.2.840.113549.1.1.11':
             sig = extractBytesFromBITSTRING(sig_der);
             break;
         // ecdsa-with-SHAXXX の時は
-        // Ecdsa-Sig-Value  ::=  SEQUENCE  {
-        //     r     INTEGER,
-        //     s     INTEGER  }
+        // Ecdsa-Sig-Value  ::=  SEQUENCE  { r INTEGER, s INTEGER }
         case '1.2.840.10045.4.3.2':
         case '1.2.840.10045.4.3.3':
         case '1.2.840.10045.4.3.4': {
@@ -246,7 +251,7 @@ function parseX509DER(der_raw) {
             break;
         }
         default:
-            throw EvalError(`parseX509DER does not support this alg(${sigAlg.join('.')})`);
+            throw EvalError(`parseX509DER does not support this alg(${sigAlg})`);
     }
     return { tbs: parseX509TBSCert(tbs_der), sigAlg, sig };
 }
@@ -308,51 +313,54 @@ function parseX509SPKI(der) {
     }
     const [algID, spki] = derArrayFromSEQUENCE(der);
     const [alg, param] = derArrayFromSEQUENCE(algID);
-    const oid = convertDotNotationFromOID(alg).join('.');
-    // このOID(rsaEncryption) は RSA 公開鍵を識別する (RFC3279)
-    if (oid == '1.2.840.113549.1.1.1') {
-        // パラメータは null である
-        if (param.class !== 'Universal' || param.tag !== TAG_NULL) {
-            throw EvalError('RSA公開鍵のフォーマットを満たしていない');
+    switch (convertDotNotationFromOID(alg)) {
+        // このOID(rsaEncryption) は RSA 公開鍵を識別する (RFC3279)
+        case '1.2.840.113549.1.1.1': {
+            // パラメータは null である
+            if (param.class !== 'Universal' || param.tag !== TAG_NULL) {
+                throw EvalError('RSA公開鍵のフォーマットを満たしていない');
+            }
+            // spki は次のフォーマットになる (RFC3279)
+            // RSAPublicKey ::= SEQUENCE {
+            //   modulus            INTEGER,    -- n
+            //   publicExponent     INTEGER  }  -- e
+            const [n, e] = derArrayFromSEQUENCE(DER_DECODE(extractBytesFromBITSTRING(spki)));
+            return {
+                kty: 'RSA',
+                raw: der.raw,
+                n: extractNonNegativeIntegerFromInteger(n),
+                e: extractNonNegativeIntegerFromInteger(e),
+            };
         }
-        // spki は次のフォーマットになる (RFC3279)
-        // RSAPublicKey ::= SEQUENCE {
-        //   modulus            INTEGER,    -- n
-        //   publicExponent     INTEGER  }  -- e
-        const [n, e] = derArrayFromSEQUENCE(DER_DECODE(extractBytesFromBITSTRING(spki)));
-        return {
-            kty: 'RSA',
-            raw: der.raw,
-            n: extractNonNegativeIntegerFromInteger(n),
-            e: extractNonNegativeIntegerFromInteger(e),
-        };
+        // このOID(id-ecPublicKey) は EC 公開鍵を識別する (RFC5480)
+        case '1.2.840.10045.2.1': {
+            // namedCurve 以外はPKIX では使われないのでスルー (RFC5480)
+            // EcpkParameters ::= CHOICE {
+            //  namedCurve    OBJECT IDENTIFIER,
+            //  implicitCurve  NULL,
+            //  specifiedCurve SpecifiedECDomain }
+            if (param.class !== 'Universal' || param.tag !== TAG_OBJECTIDENTIFIER) {
+                throw EvalError('EC公開鍵のパラメータは OID 指定のみ実装する');
+            }
+            // 圧縮されていない前提で考えている。
+            // 圧縮されていない場合 spki には  0x04 || x || y で公開鍵がエンコードされている.
+            const xy = extractBytesFromBITSTRING(spki);
+            const x = xy.slice(1, (xy.length - 1) / 2 + 1);
+            const y = xy.slice((xy.length - 1) / 2 + 1);
+            switch (convertDotNotationFromOID(param)) {
+                // secp256r1 つまり P-256 カーブを意味する
+                case '1.2.840.10045.3.1.7':
+                    return { kty: 'EC', raw: der.raw, crv: 'P-256', x, y };
+                // secp384r1 つまり P-384 カーブを意味する
+                case '1.3.132.0.34':
+                    return { kty: 'EC', raw: der.raw, crv: 'P-384', x, y };
+                default:
+                    throw EvalError('SPKI parser for ec unimplmented');
+            }
+        }
+        default:
+            throw EvalError('SPKI parser Unimplemented!');
     }
-    // このOID(id-ecPublicKey) は EC 公開鍵を識別する (RFC5480)
-    if (oid == '1.2.840.10045.2.1') {
-        // namedCurve 以外はPKIX では使われないのでスルー (RFC5480)
-        // EcpkParameters ::= CHOICE {
-        //  namedCurve    OBJECT IDENTIFIER,
-        //  implicitCurve  NULL,
-        //  specifiedCurve SpecifiedECDomain }
-        if (param.class !== 'Universal' || param.tag !== TAG_OBJECTIDENTIFIER) {
-            throw EvalError('EC公開鍵のパラメータは OID 指定のみ実装する');
-        }
-        const namedCurve = convertDotNotationFromOID(param).join('.');
-        // 圧縮されていない前提で考えている。
-        // 圧縮されていない場合 spki には  0x04 || x || y で公開鍵がエンコードされている.
-        const xy = extractBytesFromBITSTRING(spki);
-        const x = xy.slice(1, (xy.length - 1) / 2 + 1);
-        const y = xy.slice((xy.length - 1) / 2 + 1);
-        // secp256r1 つまり P-256 カーブを意味する
-        if (namedCurve === '1.2.840.10045.3.1.7') {
-            return { kty: 'EC', raw: der.raw, crv: 'P-256', x, y };
-        }
-        // secp384r1 つまり P-384 カーブを意味する
-        if (namedCurve === '1.3.132.0.34') {
-            return { kty: 'EC', raw: der.raw, crv: 'P-384', x, y };
-        }
-    }
-    throw EvalError('SPKI parset Unimplemented!');
 }
 const TAG_INTEGER = 2;
 const TAG_BITSTRING = 3;
@@ -395,7 +403,7 @@ function extractBytesFromBITSTRING(der) {
     return ans;
 }
 /**
- * OID の DER 表現から Object Identifier のドット表記をパースする。
+ * OID の DER 表現から Object Identifier のドット表記に変換する
  */
 function convertDotNotationFromOID(der) {
     if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_OBJECTIDENTIFIER) {
@@ -422,7 +430,7 @@ function convertDotNotationFromOID(der) {
         ans.push(tmp);
         i++;
     }
-    return ans;
+    return ans.join('.');
 }
 /**
  * Constructed な DER で表現された SEQUENCE を JSのオブジェクトである Array<DER> に変換する
@@ -605,7 +613,7 @@ async function validJWK(jwk, options) {
     if (options == null)
         return true;
     if (options.x5c != null) {
-        const err = await validJWKx5c(jwk, options.x5c?.selfSigned ?? false);
+        const err = await validJWKx5c(jwk, options.x5c?.selfSigned);
         if (err != null) {
             throw EvalError(err);
         }
@@ -661,56 +669,39 @@ async function test$4() {
         allGreen = false;
     }
     else {
-        log += 'JWK Set と判定できた\n';
         // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
         if (isJWK(a1.keys[0], 'EC', 'Pub') && isJWK(a1.keys[1], 'RSA', 'Pub')) {
-            log += '1つ目の鍵はEC公開鍵で、２つ目の鍵はRSA公開鍵と判定できた\n';
+            log += 'JWKSet([JWK<EC,Pub>, JWK<RSA,Pub>]) と判定できた (OK)\n';
         }
         else {
             log += 'JWK Set に含まれる公開鍵の種類の判定に失敗\n';
             allGreen = false;
         }
-        // The first specifies that the key is to be used for encryption.
-        if (a1.keys[0].use === 'enc') {
-            log += 'EC公開鍵の使い道が暗号化であることが確認できた\n';
-        }
-        else {
-            log += 'EC公開鍵の使い道が暗号化であることの判定に失敗\n';
-        }
-        // The second specifies that the key is to be used with the "RS256" algorithm.
-        if (a1.keys[1].alg === 'RS256') {
-            log += 'RSA公開鍵のアルゴリズムを判定できた\n';
-        }
-        else {
-            log += 'RSA公開鍵のアルゴリズムの判定に失敗\n';
-        }
     }
-    log += 'TEST NAME: A.2. Example Private Keys ';
+    log += 'TEST NAME: A.2. Example Private Keys: ';
     if (!isJWKSet(a2)) {
         log += 'JWK Set と判定できていない\n';
         allGreen = false;
     }
     else {
-        log += 'JWK Set と判定できた\n';
         // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
         if (isJWK(a2.keys[0], 'EC', 'Priv') && isJWK(a2.keys[1], 'RSA', 'Priv')) {
-            log += '1つ目の鍵はEC秘密鍵で、２つ目の鍵はRSA秘密鍵と判定できた\n';
+            log += 'JWKSet([JWK<EC,Priv>, JWK<RSA,Priv>]) と判定できた (OK)\n';
         }
         else {
             log += 'JWK Set に含まれる秘密鍵の種類の判定に失敗\n';
             allGreen = false;
         }
     }
-    log += 'TEST NAME: A.3. Example Symmetric Keys ';
+    log += 'TEST NAME: A.3. Example Symmetric Keys: ';
     if (!isJWKSet(a3)) {
         log += 'JWK Set と判定できていない\n';
         allGreen = false;
     }
     else {
-        log += 'JWK Set と判定できた\n';
         // JWK Set contains two symmetric keys represented as JWKs:
         if (isJWK(a3.keys[0], 'oct') && isJWK(a3.keys[1], 'oct')) {
-            log += '２つの対称鍵が含まれていることを確認\n';
+            log += 'JWKSet([JWK<oct>, JWK<oct>]) と判定できた (OK)\n';
         }
         else {
             log += 'JWK Set に含まれる対称鍵の種類の判定に失敗\n';
@@ -861,7 +852,7 @@ const b = {
         'MIIDQjCCAiqgAwIBAgIGATz/FuLiMA0GCSqGSIb3DQEBBQUAMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDAeFw0xMzAyMjEyMzI5MTVaFw0xODA4MTQyMjI5MTVaMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAL64zn8/QnHYMeZ0LncoXaEde1fiLm1jHjmQsF/449IYALM9if6amFtPDy2yvz3YlRij66s5gyLCyO7ANuVRJx1NbgizcAblIgjtdf/u3WG7K+IiZhtELto/A7Fck9Ws6SQvzRvOE8uSirYbgmj6He4iO8NCyvaK0jIQRMMGQwsU1quGmFgHIXPLfnpnfajr1rVTAwtgV5LEZ4Iel+W1GC8ugMhyr4/p1MtcIM42EA8BzE6ZQqC7VPqPvEjZ2dbZkaBhPbiZAS3YeYBRDWm1p1OZtWamT3cEvqqPpnjL1XyW+oyVVkaZdklLQp2Btgt9qr21m42f4wTw+Xrp6rCKNb0CAwEAATANBgkqhkiG9w0BAQUFAAOCAQEAh8zGlfSlcI0o3rYDPBB07aXNswb4ECNIKG0CETTUxmXl9KUL+9gGlqCz5iWLOgWsnrcKcY0vXPG9J1r9AqBNTqNgHq2G03X09266X5CpOe1zFo+Owb1zxtp3PehFdfQJ610CDLEaS9V9Rqp17hCyybEpOGVwe8fnk+fbEL2Bo3UPGrpsHzUoaGpDftmWssZkhpBJKVMJyf/RuP2SmmaIzmnw9JiSlYhzo4tpzd5rFXhjRbg4zW9C+2qok+2+qDM1iJ684gPHMIY8aLWrdgQTxkumGmTqgawR+N5MDtdPTEQ0XfIBc2cJEUyMTY5MPvACWpkA6SdS4xSvdXK3IVfOWA==',
     ],
 };
-// ref: https://good.sca3a.amazontrust.com/
+// ref: https://good.sca3a.amazontrust.com/ に基づいて JWK を生成した
 const amazon_root_ca_3 = {
     kty: 'EC',
     crv: 'P-256',
@@ -1043,7 +1034,7 @@ async function test() {
 (async () => {
     for (const test$5 of [test$4, test$3, test$2, test$1, test]) {
         const { title, log, allGreen } = await test$5();
-        console.group(title, 'AllGreen?', allGreen);
+        console.group(title, allGreen);
         console.log(log);
         console.groupEnd();
     }

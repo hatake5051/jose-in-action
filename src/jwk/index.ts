@@ -111,7 +111,7 @@ async function validJWK<K extends Kty, A extends AsymKty>(
 ): Promise<boolean> {
   if (options == null) return true;
   if (options.x5c != null) {
-    const err = await validJWKx5c(jwk, options.x5c?.selfSigned ?? false);
+    const err = await validJWKx5c(jwk, options.x5c?.selfSigned);
     if (err != null) {
       throw EvalError(err);
     }

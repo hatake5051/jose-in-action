@@ -17,50 +17,35 @@ async function test(): Promise<{
     log += 'JWK Set と判定できていない\n';
     allGreen = false;
   } else {
-    log += 'JWK Set と判定できた\n';
     // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
     if (isJWK(a1.keys[0], 'EC', 'Pub') && isJWK(a1.keys[1], 'RSA', 'Pub')) {
-      log += '1つ目の鍵はEC公開鍵で、２つ目の鍵はRSA公開鍵と判定できた\n';
+      log += 'JWKSet([JWK<EC,Pub>, JWK<RSA,Pub>]) と判定できた (OK)\n';
     } else {
       log += 'JWK Set に含まれる公開鍵の種類の判定に失敗\n';
       allGreen = false;
     }
-    // The first specifies that the key is to be used for encryption.
-    if (a1.keys[0].use === 'enc') {
-      log += 'EC公開鍵の使い道が暗号化であることが確認できた\n';
-    } else {
-      log += 'EC公開鍵の使い道が暗号化であることの判定に失敗\n';
-    }
-    // The second specifies that the key is to be used with the "RS256" algorithm.
-    if (a1.keys[1].alg === 'RS256') {
-      log += 'RSA公開鍵のアルゴリズムを判定できた\n';
-    } else {
-      log += 'RSA公開鍵のアルゴリズムの判定に失敗\n';
-    }
   }
-  log += 'TEST NAME: A.2. Example Private Keys ';
+  log += 'TEST NAME: A.2. Example Private Keys: ';
   if (!isJWKSet(a2)) {
     log += 'JWK Set と判定できていない\n';
     allGreen = false;
   } else {
-    log += 'JWK Set と判定できた\n';
     // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
     if (isJWK(a2.keys[0], 'EC', 'Priv') && isJWK(a2.keys[1], 'RSA', 'Priv')) {
-      log += '1つ目の鍵はEC秘密鍵で、２つ目の鍵はRSA秘密鍵と判定できた\n';
+      log += 'JWKSet([JWK<EC,Priv>, JWK<RSA,Priv>]) と判定できた (OK)\n';
     } else {
       log += 'JWK Set に含まれる秘密鍵の種類の判定に失敗\n';
       allGreen = false;
     }
   }
-  log += 'TEST NAME: A.3. Example Symmetric Keys ';
+  log += 'TEST NAME: A.3. Example Symmetric Keys: ';
   if (!isJWKSet(a3)) {
     log += 'JWK Set と判定できていない\n';
     allGreen = false;
   } else {
-    log += 'JWK Set と判定できた\n';
     // JWK Set contains two symmetric keys represented as JWKs:
     if (isJWK(a3.keys[0], 'oct') && isJWK(a3.keys[1], 'oct')) {
-      log += '２つの対称鍵が含まれていることを確認\n';
+      log += 'JWKSet([JWK<oct>, JWK<oct>]) と判定できた (OK)\n';
     } else {
       log += 'JWK Set に含まれる対称鍵の種類の判定に失敗\n';
       allGreen = false;

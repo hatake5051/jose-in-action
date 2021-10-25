@@ -9,7 +9,7 @@ import { test as rsatest } from './jwk/test/rfc7520-rsa.test';
 (async () => {
   for (const test of [jwktest, x5ctest, ectest, octtest, rsatest]) {
     const { title, log, allGreen } = await test();
-    console.group(title, 'AllGreen?', allGreen);
+    console.group(title, allGreen);
     console.log(log);
     console.groupEnd();
   }

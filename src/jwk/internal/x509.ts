@@ -4,10 +4,17 @@ import { CONCAT } from '../../util';
 
 export { X509Cert, parseX509BASE64EncodedDER, validateSelfSignedCert, isX509SPKI };
 
+/**
+ * 自己署名証明書の X.509 証明書を受け取って、有効性の検証を行う。
+ * ここで行う有効性の検証は TBSCertificate.signature に書かれてあるアルゴリズムを使って、
+ * TBSCertificate.subjectPublicKeyInfo の公開鍵を用いて Certificate.signatureValue
+ * の検証ができるかのみを行う。
+ * validity の検証など必要な様々な検証が未実装である。
+ */
 async function validateSelfSignedCert(crt: X509Cert): Promise<boolean> {
   // alg を識別する
-  const alg = crt.sigAlg.join('.');
-  if (alg !== crt.tbs.alg.join('.')) {
+  const alg = crt.sigAlg;
+  if (alg !== crt.tbs.alg) {
     throw EvalError('signatureAlgorithm !== TBSCertificate.signature エラー');
   }
   // for Public-Key Cryptography Standards (PKCS) OID
@@ -79,16 +86,16 @@ type X509Cert = {
   sig: Uint8Array;
 };
 
+// X509 Algorithm Identifier は OID のみを表現することにした
+// 本来は algorithm ごとに用意された parameters ももつ
+type X509AlgId = string;
+
 /**
  * X.509 Certificate を表す、BASE64 エンコードされた DER をパースする
  */
 function parseX509BASE64EncodedDER(der_b64: string): X509Cert {
   return parseX509DER(BASE64_DECODE(der_b64));
 }
-
-// X509 Algorithm Identifier は OID のみを表現することにした
-// 本来は algorithm ごとに用意された parameters ももつ
-type X509AlgId = number[];
 
 function parseX509DER(der_raw: Uint8Array): X509Cert {
   const der = DER_DECODE(der_raw);
@@ -108,16 +115,14 @@ function parseX509DER(der_raw: Uint8Array): X509Cert {
   const sigAlg: X509AlgId = convertDotNotationFromOID(alg_der);
   const sig_der = seq[2];
   let sig: Uint8Array;
-  switch (sigAlg.join('.')) {
+  switch (sigAlg) {
     // shaXXXWithRSAEncryption
     case '1.2.840.113549.1.1.5':
     case '1.2.840.113549.1.1.11':
       sig = extractBytesFromBITSTRING(sig_der);
       break;
     // ecdsa-with-SHAXXX の時は
-    // Ecdsa-Sig-Value  ::=  SEQUENCE  {
-    //     r     INTEGER,
-    //     s     INTEGER  }
+    // Ecdsa-Sig-Value  ::=  SEQUENCE  { r INTEGER, s INTEGER }
     case '1.2.840.10045.4.3.2':
     case '1.2.840.10045.4.3.3':
     case '1.2.840.10045.4.3.4': {
@@ -130,7 +135,7 @@ function parseX509DER(der_raw: Uint8Array): X509Cert {
       break;
     }
     default:
-      throw EvalError(`parseX509DER does not support this alg(${sigAlg.join('.')})`);
+      throw EvalError(`parseX509DER does not support this alg(${sigAlg})`);
   }
   return { tbs: parseX509TBSCert(tbs_der), sigAlg, sig };
 }
@@ -237,52 +242,54 @@ function parseX509SPKI(der: DER): X509SPKI<'RSA' | 'EC'> {
   }
   const [algID, spki] = derArrayFromSEQUENCE(der);
   const [alg, param] = derArrayFromSEQUENCE(algID);
-  const oid = convertDotNotationFromOID(alg).join('.');
-  // このOID(rsaEncryption) は RSA 公開鍵を識別する (RFC3279)
-  if (oid == '1.2.840.113549.1.1.1') {
-    // パラメータは null である
-    if (param.class !== 'Universal' || param.tag !== TAG_NULL) {
-      throw EvalError('RSA公開鍵のフォーマットを満たしていない');
+  switch (convertDotNotationFromOID(alg)) {
+    // このOID(rsaEncryption) は RSA 公開鍵を識別する (RFC3279)
+    case '1.2.840.113549.1.1.1': {
+      // パラメータは null である
+      if (param.class !== 'Universal' || param.tag !== TAG_NULL) {
+        throw EvalError('RSA公開鍵のフォーマットを満たしていない');
+      }
+      // spki は次のフォーマットになる (RFC3279)
+      // RSAPublicKey ::= SEQUENCE {
+      //   modulus            INTEGER,    -- n
+      //   publicExponent     INTEGER  }  -- e
+      const [n, e] = derArrayFromSEQUENCE(DER_DECODE(extractBytesFromBITSTRING(spki)));
+      return {
+        kty: 'RSA',
+        raw: der.raw,
+        n: extractNonNegativeIntegerFromInteger(n),
+        e: extractNonNegativeIntegerFromInteger(e),
+      };
     }
-    // spki は次のフォーマットになる (RFC3279)
-    // RSAPublicKey ::= SEQUENCE {
-    //   modulus            INTEGER,    -- n
-    //   publicExponent     INTEGER  }  -- e
-    const [n, e] = derArrayFromSEQUENCE(DER_DECODE(extractBytesFromBITSTRING(spki)));
-    return {
-      kty: 'RSA',
-      raw: der.raw,
-      n: extractNonNegativeIntegerFromInteger(n),
-      e: extractNonNegativeIntegerFromInteger(e),
-    };
+    // このOID(id-ecPublicKey) は EC 公開鍵を識別する (RFC5480)
+    case '1.2.840.10045.2.1': {
+      // namedCurve 以外はPKIX では使われないのでスルー (RFC5480)
+      // EcpkParameters ::= CHOICE {
+      //  namedCurve    OBJECT IDENTIFIER,
+      //  implicitCurve  NULL,
+      //  specifiedCurve SpecifiedECDomain }
+      if (param.class !== 'Universal' || param.tag !== TAG_OBJECTIDENTIFIER) {
+        throw EvalError('EC公開鍵のパラメータは OID 指定のみ実装する');
+      }
+      // 圧縮されていない前提で考えている。
+      // 圧縮されていない場合 spki には  0x04 || x || y で公開鍵がエンコードされている.
+      const xy = extractBytesFromBITSTRING(spki);
+      const x = xy.slice(1, (xy.length - 1) / 2 + 1);
+      const y = xy.slice((xy.length - 1) / 2 + 1);
+      switch (convertDotNotationFromOID(param)) {
+        // secp256r1 つまり P-256 カーブを意味する
+        case '1.2.840.10045.3.1.7':
+          return { kty: 'EC', raw: der.raw, crv: 'P-256', x, y };
+        // secp384r1 つまり P-384 カーブを意味する
+        case '1.3.132.0.34':
+          return { kty: 'EC', raw: der.raw, crv: 'P-384', x, y };
+        default:
+          throw EvalError('SPKI parser for ec unimplmented');
+      }
+    }
+    default:
+      throw EvalError('SPKI parser Unimplemented!');
   }
-  // このOID(id-ecPublicKey) は EC 公開鍵を識別する (RFC5480)
-  if (oid == '1.2.840.10045.2.1') {
-    // namedCurve 以外はPKIX では使われないのでスルー (RFC5480)
-    // EcpkParameters ::= CHOICE {
-    //  namedCurve    OBJECT IDENTIFIER,
-    //  implicitCurve  NULL,
-    //  specifiedCurve SpecifiedECDomain }
-    if (param.class !== 'Universal' || param.tag !== TAG_OBJECTIDENTIFIER) {
-      throw EvalError('EC公開鍵のパラメータは OID 指定のみ実装する');
-    }
-    const namedCurve = convertDotNotationFromOID(param).join('.');
-
-    // 圧縮されていない前提で考えている。
-    // 圧縮されていない場合 spki には  0x04 || x || y で公開鍵がエンコードされている.
-    const xy = extractBytesFromBITSTRING(spki);
-    const x = xy.slice(1, (xy.length - 1) / 2 + 1);
-    const y = xy.slice((xy.length - 1) / 2 + 1);
-    // secp256r1 つまり P-256 カーブを意味する
-    if (namedCurve === '1.2.840.10045.3.1.7') {
-      return { kty: 'EC', raw: der.raw, crv: 'P-256', x, y };
-    }
-    // secp384r1 つまり P-384 カーブを意味する
-    if (namedCurve === '1.3.132.0.34') {
-      return { kty: 'EC', raw: der.raw, crv: 'P-384', x, y };
-    }
-  }
-  throw EvalError('SPKI parset Unimplemented!');
 }
 
 // DER パーサを実装する。
@@ -334,9 +341,9 @@ function extractBytesFromBITSTRING(der: DER): Uint8Array {
 }
 
 /**
- * OID の DER 表現から Object Identifier のドット表記をパースする。
+ * OID の DER 表現から Object Identifier のドット表記に変換する
  */
-function convertDotNotationFromOID(der: DER): number[] {
+function convertDotNotationFromOID(der: DER): string {
   if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_OBJECTIDENTIFIER) {
     throw EvalError('OID ではない DER format を扱おうとしている');
   }
@@ -361,7 +368,7 @@ function convertDotNotationFromOID(der: DER): number[] {
     ans.push(tmp);
     i++;
   }
-  return ans;
+  return ans.join('.');
 }
 
 /**
