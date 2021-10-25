@@ -1,5 +1,54 @@
 'use strict';
 
+// --------------------BEGIN util functions --------------------
+/**
+ * バイト列を BASE64URL エンコードする (Uint8Array to string)
+ */
+function BASE64URL(OCTETS) {
+    // window 組み込みの base64 encode 関数
+    // 組み込みの関数は引数としてバイナリ文字列を要求するため
+    // Uint8Array をバイナリ文字列へと変換する
+    const b_str = String.fromCharCode(...OCTETS);
+    const base64_encode = window.btoa(b_str);
+    return (base64_encode
+        // 文字「+」は全て「-」へ変換する
+        .replaceAll('+', '-')
+        // 文字「/」は全て「_」へ変換する
+        .replaceAll('/', '_')
+        // 4の倍数にするためのパディング文字は全て消去
+        .replaceAll('=', ''));
+}
+/**
+ * バイト列に BASE64URL デコードする (string to Uint8Array)
+ */
+function BASE64URL_DECODE(STRING) {
+    const url_decode = STRING
+        // URL-safe にするために変換した文字たちを戻す
+        .replaceAll('-', '+')
+        .replaceAll('_', '/')
+        // 文字列長が4の倍数になるように padding文字で埋める
+        .padEnd(Math.ceil(STRING.length / 4) * 4, '=');
+    // window 組み込みの base64 decode 関数
+    // この関数はデコードの結果をバイナリ文字列として出力する
+    const b_str = window.atob(url_decode);
+    // バイナリ文字列を Uint8Array に変換する
+    const b = new Uint8Array(b_str.length);
+    for (let i = 0; i < b_str.length; i++) {
+        b[i] = b_str.charCodeAt(i);
+    }
+    return b;
+}
+/**
+ * ２つのバイト列を結合する
+ */
+function CONCAT(A, B) {
+    const ans = new Uint8Array(A.length + B.length);
+    ans.set(A);
+    ans.set(B, A.length);
+    return ans;
+}
+// --------------------END util functions --------------------
+
 // --------------------BEGIN iana constants --------------------
 /**
  * Kty は JSON Web Key Types を列挙する。
@@ -24,29 +73,6 @@ const isCommonJWKParams = (arg) => {
     return false;
 };
 // --------------------END JWK common parameters --------------------
-
-// --------------------BEGIN util functions --------------------
-/**
- * バイト列に BASE64URL デコードする (string to Uint8Array)
- */
-function BASE64URL_DECODE(STRING) {
-    const url_decode = STRING
-        // URL-safe にするために変換した文字たちを戻す
-        .replaceAll('-', '+')
-        .replaceAll('_', '/')
-        // 文字列長が4の倍数になるように padding文字で埋める
-        .padEnd(Math.ceil(STRING.length / 4) * 4, '=');
-    // window 組み込みの base64 decode 関数
-    // この関数はデコードの結果をバイナリ文字列として出力する
-    const b_str = window.atob(url_decode);
-    // バイナリ文字列を Uint8Array に変換する
-    const b = new Uint8Array(b_str.length);
-    for (let i = 0; i < b_str.length; i++) {
-        b[i] = b_str.charCodeAt(i);
-    }
-    return b;
-}
-// --------------------END util functions --------------------
 
 // --------------------BEGIN JWK EC parameters --------------------
 const ecPublicKeyParams = ['crv', 'x', 'y'];
@@ -120,15 +146,6 @@ const isRSAPrivateKey = (arg) => {
 // --------------------END JWK RSA parameters --------------------
 
 // --------------------BEGIN X.509 DER praser --------------------
-const TAG_SEQUENCE = 16;
-const TAG_BITSTRING = 3;
-const TAG_OBJECTIDENTIFIER = 6;
-/**
- * X.509 Certificate を表す、BASE64 エンコードされた DER をパースする
- */
-function parseX509BASE64EncodedDER(der_b64) {
-    return parseX509DER(BASE64_DECODE(der_b64));
-}
 async function validateSelfSignedCert(crt) {
     // alg を識別する
     const alg = crt.sigAlg.join('.');
@@ -138,72 +155,226 @@ async function validateSelfSignedCert(crt) {
     // for Public-Key Cryptography Standards (PKCS) OID
     if (alg.startsWith('1.2.840.113549.1.1')) {
         let keyAlg;
-        let verifyAlg;
-        if (alg === '1.2.840.113549.1.1.5') {
+        const verifyAlg = 'RSASSA-PKCS1-v1_5';
+        switch (alg) {
             // sha1-with-rsa-signature とか sha1WithRSAEncryption
-            keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' };
-            verifyAlg = 'RSASSA-PKCS1-v1_5';
-        }
-        else if (alg === '1.2.840.113549.1.1.11') {
+            case '1.2.840.113549.1.1.5':
+                keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' };
+                break;
             // sha256WithRSAEncryption
-            keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
-            verifyAlg = 'RSASSA-PKCS1-v1_5';
+            case '1.2.840.113549.1.1.11':
+                keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
+                break;
+            default:
+                throw EvalError(`unimplemented rsa alg(${alg})`);
         }
-        else {
-            throw EvalError(`unimplemented rsa alg(${alg})`);
+        const pubkey = await crypto.subtle.importKey('spki', crt.tbs.spki.raw, keyAlg, false, [
+            'verify',
+        ]);
+        return crypto.subtle.verify(verifyAlg, pubkey, crt.sig, crt.tbs.raw);
+    }
+    // OID(ansi-X9-62 signatures) は ecdsa の署名アルゴリズムを識別する
+    if (alg.startsWith('1.2.840.10045.4')) {
+        let keyAlg;
+        let verifyAlg;
+        switch (alg) {
+            // ecdsa-with-SHA256 (RFC5480)
+            case '1.2.840.10045.4.3.2':
+                keyAlg = { name: 'ECDSA', namedCurve: 'P-256' };
+                verifyAlg = { name: 'ECDSA', hash: 'SHA-256' };
+                break;
+            // ecdsa-with-SHA384
+            case '1.2.840.10045.4.3.3':
+                keyAlg = { name: 'ECDSA', namedCurve: 'P-384' };
+                verifyAlg = { name: 'ECDSA', hash: 'SHA-384' };
+                break;
+            // ecdsa-with-SHA512
+            case '1.2.840.10045.4.3.4':
+                keyAlg = { name: 'ECDSA', namedCurve: 'P-521' };
+                verifyAlg = { name: 'ECDSA', hash: 'SHA-512' };
+                break;
+            default:
+                throw EvalError(`unimplemented ec alg(${alg})`);
         }
-        const pubkey = await crypto.subtle.importKey('spki', crt.tbs.spki, keyAlg, false, ['verify']);
+        const pubkey = await crypto.subtle.importKey('spki', crt.tbs.spki.raw, keyAlg, false, [
+            'verify',
+        ]);
         return crypto.subtle.verify(verifyAlg, pubkey, crt.sig, crt.tbs.raw);
     }
     throw EvalError(`unimplemented alg(${alg})`);
+}
+/**
+ * X.509 Certificate を表す、BASE64 エンコードされた DER をパースする
+ */
+function parseX509BASE64EncodedDER(der_b64) {
+    return parseX509DER(BASE64_DECODE(der_b64));
 }
 function parseX509DER(der_raw) {
     const der = DER_DECODE(der_raw);
     if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
         throw EvalError('X509Cert DER フォーマットを満たしていない');
     }
-    const tbs_der = DER_DECODE(der.value);
-    const sigalg_der = DER_DECODE(der.value.slice(tbs_der.entireLen));
-    const sigAlg = convertDotNotationFromOID(DER_DECODE(sigalg_der.value));
-    const sig_der = DER_DECODE(der.value.slice(tbs_der.entireLen + sigalg_der.entireLen));
-    return {
-        tbs: parseX509TBSCert(tbs_der),
-        sigAlg,
-        sig: extractBytesFromBITSTRING(sig_der),
-    };
+    const seq = derArrayFromSEQUENCE(der);
+    if (seq.length !== 3) {
+        throw EvalError('X509Cert DER format を満たしていない');
+    }
+    const tbs_der = seq[0];
+    // AlgorithmIdentifier は以下の通りで、 RSA-PKCSv1.5 と ECDSA では parameter が null
+    // SEQUENCE  {
+    //   algorithm               OBJECT IDENTIFIER,
+    //   parameters              ANY DEFINED BY algorithm OPTIONAL  }
+    const alg_der = derArrayFromSEQUENCE(seq[1])[0];
+    const sigAlg = convertDotNotationFromOID(alg_der);
+    const sig_der = seq[2];
+    let sig;
+    switch (sigAlg.join('.')) {
+        // shaXXXWithRSAEncryption
+        case '1.2.840.113549.1.1.5':
+        case '1.2.840.113549.1.1.11':
+            sig = extractBytesFromBITSTRING(sig_der);
+            break;
+        // ecdsa-with-SHAXXX の時は
+        // Ecdsa-Sig-Value  ::=  SEQUENCE  {
+        //     r     INTEGER,
+        //     s     INTEGER  }
+        case '1.2.840.10045.4.3.2':
+        case '1.2.840.10045.4.3.3':
+        case '1.2.840.10045.4.3.4': {
+            const [r, s] = derArrayFromSEQUENCE(DER_DECODE(extractBytesFromBITSTRING(sig_der)));
+            // JWS などでサポートする署名値 format は r と s のバイナリ表現を単にくっつけただけのやつ
+            sig = CONCAT(extractNonNegativeIntegerFromInteger(r), extractNonNegativeIntegerFromInteger(s));
+            break;
+        }
+        default:
+            throw EvalError(`parseX509DER does not support this alg(${sigAlg.join('.')})`);
+    }
+    return { tbs: parseX509TBSCert(tbs_der), sigAlg, sig };
 }
 /**
  * X509 tbsCertificate の DER 表現をパースする
+ *  TBSCertificate  ::=  SEQUENCE  {
+ *         version         [0]  EXPLICIT Version DEFAULT v1,
+ *         serialNumber         CertificateSerialNumber,
+ *         signature            AlgorithmIdentifier,
+ *         issuer               Name,
+ *         validity             Validity,
+ *         subject              Name,
+ *         subjectPublicKeyInfo SubjectPublicKeyInfo,
+ *         issuerUniqueID  [1]  IMPLICIT UniqueIdentifier OPTIONAL, -- If present, version MUST be v2 or v3
+ *         subjectUniqueID [2]  IMPLICIT UniqueIdentifier OPTIONAL, -- If present, version MUST be v2 or v3
+ *         extensions      [3]  EXPLICIT Extensions OPTIONAL        -- If present, version MUST be v3        }
  */
 function parseX509TBSCert(der) {
     // TBSCert は SEQUENCE で表される
     if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
         throw EvalError('X509TBSCert DER フォーマットを満たしていない');
     }
-    // 一番初めは Version
-    const version = DER_DECODE(der.value);
-    let start = version.entireLen;
-    // 次は Serial Number
-    const serialNumber = DER_DECODE(der.value.slice(start));
-    start += serialNumber.entireLen;
-    const signature = DER_DECODE(der.value.slice(start));
-    start += signature.entireLen;
-    const issuer = DER_DECODE(der.value.slice(start));
-    start += issuer.entireLen;
-    const validity = DER_DECODE(der.value.slice(start));
-    start += validity.entireLen;
-    const subject = DER_DECODE(der.value.slice(start));
-    start += subject.entireLen;
-    const subjectPublicKeyInformation = DER_DECODE(der.value.slice(start));
+    const seq = derArrayFromSEQUENCE(der);
+    // Version は省略されるかもしれない (その場合は古いバージョンなのでエラーにする)
+    if (seq[0].class !== 'ContentSpecific') {
+        throw EvalError('X509v3 certificate ではない');
+    }
     return {
         raw: der.raw,
-        alg: convertDotNotationFromOID(DER_DECODE(signature.value)),
-        spki: subjectPublicKeyInformation.raw,
+        alg: convertDotNotationFromOID(DER_DECODE(seq[2].value)),
+        spki: parseX509SPKI(seq[6]),
     };
 }
-// ref: http://websites.umich.edu/~x509/ssleay/layman.html
+const isX509SPKI = (arg, kty) => {
+    if (typeof arg !== 'object')
+        return false;
+    if (arg == null)
+        return false;
+    if ('kty' in arg) {
+        const a = arg;
+        if (typeof a.kty !== 'string')
+            return false;
+        if (kty !== a.kty)
+            return false;
+        switch (a.kty) {
+            case 'RSA':
+                return 'raw' in a && 'n' in a && 'e' in a;
+            case 'EC':
+                return 'raw' in a && 'x' in a && 'y' in a;
+            default:
+                throw TypeError(`isX509SPKI(${kty}) is not implemented`);
+        }
+    }
+    return false;
+};
+function parseX509SPKI(der) {
+    if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
+        throw EvalError('SubjectPublicKeyInfo DER フォーマットを満たしていない');
+    }
+    const [algID, spki] = derArrayFromSEQUENCE(der);
+    const [alg, param] = derArrayFromSEQUENCE(algID);
+    const oid = convertDotNotationFromOID(alg).join('.');
+    // このOID(rsaEncryption) は RSA 公開鍵を識別する (RFC3279)
+    if (oid == '1.2.840.113549.1.1.1') {
+        // パラメータは null である
+        if (param.class !== 'Universal' || param.tag !== TAG_NULL) {
+            throw EvalError('RSA公開鍵のフォーマットを満たしていない');
+        }
+        // spki は次のフォーマットになる (RFC3279)
+        // RSAPublicKey ::= SEQUENCE {
+        //   modulus            INTEGER,    -- n
+        //   publicExponent     INTEGER  }  -- e
+        const [n, e] = derArrayFromSEQUENCE(DER_DECODE(extractBytesFromBITSTRING(spki)));
+        return {
+            kty: 'RSA',
+            raw: der.raw,
+            n: extractNonNegativeIntegerFromInteger(n),
+            e: extractNonNegativeIntegerFromInteger(e),
+        };
+    }
+    // このOID(id-ecPublicKey) は EC 公開鍵を識別する (RFC5480)
+    if (oid == '1.2.840.10045.2.1') {
+        // namedCurve 以外はPKIX では使われないのでスルー (RFC5480)
+        // EcpkParameters ::= CHOICE {
+        //  namedCurve    OBJECT IDENTIFIER,
+        //  implicitCurve  NULL,
+        //  specifiedCurve SpecifiedECDomain }
+        if (param.class !== 'Universal' || param.tag !== TAG_OBJECTIDENTIFIER) {
+            throw EvalError('EC公開鍵のパラメータは OID 指定のみ実装する');
+        }
+        const namedCurve = convertDotNotationFromOID(param).join('.');
+        // 圧縮されていない前提で考えている。
+        // 圧縮されていない場合 spki には  0x04 || x || y で公開鍵がエンコードされている.
+        const xy = extractBytesFromBITSTRING(spki);
+        const x = xy.slice(1, (xy.length - 1) / 2 + 1);
+        const y = xy.slice((xy.length - 1) / 2 + 1);
+        // secp256r1 つまり P-256 カーブを意味する
+        if (namedCurve === '1.2.840.10045.3.1.7') {
+            return { kty: 'EC', raw: der.raw, crv: 'P-256', x, y };
+        }
+        // secp384r1 つまり P-384 カーブを意味する
+        if (namedCurve === '1.3.132.0.34') {
+            return { kty: 'EC', raw: der.raw, crv: 'P-384', x, y };
+        }
+    }
+    throw EvalError('SPKI parset Unimplemented!');
+}
+const TAG_INTEGER = 2;
+const TAG_BITSTRING = 3;
+const TAG_NULL = 5;
+const TAG_OBJECTIDENTIFIER = 6;
+const TAG_SEQUENCE = 16;
 /**
- * DER で表現された BITString からバイナリを取り出す
+ * Primitive な DER で表現された Integer からバイナリ表現の非負整数を取り出す。
+ * DER encoding では整数は符号付きなので非負整数は負の数と間違われないために先頭に 0x00 がついている。
+ * 非負整数のみを扱うと分かっていれば別に先頭のオクテットはいらないので消して取り出す。
+ */
+function extractNonNegativeIntegerFromInteger(der) {
+    if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_INTEGER) {
+        throw EvalError('INTEGER ではない DER format を扱おうとしている');
+    }
+    if (der.value[0] === 0x00) {
+        return der.value.slice(1);
+    }
+    return der.value;
+}
+/**
+ * Primitive な DER で表現された BITString からバイナリを取り出す
  */
 function extractBytesFromBITSTRING(der) {
     if (der.class !== 'Universal' || der.pc !== 'Primitive' || der.tag !== TAG_BITSTRING) {
@@ -250,6 +421,23 @@ function convertDotNotationFromOID(der) {
         tmp += v[i];
         ans.push(tmp);
         i++;
+    }
+    return ans;
+}
+/**
+ * Constructed な DER で表現された SEQUENCE を JSのオブジェクトである Array<DER> に変換する
+ */
+function derArrayFromSEQUENCE(der) {
+    if (der.class !== 'Universal' || der.pc !== 'Constructed' || der.tag !== TAG_SEQUENCE) {
+        throw EvalError('SEQUENCE ではない DER format を扱おうとしている');
+    }
+    const v = der.value;
+    const ans = [];
+    let start = 0;
+    while (start < v.length) {
+        const c = DER_DECODE(v.slice(start));
+        ans.push(c);
+        start += c.entireLen;
     }
     return ans;
 }
@@ -417,44 +605,48 @@ async function validJWK(jwk, options) {
     if (options == null)
         return true;
     if (options.x5c != null) {
-        if (options.x5c.selfSigned && !validX5C(jwk))
-            return false;
+        const err = await validJWKx5c(jwk, options.x5c?.selfSigned ?? false);
+        if (err != null) {
+            throw EvalError(err);
+        }
+        return true;
     }
     return true;
 }
-async function validX5C(jwk) {
+async function validJWKx5c(jwk, selfSigned = false) {
     if (jwk.x5c == null)
-        return true;
+        return 'JWK.x5c parameter not found';
+    if (jwk.x5c.length === 1 && !selfSigned)
+        return 'JWK.x5c is self-signed certificate';
+    // The key in the first certificate MUST match the public key represented by other members of the JWK. (RFC7517)
+    // jwk.x5c[0] が表現する公開鍵はその jwk が表現する値と同じでなければならない
+    const crt1 = parseX509BASE64EncodedDER(jwk.x5c[0]);
+    switch (jwk.kty) {
+        case 'RSA':
+            if (crt1.tbs.spki.kty === 'RSA' &&
+                isX509SPKI(crt1.tbs.spki, 'RSA') &&
+                jwk.n === BASE64URL(crt1.tbs.spki.n) &&
+                jwk.e === BASE64URL(crt1.tbs.spki.e)) {
+                break;
+            }
+            return 'JWK.x5c[0] does not match with JWK parameteres';
+        case 'EC':
+            if (crt1.tbs.spki.kty === 'EC' &&
+                isX509SPKI(crt1.tbs.spki, 'EC') &&
+                jwk.x === BASE64URL(crt1.tbs.spki.x) &&
+                jwk.y === BASE64URL(crt1.tbs.spki.y)) {
+                break;
+            }
+            return 'JWK.x5c[0] does not match with JWK parameteres';
+        case 'oct':
+            return 'JWK.x5c does not support symmetric key representation';
+    }
     if (jwk.x5c.length > 1)
         throw EvalError('証明書チェーンが１の長さで、かつ自己署名の場合のみ実装している');
     const crt = parseX509BASE64EncodedDER(jwk.x5c[0]);
     if (!(await validateSelfSignedCert(crt))) {
-        return false;
+        return 'JWK.x5c Signature Verification Error';
     }
-    // X.509 crt と jwk の値の比較をする
-    if (jwk.kty === 'RSA') {
-        let keyAlg;
-        if (crt.sigAlg.join('.') === '1.2.840.113549.1.1.5') {
-            // sha1-with-rsa-signature とか sha1WithRSAEncryption
-            keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' };
-        }
-        else if (crt.sigAlg.join('.') === '1.2.840.113549.1.1.11') {
-            // sha256WithRSAEncryption
-            keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
-        }
-        else {
-            throw EvalError(`validateSelfSignedCert の実装よりここには到達しない`);
-        }
-        const pubkey = await window.crypto.subtle.importKey('spki', crt.tbs.spki, keyAlg, true, [
-            'verify',
-        ]);
-        const crt_jwk = await window.crypto.subtle.exportKey('jwk', pubkey);
-        return jwk.n === crt_jwk.n && jwk.e === crt_jwk.e;
-    }
-    if (jwk.kty === 'EC') {
-        throw EvalError(`EC鍵を持つ x509crt の検証は未実装`);
-    }
-    return false;
 }
 // --------------------END JWK definition --------------------
 
@@ -592,24 +784,46 @@ async function test$3() {
     const cert = parseX509BASE64EncodedDER(b.x5c[0]);
     const isVerified = await validateSelfSignedCert(cert);
     if (isVerified) {
-        log += 'X509証明書のパースと検証に成功\n';
+        log += 'X509証明書(RSA) OK ';
     }
     else {
-        log += 'X509証明書のパースと検証に失敗\n';
+        log += 'X509証明書(RSA) X ';
         allGreen = false;
     }
-    log += 'TEST NAME: Validate JWK.x5c: ';
+    const eccert = parseX509BASE64EncodedDER(amazon_root_ca_3.x5c[0]);
+    const isECVerified = await validateSelfSignedCert(eccert);
+    if (isECVerified) {
+        log += 'X509証明書(EC) OK\n';
+    }
+    else {
+        log += 'X509証明書(EC) X\n';
+        allGreen = false;
+    }
+    log += 'TEST NAME: Validate JWK.x5c\n';
     if (isJWK(b, 'RSA', 'Pub')) {
         if (await validJWK(b, { x5c: { selfSigned: true } })) {
-            log += 'JWK.x5c の検証と整合性の確認に成功\n';
+            log += 'JWK.x5c (RSA) の検証と整合性の確認に成功\n';
         }
         else {
-            log += 'JWK.x5c の検証に失敗\n';
+            log += 'JWK.x5c (RSA) の検証に失敗\n';
             allGreen = false;
         }
     }
     else {
-        log += 'JWKPub<RSA> のパースに失敗\n';
+        log += 'JWK<RSA,Pub> のパースに失敗\n';
+        allGreen = false;
+    }
+    if (isJWK(amazon_root_ca_3, 'EC', 'Pub')) {
+        if (await validJWK(amazon_root_ca_3, { x5c: { selfSigned: true } })) {
+            log += 'JWK.x5c (EC) の検証と整合性の確認に成功\n';
+        }
+        else {
+            log += 'JWK.x5c (EC) の検証に失敗\n';
+            allGreen = false;
+        }
+    }
+    else {
+        log += 'JWK<EC, Pub> のパースに失敗\n';
         allGreen = false;
     }
     log += "TEST NAME: Validate JWK.x5c of microsoft's JWKSet for oidc: ";
@@ -645,6 +859,16 @@ const b = {
     e: 'AQAB',
     x5c: [
         'MIIDQjCCAiqgAwIBAgIGATz/FuLiMA0GCSqGSIb3DQEBBQUAMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDAeFw0xMzAyMjEyMzI5MTVaFw0xODA4MTQyMjI5MTVaMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAL64zn8/QnHYMeZ0LncoXaEde1fiLm1jHjmQsF/449IYALM9if6amFtPDy2yvz3YlRij66s5gyLCyO7ANuVRJx1NbgizcAblIgjtdf/u3WG7K+IiZhtELto/A7Fck9Ws6SQvzRvOE8uSirYbgmj6He4iO8NCyvaK0jIQRMMGQwsU1quGmFgHIXPLfnpnfajr1rVTAwtgV5LEZ4Iel+W1GC8ugMhyr4/p1MtcIM42EA8BzE6ZQqC7VPqPvEjZ2dbZkaBhPbiZAS3YeYBRDWm1p1OZtWamT3cEvqqPpnjL1XyW+oyVVkaZdklLQp2Btgt9qr21m42f4wTw+Xrp6rCKNb0CAwEAATANBgkqhkiG9w0BAQUFAAOCAQEAh8zGlfSlcI0o3rYDPBB07aXNswb4ECNIKG0CETTUxmXl9KUL+9gGlqCz5iWLOgWsnrcKcY0vXPG9J1r9AqBNTqNgHq2G03X09266X5CpOe1zFo+Owb1zxtp3PehFdfQJ610CDLEaS9V9Rqp17hCyybEpOGVwe8fnk+fbEL2Bo3UPGrpsHzUoaGpDftmWssZkhpBJKVMJyf/RuP2SmmaIzmnw9JiSlYhzo4tpzd5rFXhjRbg4zW9C+2qok+2+qDM1iJ684gPHMIY8aLWrdgQTxkumGmTqgawR+N5MDtdPTEQ0XfIBc2cJEUyMTY5MPvACWpkA6SdS4xSvdXK3IVfOWA==',
+    ],
+};
+// ref: https://good.sca3a.amazontrust.com/
+const amazon_root_ca_3 = {
+    kty: 'EC',
+    crv: 'P-256',
+    x: 'KZenxkF_wA2b6AEbVsbyUqW6LbIS6NIu1_rJxdiqbR8',
+    y: 'c4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt4',
+    x5c: [
+        'MIIBtjCCAVugAwIBAgITBmyf1XSXNmY/Owua2eiedgPySjAKBggqhkjOPQQDAjA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6b24gUm9vdCBDQSAzMB4XDTE1MDUyNjAwMDAwMFoXDTQwMDUyNjAwMDAwMFowOTELMAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJvb3QgQ0EgMzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCmXp8ZBf8ANm+gBG1bG8lKlui2yEujSLtf6ycXYqm0fc4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt6jQjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGGMB0GA1UdDgQWBBSrttvXBp43rDCGB5Fwx5zEGbF4wDAKBggqhkjOPQQDAgNJADBGAiEA4IWSoxe3jfkrBqWTrBqYaGFy+uGh0PsceGCmQ5nFuMQCIQCcAu/xlJyzlvnrxir4tiz+OpAUFteMYyRIHN8wfdVoOw==',
     ],
 };
 // --------------------END RFC7517 appendix.B test --------------------

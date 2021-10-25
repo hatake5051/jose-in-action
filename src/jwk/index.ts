@@ -1,11 +1,12 @@
 // --------------------BEGIN JWK definition --------------------
 
 import { Kty } from '../iana';
+import { BASE64URL } from '../util';
 import { isCommonJWKParams } from './internal/common';
 import { ECPrivateKey, ECPublicKey, isECPrivateKey, isECPublicKey } from './internal/ec';
 import { isOctKey, octKey } from './internal/oct';
 import { isRSAPrivateKey, isRSAPublicKey, RSAPrivateKey, RSAPublicKey } from './internal/rsa';
-import { parseX509BASE64EncodedDER, validateSelfSignedCert } from './internal/x509';
+import { isX509SPKI, parseX509BASE64EncodedDER, validateSelfSignedCert } from './internal/x509';
 
 export { JWK, JWKSet, isJWKSet, isJWK, validJWK };
 
@@ -110,41 +111,62 @@ async function validJWK<K extends Kty, A extends AsymKty>(
 ): Promise<boolean> {
   if (options == null) return true;
   if (options.x5c != null) {
-    if (options.x5c.selfSigned && !validX5C(jwk)) return false;
+    const err = await validJWKx5c(jwk, options.x5c?.selfSigned ?? false);
+    if (err != null) {
+      throw EvalError(err);
+    }
+    return true;
   }
   return true;
 }
 
-async function validX5C<K extends Kty>(jwk: JWK<K, 'Pub' | 'Priv'>): Promise<boolean> {
-  if (jwk.x5c == null) return true;
+type JWKValidationError =
+  | 'JWK.x5c parameter not found'
+  | 'JWK.x5c is self-signed certificate'
+  | 'JWK.x5c[0] does not match with JWK parameteres'
+  | 'JWK.x5c does not support symmetric key representation'
+  | 'JWK.x5c Signature Verification Error';
+
+async function validJWKx5c<K extends Kty>(
+  jwk: JWK<K, 'Pub' | 'Priv'>,
+  selfSigned = false
+): Promise<JWKValidationError | undefined> {
+  if (jwk.x5c == null) return 'JWK.x5c parameter not found';
+  if (jwk.x5c.length === 1 && !selfSigned) return 'JWK.x5c is self-signed certificate';
+  // The key in the first certificate MUST match the public key represented by other members of the JWK. (RFC7517)
+  // jwk.x5c[0] が表現する公開鍵はその jwk が表現する値と同じでなければならない
+  const crt1 = parseX509BASE64EncodedDER(jwk.x5c[0]);
+  switch (jwk.kty) {
+    case 'RSA':
+      if (
+        crt1.tbs.spki.kty === 'RSA' &&
+        isX509SPKI(crt1.tbs.spki, 'RSA') &&
+        jwk.n === BASE64URL(crt1.tbs.spki.n) &&
+        jwk.e === BASE64URL(crt1.tbs.spki.e)
+      ) {
+        break;
+      }
+      return 'JWK.x5c[0] does not match with JWK parameteres';
+    case 'EC':
+      if (
+        crt1.tbs.spki.kty === 'EC' &&
+        isX509SPKI(crt1.tbs.spki, 'EC') &&
+        jwk.x === BASE64URL(crt1.tbs.spki.x) &&
+        jwk.y === BASE64URL(crt1.tbs.spki.y)
+      ) {
+        break;
+      }
+      return 'JWK.x5c[0] does not match with JWK parameteres';
+    case 'oct':
+      return 'JWK.x5c does not support symmetric key representation';
+  }
+
   if (jwk.x5c.length > 1)
     throw EvalError('証明書チェーンが１の長さで、かつ自己署名の場合のみ実装している');
   const crt = parseX509BASE64EncodedDER(jwk.x5c[0]);
   if (!(await validateSelfSignedCert(crt))) {
-    return false;
+    return 'JWK.x5c Signature Verification Error';
   }
-  // X.509 crt と jwk の値の比較をする
-  if (jwk.kty === 'RSA') {
-    let keyAlg;
-    if (crt.sigAlg.join('.') === '1.2.840.113549.1.1.5') {
-      // sha1-with-rsa-signature とか sha1WithRSAEncryption
-      keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' };
-    } else if (crt.sigAlg.join('.') === '1.2.840.113549.1.1.11') {
-      // sha256WithRSAEncryption
-      keyAlg = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
-    } else {
-      throw EvalError(`validateSelfSignedCert の実装よりここには到達しない`);
-    }
-    const pubkey = await window.crypto.subtle.importKey('spki', crt.tbs.spki, keyAlg, true, [
-      'verify',
-    ]);
-    const crt_jwk = await window.crypto.subtle.exportKey('jwk', pubkey);
-    return jwk.n === crt_jwk.n && jwk.e === crt_jwk.e;
-  }
-  if (jwk.kty === 'EC') {
-    throw EvalError(`EC鍵を持つ x509crt の検証は未実装`);
-  }
-  return false;
 }
 
 // --------------------END JWK definition --------------------
