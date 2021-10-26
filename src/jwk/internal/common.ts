@@ -1,8 +1,8 @@
 // --------------------BEGIN JWK common parameters --------------------
 
-import { isKty, KeyOps, KeyUse, Kty } from '../../iana';
+import { Alg, isAlg, isKeyOps, isKeyUse, isKty, KeyOps, KeyUse, Kty } from '../../iana';
 
-export { CommomJWKParams, isCommonJWKParams };
+export { CommomJWKParams, isCommonJWKParams, validCommonJWKParams };
 
 /**
  * JWK が持つ共通パラメータを表す。
@@ -35,7 +35,7 @@ type CommomJWKParams<K extends Kty> = {
    * JWK Algorithm parameter はこの鍵を使う時に目的としたアルゴリズムを識別する。
    * 値として IANA レジストリに定義されているもののいずれか、もしくは当事者間で合意された文字列をもつ。
    */
-  alg?: string;
+  alg?: Alg;
   /**
    * RFC7517#4.5
    * JWK Key ID parameter は特定の鍵を照合するために用いられる。
@@ -66,15 +66,49 @@ type CommomJWKParams<K extends Kty> = {
 };
 
 /**
- * 共通パラメータのうち JWK として必須なものを引数が持っているか確認する。
- * RFC7517 では kty が必須とされている。
+ * CommonJWKParams の型ガード。型で表現していない JWK の制限は validJWK でチェックする。
  */
 const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams<Kty> => {
+  // CommJWKParams は null ではないオブジェクト
   if (typeof arg !== 'object' || arg == null) return false;
-  if ('kty' in arg) {
-    return isKty((arg as { kty: unknown }).kty);
+  // CommonJWKParams は kty をもち、その値は IANA に登録済みの値である
+  if (!('kty' in arg) || !isKty((arg as { kty: unknown }).kty)) return false;
+  // CommonJWKParams は use を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+  if ('use' in arg && !isKeyUse((arg as { use: unknown }).use)) return false;
+  // CommonJWKParams は key_ops を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+  if ('key_ops' in arg) {
+    const ops = (arg as { key_ops: unknown }).key_ops;
+    if (!Array.isArray(ops) || !ops.every((o) => isKeyOps(o))) return false;
   }
-  return false;
+  // CommonJWKParams は alg を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+  if ('alg' in arg && !isAlg((arg as { alg: unknown }).alg)) return false;
+  return true;
 };
+
+/**
+ * CommonJWKParams が RFC7517 に準拠しているか確認する
+ */
+function validCommonJWKParams(params: CommomJWKParams<Kty>): boolean {
+  if (params.key_ops != null) {
+    // key_ops と use は一緒に使うべきではない (SHOULD NOT)
+    if (params.use != null) return false;
+    const set = new Set(params.key_ops);
+    // key_ops は高々２の配列で、重複する値を含めてはならない(MUST NOT)
+    if (params.key_ops.length > 2 || params.key_ops.length !== set.size) return false;
+    if (set.size === 2) {
+      // かつ、要素は["sign", "verify"], ["encrypt", "decrypt"], ["wrapKey", "unwrapKey"] のバリエーションのみ(SHOULD)
+      // 疑問: なぜ ["deriveBit", "deriveKey"] の組み合わせはなぜダメなのか？教えて欲しい...
+      if (
+        !(
+          (set.has('sign') && set.has('verify')) ||
+          (set.has('encrypt') && set.has('decrypt')) ||
+          (set.has('wrapKey') && set.has('unwrapKey'))
+        )
+      )
+        return false;
+    }
+  }
+  return true;
+}
 
 // --------------------END JWK common parameters --------------------

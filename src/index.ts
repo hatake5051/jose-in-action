@@ -6,13 +6,15 @@ import { test as ectest } from './jwk/test/rfc7520-ec.test';
 import { test as octtest } from './jwk/test/rfc7520-oct.test';
 import { test as rsatest } from './jwk/test/rfc7520-rsa.test';
 
-(async () => {
+window.document.getElementById('jwk')?.addEventListener('click', test_jwk);
+
+async function test_jwk() {
   for (const test of [jwktest, x5ctest, ectest, octtest, rsatest]) {
     const { title, log, allGreen } = await test();
     console.group(title, allGreen);
     console.log(log);
     console.groupEnd();
   }
-})();
+}
 
 // --------------------END entry point --------------------

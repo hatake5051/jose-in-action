@@ -50,10 +50,50 @@ function CONCAT(A, B) {
 // --------------------END util functions --------------------
 
 // --------------------BEGIN iana constants --------------------
-/**
- * Kty は JSON Web Key Types を列挙する。
- * 'OKP' は未実装である。
- */
+const algList = [
+    'HS256',
+    'HS384',
+    'HS512',
+    'RS256',
+    'RS384',
+    'RS512',
+    'ES256',
+    'ES384',
+    'ES512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'none',
+    'RSA1_5',
+    'RSA-OAEP',
+    'RSA-OAEP-256',
+    'A128KW',
+    'A192KW',
+    'A256KW',
+    'dir',
+    'ECDH-ES',
+    'ECDH-ES+A128KW',
+    'ECDH-ES+A192KW',
+    'ECDH-ES+A256KW',
+    'A128GCMKW',
+    'A192GCMKW',
+    'A256GCMKW',
+    'PBES2-HS256+A128KW',
+    'PBES2-HS384+A192KW',
+    'PBES2-HS512+A256KW',
+    'A128CBC-HS256',
+    'A192CBC-HS384',
+    'A256CBC-HS512',
+    'A128GCM',
+    'A192GCM',
+    'A256GCM',
+];
+const isAlg = (arg) => {
+    if (typeof arg === 'string') {
+        return algList.some((a) => a === arg);
+    }
+    return false;
+};
 const ktyList = ['EC', 'RSA', 'oct'];
 const isKty = (arg) => {
     if (typeof arg == 'string') {
@@ -61,21 +101,112 @@ const isKty = (arg) => {
     }
     return false;
 };
-// --------------------END iana constants --------------------
-
-// --------------------BEGIN JWK common parameters --------------------
-const isCommonJWKParams = (arg) => {
-    if (typeof arg !== 'object' || arg == null)
-        return false;
-    if ('kty' in arg) {
-        return isKty(arg.kty);
+const keyUseList = ['sig', 'enc'];
+const isKeyUse = (arg) => {
+    if (typeof arg === 'string') {
+        return keyUseList.some((u) => u === arg);
     }
     return false;
 };
+/**
+ * JSON Web Key Operations を列挙する。
+ */
+const keyOpsList = [
+    'sign',
+    'verify',
+    'encrypt',
+    'decrypt',
+    'wrapKey',
+    'unwrapKey',
+    'deriveKey',
+    'deriveBits',
+];
+const isKeyOps = (arg) => {
+    if (typeof arg === 'string') {
+        return keyOpsList.some((u) => u === arg);
+    }
+    return false;
+};
+// --------------------END iana constants --------------------
+
+// --------------------BEGIN JWK common parameters --------------------
+/**
+ * CommonJWKParams の型ガード。型で表現していない JWK の制限は validJWK でチェックする。
+ */
+const isCommonJWKParams = (arg) => {
+    // CommJWKParams は null ではないオブジェクト
+    if (typeof arg !== 'object' || arg == null)
+        return false;
+    // CommonJWKParams は kty をもち、その値は IANA に登録済みの値である
+    if (!('kty' in arg) || !isKty(arg.kty))
+        return false;
+    // CommonJWKParams は use を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+    if ('use' in arg && !isKeyUse(arg.use))
+        return false;
+    // CommonJWKParams は key_ops を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+    if ('key_ops' in arg) {
+        const ops = arg.key_ops;
+        if (!Array.isArray(ops) || !ops.every((o) => isKeyOps(o)))
+            return false;
+    }
+    // CommonJWKParams は alg を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+    if ('alg' in arg && !isAlg(arg.alg))
+        return false;
+    return true;
+};
+/**
+ * CommonJWKParams が RFC7517 に準拠しているか確認する
+ */
+function validCommonJWKParams(params) {
+    if (params.key_ops != null) {
+        // key_ops と use は一緒に使うべきではない (SHOULD NOT)
+        if (params.use != null)
+            return false;
+        const set = new Set(params.key_ops);
+        // key_ops は高々２の配列で、重複する値を含めてはならない(MUST NOT)
+        if (params.key_ops.length > 2 || params.key_ops.length !== set.size)
+            return false;
+        if (set.size === 2) {
+            // かつ、要素は["sign", "verify"], ["encrypt", "decrypt"], ["wrapKey", "unwrapKey"] のバリエーションのみ(SHOULD)
+            // 疑問: なぜ ["deriveBit", "deriveKey"] の組み合わせはなぜダメなのか？教えて欲しい...
+            if (!((set.has('sign') && set.has('verify')) ||
+                (set.has('encrypt') && set.has('decrypt')) ||
+                (set.has('wrapKey') && set.has('unwrapKey'))))
+                return false;
+        }
+    }
+    return true;
+}
 // --------------------END JWK common parameters --------------------
 
 // --------------------BEGIN JWK EC parameters --------------------
+/**
+ * 引数が EC公開鍵の JWK 表現か確認する。
+ * kty == EC かどうか、 crv に適した x,y のサイズとなっているかどうか。
+ */
+const isECPublicKey = (arg) => {
+    if (!isCommonJWKParams(arg) || arg.kty !== 'EC')
+        return false;
+    if (!ecPublicKeyParams.every((key) => key in arg))
+        return false;
+    return validECPublicKeyParams(arg);
+};
+/**
+ * 引数が EC 秘密鍵の JWK 表現か確認する。
+ * EC 公開鍵であり、かつ d をパラメータとして持っていれば。
+ */
+const isECPrivateKey = (arg) => {
+    if (!isECPublicKey(arg))
+        return false;
+    const crv = arg.crv;
+    if (!('d' in arg))
+        return false;
+    return validECPrivateKeyParams(crv, arg);
+};
 const ecPublicKeyParams = ['crv', 'x', 'y'];
+/**
+ * EC 公開鍵パラメータが矛盾した値になってないか確認する
+ */
 function validECPublicKeyParams(p) {
     let key_len;
     switch (p.crv) {
@@ -91,6 +222,9 @@ function validECPublicKeyParams(p) {
     }
     return BASE64URL_DECODE(p.x).length === key_len && BASE64URL_DECODE(p.y).length === key_len;
 }
+/**
+ * EC 秘密鍵パラメータが引数で与えた crv のものか確認する。
+ */
 function validECPrivateKeyParams(crv, p) {
     let key_len;
     switch (crv) {
@@ -106,24 +240,13 @@ function validECPrivateKeyParams(crv, p) {
     }
     return BASE64URL_DECODE(p.d).length === key_len;
 }
-const isECPublicKey = (arg) => {
-    if (!isCommonJWKParams(arg) || arg.kty !== 'EC')
-        return false;
-    if (!ecPublicKeyParams.every((key) => key in arg))
-        return false;
-    return validECPublicKeyParams(arg);
-};
-const isECPrivateKey = (arg) => {
-    if (!isECPublicKey(arg))
-        return false;
-    const crv = arg.crv;
-    if (!('d' in arg))
-        return false;
-    return validECPrivateKeyParams(crv, arg);
-};
 // --------------------END JWK EC parameters --------------------
 
 // --------------------BEGIN JWK oct parameters --------------------
+/**
+ * 引数が対称鍵か確認する。
+ * kty == oct で k をパラメータとして持つか確認する。
+ */
 const isOctKey = (arg) => {
     if (!isCommonJWKParams(arg) || arg.kty !== 'oct')
         return false;
@@ -132,17 +255,25 @@ const isOctKey = (arg) => {
 // --------------------END JWK oct parameters --------------------
 
 // --------------------BEGIN JWK RSA parameters --------------------
-const rsaPublicKeyParams = ['n', 'e'];
+/**
+ * 引数が RSA 公開鍵かどうか確認する。
+ * kty == RSA かどうか、 n,e をパラメータとしてもつか確認する。
+ */
 const isRSAPublicKey = (arg) => {
     if (!isCommonJWKParams(arg) || arg.kty !== 'RSA')
         return false;
     return rsaPublicKeyParams.every((s) => s in arg);
 };
+/**
+ * 引数が RSA 秘密鍵かどうか確認する。
+ * RSA 公開鍵であるか、また d をパラメータとして持つか確認する。
+ */
 const isRSAPrivateKey = (arg) => {
     if (!isRSAPublicKey(arg))
         return false;
     return 'd' in arg;
 };
+const rsaPublicKeyParams = ['n', 'e'];
 // --------------------END JWK RSA parameters --------------------
 
 // --------------------BEGIN X.509 DER praser --------------------
@@ -541,6 +672,9 @@ function parseLength(lengthField) {
     }
     return { len, lengthFieldLen: 1 + additionalLengthFieldLen };
 }
+/**
+ * バイナリに文字列を BASE64 デコードする
+ */
 function BASE64_DECODE(STRING) {
     const b_str = window.atob(STRING);
     // バイナリ文字列を Uint8Array に変換する
@@ -604,20 +738,26 @@ const isJWKSet = (arg) => {
     return false;
 };
 /**
+ * 型で表現しきれない JWK の条件を満たすか確認する。
  * options に渡された条件を jwk が満たすか確認する
  * options.x5c を渡すことで、 jwk.x5c があればそれを検証する。
  * options.x5c.selfSigned = true にすると、x5t が自己署名証明書だけを持つか確認し、
  * 署名が正しいか確認する。また jwk パラメータと同じ内容が書かれているか確認する。
  */
 async function validJWK(jwk, options) {
+    if (!validCommonJWKParams(jwk))
+        return false;
     if (options == null)
         return true;
+    if (options.use != null) {
+        if (options.use !== jwk.use)
+            return false;
+    }
     if (options.x5c != null) {
         const err = await validJWKx5c(jwk, options.x5c?.selfSigned);
         if (err != null) {
             throw EvalError(err);
         }
-        return true;
     }
     return true;
 }
@@ -1031,12 +1171,13 @@ async function test() {
 // --------------------END RFC7520 Section.3 for RSA test --------------------
 
 // --------------------BEGIN entry point --------------------
-(async () => {
+window.document.getElementById('jwk')?.addEventListener('click', test_jwk);
+async function test_jwk() {
     for (const test$5 of [test$4, test$3, test$2, test$1, test]) {
         const { title, log, allGreen } = await test$5();
         console.group(title, allGreen);
         console.log(log);
         console.groupEnd();
     }
-})();
+}
 // --------------------END entry point --------------------

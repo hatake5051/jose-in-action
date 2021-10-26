@@ -1,8 +1,8 @@
 // --------------------BEGIN JWK definition --------------------
 
-import { Kty } from '../iana';
+import { KeyUse, Kty } from '../iana';
 import { BASE64URL } from '../util';
-import { isCommonJWKParams } from './internal/common';
+import { isCommonJWKParams, validCommonJWKParams } from './internal/common';
 import { ECPrivateKey, ECPublicKey, isECPrivateKey, isECPublicKey } from './internal/ec';
 import { isOctKey, octKey } from './internal/oct';
 import { isRSAPrivateKey, isRSAPublicKey, RSAPrivateKey, RSAPublicKey } from './internal/rsa';
@@ -99,6 +99,7 @@ const isJWKSet = (arg: unknown): arg is JWKSet => {
 type AsymKty = 'Pub' | 'Priv';
 
 /**
+ * 型で表現しきれない JWK の条件を満たすか確認する。
  * options に渡された条件を jwk が満たすか確認する
  * options.x5c を渡すことで、 jwk.x5c があればそれを検証する。
  * options.x5c.selfSigned = true にすると、x5t が自己署名証明書だけを持つか確認し、
@@ -107,18 +108,22 @@ type AsymKty = 'Pub' | 'Priv';
 async function validJWK<K extends Kty, A extends AsymKty>(
   jwk: JWK<K, A>,
   options: {
+    use?: KeyUse;
     x5c?: {
       selfSigned?: boolean;
     };
   }
 ): Promise<boolean> {
+  if (!validCommonJWKParams(jwk)) return false;
   if (options == null) return true;
+  if (options.use != null) {
+    if (options.use !== jwk.use) return false;
+  }
   if (options.x5c != null) {
     const err = await validJWKx5c(jwk, options.x5c?.selfSigned);
     if (err != null) {
       throw EvalError(err);
     }
-    return true;
   }
   return true;
 }
