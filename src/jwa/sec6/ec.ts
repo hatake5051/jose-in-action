@@ -1,10 +1,18 @@
-// --------------------BEGIN JWK EC parameters --------------------
+// --------------------BEGIN JWA EC keys --------------------
 
-import { Crv } from '../../iana';
+import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from '../../jwk/common';
 import { BASE64URL_DECODE } from '../../util';
-import { CommomJWKParams, isCommonJWKParams } from './common';
+import { JWACrv } from './kty';
 
-export { ECPublicKey, isECPublicKey, ECPrivateKey, isECPrivateKey };
+export {
+  ECPublicKey,
+  isECPublicKey,
+  equalsECPublicKey,
+  ECPrivateKey,
+  isECPrivateKey,
+  equalsECPrivateKey,
+  exportECPublicKey,
+};
 
 /**
  * EC 公開鍵は JWK 共通パラメータと EC 公開鍵用パラメータからなる
@@ -20,6 +28,10 @@ const isECPublicKey = (arg: unknown): arg is ECPublicKey => {
   if (!ecPublicKeyParams.every((key) => key in arg)) return false;
   return validECPublicKeyParams(arg as ECPublicKey);
 };
+
+function equalsECPublicKey(l?: ECPublicKey, r?: ECPublicKey): boolean {
+  return equalsCommonJWKParams(l, r) && equalsECPublicKeyParams(l, r);
+}
 
 /**
  * EC 秘密鍵は EC 公開鍵に EC 秘密鍵用パラメータを加えたもの
@@ -37,6 +49,17 @@ const isECPrivateKey = (arg: unknown): arg is ECPrivateKey => {
   return validECPrivateKeyParams(crv, arg as ECPrivateKey);
 };
 
+function equalsECPrivateKey(l?: ECPrivateKey, r?: ECPrivateKey): boolean {
+  if (!equalsECPublicKey(l, r)) return false;
+  return l?.d === r?.d;
+}
+
+const exportECPublicKey = (priv: ECPrivateKey): ECPublicKey => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { d, ...pub } = priv;
+  return pub;
+};
+
 /**
  * RFC7518#6.2.1
  * EC 公開鍵が持つパラメータを定義する。
@@ -47,7 +70,7 @@ type ECPublicKeyParams = {
    * Curve parameter はこの鍵で用いる curve を識別する。
    * JSON Web Key Eliptic Curve レジストリに登録されているもののいずれかである。
    */
-  crv: Crv;
+  crv: JWACrv;
   /**
    * RFC7518#6.2.1.2
    * X Coordinate parameter は楕円曲線点のx座標を表す。
@@ -63,7 +86,7 @@ type ECPublicKeyParams = {
    */
   y: string;
 };
-const ecPublicKeyParams = ['crv', 'x', 'y'];
+const ecPublicKeyParams = ['crv', 'x', 'y'] as const;
 
 /**
  * EC 公開鍵パラメータが矛盾した値になってないか確認する
@@ -84,6 +107,20 @@ function validECPublicKeyParams(p: ECPublicKeyParams): boolean {
   return BASE64URL_DECODE(p.x).length === key_len && BASE64URL_DECODE(p.y).length === key_len;
 }
 
+function equalsECPublicKeyParams(l?: ECPublicKeyParams, r?: ECPublicKeyParams): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  for (const n of ecPublicKeyParams) {
+    const ln = l[n];
+    const rn = r[n];
+    if (ln == null && rn == null) continue;
+    if (ln == null || rn == null) return false;
+    if (ln === rn) continue;
+    return false;
+  }
+  return true;
+}
+
 /**
  * RFC7518#6.2.2
  * EC 秘密鍵が持つパラメータを定義する。
@@ -101,7 +138,7 @@ type ECPrivateKeyParams = {
 /**
  * EC 秘密鍵パラメータが引数で与えた crv のものか確認する。
  */
-function validECPrivateKeyParams(crv: Crv, p: ECPrivateKeyParams): boolean {
+function validECPrivateKeyParams(crv: JWACrv, p: ECPrivateKeyParams): boolean {
   let key_len;
   switch (crv) {
     case 'P-256':
@@ -117,4 +154,4 @@ function validECPrivateKeyParams(crv: Crv, p: ECPrivateKeyParams): boolean {
   return BASE64URL_DECODE(p.d).length === key_len;
 }
 
-// --------------------END JWK EC parameters --------------------
+// --------------------END JWA EC keys --------------------

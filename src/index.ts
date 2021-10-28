@@ -5,6 +5,7 @@ import { test as x5ctest } from './jwk/test/rfc7517-b.test';
 import { test as ectest } from './jwk/test/rfc7520-ec.test';
 import { test as octtest } from './jwk/test/rfc7520-oct.test';
 import { test as rsatest } from './jwk/test/rfc7520-rsa.test';
+import { sec4 } from './jws/test/rfc7520.test';
 
 window.document.getElementById('jwk')?.addEventListener('click', test_jwk);
 
@@ -16,5 +17,7 @@ async function test_jwk() {
     console.groupEnd();
   }
 }
+
+sec4();
 
 // --------------------END entry point --------------------

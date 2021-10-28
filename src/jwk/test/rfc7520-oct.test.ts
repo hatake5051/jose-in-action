@@ -1,6 +1,6 @@
 // --------------------BEGIN RFC7520 Section.3 for oct test --------------------
 
-import { isJWK } from '../index';
+import { isJWK } from '..';
 
 export { test };
 

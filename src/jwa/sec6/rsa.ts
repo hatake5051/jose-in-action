@@ -1,8 +1,16 @@
-// --------------------BEGIN JWK RSA parameters --------------------
+// --------------------BEGIN JWA RSA keys --------------------
 
-import { CommomJWKParams, isCommonJWKParams } from './common';
+import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from '../../jwk/common';
 
-export { RSAPublicKey, isRSAPublicKey, RSAPrivateKey, isRSAPrivateKey };
+export {
+  RSAPublicKey,
+  isRSAPublicKey,
+  equalsRSAPublicKey,
+  RSAPrivateKey,
+  isRSAPrivateKey,
+  equalsRSAPrivateKey,
+  exportRSAPublicKey,
+};
 
 /**
  * RSA 公開鍵は JWK 共通パラメータと RSA 公開鍵パラメータからなる。
@@ -18,6 +26,10 @@ const isRSAPublicKey = (arg: unknown): arg is RSAPublicKey => {
   return rsaPublicKeyParams.every((s) => s in arg);
 };
 
+function equalsRSAPublicKey(l?: RSAPublicKey, r?: RSAPublicKey): boolean {
+  return equalsCommonJWKParams(l, r) && equalsRSAPublicKeyParams(l, r);
+}
+
 /**
  * RSA 秘密鍵は RSA 公開鍵に RSA 秘密鍵パラメータを加えたもの
  */
@@ -30,6 +42,16 @@ type RSAPrivateKey = RSAPublicKey & RSAPrivateKeyParams;
 const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey => {
   if (!isRSAPublicKey(arg)) return false;
   return 'd' in arg;
+};
+
+function equalsRSAPrivateKey(l?: RSAPrivateKey, r?: RSAPrivateKey): boolean {
+  return equalsRSAPublicKey(l, r) && equalsRSAPrivateKeyParams(l, r);
+}
+
+const exportRSAPublicKey = (priv: RSAPrivateKey): RSAPublicKey => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { d, p, q, dp, dq, qi, ...pub } = priv;
+  return pub;
 };
 
 /**
@@ -48,7 +70,21 @@ type RSAPublicKeyParams = {
    */
   e: string;
 };
-const rsaPublicKeyParams = ['n', 'e'];
+const rsaPublicKeyParams = ['n', 'e'] as const;
+
+function equalsRSAPublicKeyParams(l?: RSAPublicKeyParams, r?: RSAPublicKeyParams): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  for (const n of rsaPublicKeyParams) {
+    const ln = l[n];
+    const rn = r[n];
+    if (ln == null && rn == null) continue;
+    if (ln == null || rn == null) return false;
+    if (ln === rn) continue;
+    return false;
+  }
+  return true;
+}
 
 /**
  * RFC7518#6.3.2
@@ -93,5 +129,20 @@ type RSAPrivateKeyParams = {
    */
   qi?: string;
 };
+const rsaPrivateParams = ['d', 'p', 'q', 'dp', 'dq', 'qi'] as const;
 
-// --------------------END JWK RSA parameters --------------------
+function equalsRSAPrivateKeyParams(l?: RSAPrivateKeyParams, r?: RSAPrivateKeyParams): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  for (const n of rsaPrivateParams) {
+    const ln = l[n];
+    const rn = r[n];
+    if (ln == null && rn == null) continue;
+    if (ln == null || rn == null) return false;
+    if (ln === rn) continue;
+    return false;
+  }
+  return true;
+}
+
+// --------------------END JWA RSA keys --------------------

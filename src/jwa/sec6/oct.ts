@@ -1,8 +1,8 @@
-// --------------------BEGIN JWK oct parameters --------------------
+// --------------------BEGIN JWA symmetric keys --------------------
 
-import { CommomJWKParams, isCommonJWKParams } from './common';
+import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from '../../jwk/common';
 
-export { octKey, isOctKey };
+export { octKey, isOctKey, equalsOctKey };
 
 /**
  * 対称鍵は JWK 共通パラメータと共通鍵用パラメータからなる
@@ -18,6 +18,11 @@ const isOctKey = (arg: unknown): arg is octKey => {
   return 'k' in arg;
 };
 
+function equalsOctKey(l?: octKey, r?: octKey): boolean {
+  if (!equalsCommonJWKParams(l, r)) return false;
+  return l?.k === r?.k;
+}
+
 /**
  * RFC7518#6.4
  * oct 鍵が持つパラメータを定義する。
@@ -25,10 +30,10 @@ const isOctKey = (arg: unknown): arg is octKey => {
 type octKeyParams = {
   /**
    * RFC7518#6.4.1
-   * Key Value parameter は対称鍵もしくは単一の値を持つ亜k技が含まれる。
+   * Key Value parameter は対称鍵もしくは単一の値を持つ鍵が含まれる。
    * その鍵の値のオクテット表現の BASE64URL エンコードしたものを値としてもつ。
    */
   k: string;
 };
 
-// --------------------END JWK oct parameters --------------------
+// --------------------END JWA symmetric keys --------------------

@@ -78,4 +78,9 @@ export function CONCAT(A: Uint8Array, B: Uint8Array) {
   return ans;
 }
 
+export type WouldBe<T> = { [P in keyof T]?: unknown };
+
+export const isObject = <T extends object>(value: unknown): value is WouldBe<T> =>
+  typeof value === 'object' && value !== null;
+
 // --------------------END util functions --------------------

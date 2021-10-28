@@ -1,13 +1,14 @@
 // --------------------BEGIN JWK common parameters --------------------
 
 import { Alg, isAlg, isKeyOps, isKeyUse, isKty, KeyOps, KeyUse, Kty } from '../../iana';
+import { isObject } from '../../util';
 
-export { CommomJWKParams, isCommonJWKParams, validCommonJWKParams };
+export { CommomJWKParams, isCommonJWKParams, equalsCommonJWKParams, validCommonJWKParams };
 
 /**
  * JWK が持つ共通パラメータを表す。
  */
-type CommomJWKParams<K extends Kty> = {
+type CommomJWKParams<K extends Kty = Kty> = {
   /**
    * RFC7517#4.1
    * JWK Key Type parameter はこの鍵を使う暗号アルゴリズムを識別する。
@@ -64,31 +65,91 @@ type CommomJWKParams<K extends Kty> = {
    */
   'x5t#S256'?: string;
 };
+const commonJWKParamNameList = [
+  'kty',
+  'use',
+  'key_ops',
+  'alg',
+  'kid',
+  'x5u',
+  'x5c',
+  'x5t',
+  'x5t#S256',
+] as const;
 
 /**
  * CommonJWKParams の型ガード。型で表現していない JWK の制限は validJWK でチェックする。
  */
-const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams<Kty> => {
-  // CommJWKParams は null ではないオブジェクト
-  if (typeof arg !== 'object' || arg == null) return false;
-  // CommonJWKParams は kty をもち、その値は IANA に登録済みの値である
-  if (!('kty' in arg) || !isKty((arg as { kty: unknown }).kty)) return false;
-  // CommonJWKParams は use を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-  if ('use' in arg && !isKeyUse((arg as { use: unknown }).use)) return false;
-  // CommonJWKParams は key_ops を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-  if ('key_ops' in arg) {
-    const ops = (arg as { key_ops: unknown }).key_ops;
-    if (!Array.isArray(ops) || !ops.every((o) => isKeyOps(o))) return false;
-  }
-  // CommonJWKParams は alg を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-  if ('alg' in arg && !isAlg((arg as { alg: unknown }).alg)) return false;
-  return true;
+const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams => {
+  return (
+    isObject<CommomJWKParams>(arg) &&
+    commonJWKParamNameList.every((n) => {
+      if (arg[n] == null) return true;
+      switch (n) {
+        case 'kty':
+          return isKty(arg[n]);
+        case 'use':
+          return isKeyUse(arg[n]);
+        case 'key_ops':
+          return isKeyOps(arg[n]);
+        case 'alg':
+          return isAlg(arg[n]);
+        case 'x5c':
+          return (
+            Array.isArray(arg['x5c']) && arg['x5c'].every((s: unknown) => typeof s === 'string')
+          );
+        default:
+          return typeof arg[n] === 'string';
+      }
+    })
+  );
+  // // CommJWKParams は null ではないオブジェクト
+  // if (typeof arg !== 'object' || arg == null) return false;
+  // // CommonJWKParams は kty をもち、その値は IANA に登録済みの値である
+  // if (!('kty' in arg) || !isKty((arg as { kty: unknown }).kty)) return false;
+  // // CommonJWKParams は use を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+  // if ('use' in arg && !isKeyUse((arg as { use: unknown }).use)) return false;
+  // // CommonJWKParams は key_ops を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+  // if ('key_ops' in arg) {
+  //   const ops = (arg as { key_ops: unknown }).key_ops;
+  //   if (!Array.isArray(ops) || !ops.every((o) => isKeyOps(o))) return false;
+  // }
+  // // CommonJWKParams は alg を持つことがあり、持つ場合はその値が IANA に登録済みの値である
+  // if ('alg' in arg && !isAlg((arg as { alg: unknown }).alg)) return false;
+  // return true;
 };
+
+function equalsCommonJWKParams(l?: CommomJWKParams, r?: CommomJWKParams): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  for (const n of commonJWKParamNameList) {
+    const ln = l[n];
+    const rn = r[n];
+    if (ln == null && rn == null) continue;
+    if (ln == null || rn == null) return false;
+    switch (n) {
+      case 'key_ops':
+      case 'x5t': {
+        const ll = ln as string[];
+        const rr = rn as string[];
+        if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l))) continue;
+        return false;
+      }
+      default: {
+        const ll = ln as string;
+        const rr = rn as string;
+        if (ll === rr) continue;
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 /**
  * CommonJWKParams が RFC7517 に準拠しているか確認する
  */
-function validCommonJWKParams(params: CommomJWKParams<Kty>): boolean {
+function validCommonJWKParams(params: CommomJWKParams): boolean {
   if (params.key_ops != null) {
     // key_ops と use は一緒に使うべきではない (SHOULD NOT)
     if (params.use != null) return false;

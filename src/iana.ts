@@ -1,21 +1,18 @@
 // --------------------BEGIN iana constants --------------------
 
-export { Alg, Kty, KeyUse, KeyOps, Crv, isAlg, isKty, isKeyUse, isKeyOps, isCrv };
+import { isJWAMACAlg, isJWASigAlg, JWAMACAlg, JWASigAlg } from './jwa/sec3/alg';
+import { isJWACrv, isJWAKty, JWACrv, JWAKty } from './jwa/sec6/kty';
+import { JWSJOSEHeader } from './jws/internal/header';
+import { JWSAlg } from './jws/internal/types';
+
+export { JOSEHeader, Alg, Kty, KeyUse, KeyOps, Crv, isAlg, isKty, isKeyUse, isKeyOps, isCrv };
+
+/**
+ * 暗号操作や使用されるパラメータを表現する JSON オブジェクト
+ */
+type JOSEHeader<A extends Alg> = A extends JWSAlg ? Partial<JWSJOSEHeader> : never;
 
 const algList = [
-  'HS256',
-  'HS384',
-  'HS512',
-  'RS256',
-  'RS384',
-  'RS512',
-  'ES256',
-  'ES384',
-  'ES512',
-  'PS256',
-  'PS384',
-  'PS512',
-  'none',
   'RSA1_5',
   'RSA-OAEP',
   'RSA-OAEP-256',
@@ -40,30 +37,27 @@ const algList = [
   'A192GCM',
   'A256GCM',
 ] as const;
+
 /**
  * Alg は暗号アルゴリズムを列挙する。
  * RFC7518 に定義されているもののみ今回は実装の対象としている。
  */
-type Alg = typeof algList[number];
+type Alg = JWASigAlg | JWAMACAlg | 'none' | typeof algList[number];
 const isAlg = (arg: unknown): arg is Alg => {
+  if (isJWASigAlg(arg) || isJWAMACAlg(arg)) return true;
   if (typeof arg === 'string') {
+    if (arg === 'none') return true;
     return algList.some((a) => a === arg);
   }
   return false;
 };
 
-const ktyList = ['EC', 'RSA', 'oct'] as const;
 /**
  * Kty は JSON Web Key Types を列挙する。
  * 'OKP' は未実装である。
  */
-type Kty = typeof ktyList[number];
-const isKty = (arg: unknown): arg is Kty => {
-  if (typeof arg == 'string') {
-    return ktyList.some((k) => k === arg);
-  }
-  return false;
-};
+type Kty = JWAKty;
+const isKty = (arg: unknown): arg is Kty => isJWAKty(arg);
 
 const keyUseList = ['sig', 'enc'] as const;
 /**
@@ -102,13 +96,7 @@ const isKeyOps = (arg: unknown): arg is KeyOps => {
  * JSON Web Key Elliptic Curve を列挙する。
  * Ed25519, Ed448, X25519, X448, secp256k1 は未実装である。
  */
-const crvList = ['P-256', 'P-384', 'P-521'];
-type Crv = typeof crvList[number];
-const isCrv = (arg: unknown): arg is Crv => {
-  if (typeof arg === 'string') {
-    return crvList.some((u) => u === arg);
-  }
-  return false;
-};
+type Crv = JWACrv;
+const isCrv = (arg: unknown): arg is Crv => isJWACrv(arg);
 
 // --------------------END iana constants --------------------
