@@ -1,6 +1,6 @@
 // --------------------BEGIN X.509 DER praser --------------------
 
-import { CONCAT } from '../../util';
+import { CONCAT } from 'utility';
 
 export { X509Cert, parseX509BASE64EncodedDER, validateSelfSignedCert, isX509SPKI };
 

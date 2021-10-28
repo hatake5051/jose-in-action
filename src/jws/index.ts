@@ -1,6 +1,5 @@
 import {
   equalsJWSJOSEHeader,
-  isJWSJOSEHeader,
   isJWSProtectedHeader,
   isJWSUnprotectedHeader,
   JWSProtectedHeader,
@@ -25,7 +24,6 @@ export {
   JWSUnprotectedHeader,
   isJWSUnprotectedHeader,
   equalsJWSJOSEHeader,
-  isJWSJOSEHeader,
   JWSSignature,
   JWSCompactSerialization,
   JWSJSONSerialization,

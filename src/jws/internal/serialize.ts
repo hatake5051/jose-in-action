@@ -1,4 +1,5 @@
-import { BASE64URL, BASE64URL_DECODE, isObject, UTF8, UTF8_DECODE } from '../../util';
+// --------------------BEGIN JWS Serialization definition --------------------
+import { BASE64URL, BASE64URL_DECODE, isObject, UTF8, UTF8_DECODE } from 'utility';
 import {
   equalsJWSJOSEHeader,
   isJWSUnprotectedHeader,
@@ -281,12 +282,11 @@ function equalsJWSFlattenedJSONSerialization(
   return equalsSignatureInJWSJSONSerialization(l, r);
 }
 
-function isJWSFlattenedJSONSerialization(arg: unknown): arg is JWSFlattenedJSONSerialization {
-  return (
-    isObject<JWSFlattenedJSONSerialization>(arg) &&
-    typeof arg.payload === 'string' &&
-    (arg.protected == null || typeof arg.protected === 'string') &&
-    typeof arg.signature === 'string' &&
-    (arg.header == null || isJWSUnprotectedHeader(arg.header))
-  );
-}
+const isJWSFlattenedJSONSerialization = (arg: unknown): arg is JWSFlattenedJSONSerialization =>
+  isObject<JWSFlattenedJSONSerialization>(arg) &&
+  typeof arg.payload === 'string' &&
+  (arg.protected == null || typeof arg.protected === 'string') &&
+  typeof arg.signature === 'string' &&
+  (arg.header == null || isJWSUnprotectedHeader(arg.header));
+
+// --------------------END JWS Serialization definition --------------------

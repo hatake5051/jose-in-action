@@ -1,12 +1,13 @@
 // --------------------BEGIN JWK common parameters --------------------
 
-import { Alg, isAlg, isKeyOps, isKeyUse, isKty, KeyOps, KeyUse, Kty } from '../../iana';
-import { isObject } from '../../util';
+import { Alg, isAlg, isKeyOps, isKeyUse, isKty, KeyOps, KeyUse, Kty } from 'iana';
+import { isObject } from 'utility';
 
 export { CommomJWKParams, isCommonJWKParams, equalsCommonJWKParams, validCommonJWKParams };
 
 /**
  * JWK が持つ共通パラメータを表す。
+ * K を指定すれば kty パラメータをその型に制限できる
  */
 type CommomJWKParams<K extends Kty = Kty> = {
   /**
@@ -80,44 +81,25 @@ const commonJWKParamNameList = [
 /**
  * CommonJWKParams の型ガード。型で表現していない JWK の制限は validJWK でチェックする。
  */
-const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams => {
-  return (
-    isObject<CommomJWKParams>(arg) &&
-    commonJWKParamNameList.every((n) => {
-      if (arg[n] == null) return true;
-      switch (n) {
-        case 'kty':
-          return isKty(arg[n]);
-        case 'use':
-          return isKeyUse(arg[n]);
-        case 'key_ops':
-          return isKeyOps(arg[n]);
-        case 'alg':
-          return isAlg(arg[n]);
-        case 'x5c':
-          return (
-            Array.isArray(arg['x5c']) && arg['x5c'].every((s: unknown) => typeof s === 'string')
-          );
-        default:
-          return typeof arg[n] === 'string';
-      }
-    })
-  );
-  // // CommJWKParams は null ではないオブジェクト
-  // if (typeof arg !== 'object' || arg == null) return false;
-  // // CommonJWKParams は kty をもち、その値は IANA に登録済みの値である
-  // if (!('kty' in arg) || !isKty((arg as { kty: unknown }).kty)) return false;
-  // // CommonJWKParams は use を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-  // if ('use' in arg && !isKeyUse((arg as { use: unknown }).use)) return false;
-  // // CommonJWKParams は key_ops を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-  // if ('key_ops' in arg) {
-  //   const ops = (arg as { key_ops: unknown }).key_ops;
-  //   if (!Array.isArray(ops) || !ops.every((o) => isKeyOps(o))) return false;
-  // }
-  // // CommonJWKParams は alg を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-  // if ('alg' in arg && !isAlg((arg as { alg: unknown }).alg)) return false;
-  // return true;
-};
+const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams =>
+  isObject<CommomJWKParams>(arg) &&
+  commonJWKParamNameList.every((n) => {
+    if (arg[n] == null) return true;
+    switch (n) {
+      case 'kty':
+        return isKty(arg[n]);
+      case 'use':
+        return isKeyUse(arg[n]);
+      case 'key_ops':
+        return isKeyOps(arg[n]);
+      case 'alg':
+        return isAlg(arg[n]);
+      case 'x5c':
+        return Array.isArray(arg['x5c']) && arg['x5c'].every((s: unknown) => typeof s === 'string');
+      default:
+        return typeof arg[n] === 'string';
+    }
+  });
 
 function equalsCommonJWKParams(l?: CommomJWKParams, r?: CommomJWKParams): boolean {
   if (l == null && r == null) return true;

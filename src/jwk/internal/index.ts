@@ -1,6 +1,6 @@
 // --------------------BEGIN JWK definition --------------------
 
-import { Alg, JOSEHeader, KeyUse, Kty } from '../../iana';
+import { Alg, JOSEHeader, KeyUse, Kty } from 'iana';
 import {
   isJWAMACAlg,
   isJWASigAlg,
@@ -8,12 +8,12 @@ import {
   JWASigAlg,
   ktyFromJWAJWSAlg,
   KtyFromJWAJWSAlg,
-} from '../../jwa/sec3/alg';
-import { equalsJWAJWK, isJWAJWK, jwaexportPublicKey, JWAJWK } from '../../jwa/sec6/jwk';
-import { isJWAKty, JWAKty } from '../../jwa/sec6/kty';
-import { BASE64URL } from '../../util';
-import { isX509SPKI, parseX509BASE64EncodedDER, validateSelfSignedCert } from './../internal/x509';
+} from 'jwa/sec3/alg';
+import { equalsJWAJWK, exportJWAPublicKey, isJWAJWK, JWAJWK } from 'jwa/sec6/jwk';
+import { isJWAKty, JWAKty } from 'jwa/sec6/kty';
+import { BASE64URL, isObject } from 'utility';
 import { isCommonJWKParams, validCommonJWKParams } from './common';
+import { isX509SPKI, parseX509BASE64EncodedDER, validateSelfSignedCert } from './x509';
 
 export { JWK, JWKSet, isJWKSet, isJWK, equalsJWK, validJWK, identifyKey, exportPublicKey };
 
@@ -53,7 +53,7 @@ function equalsJWK(l?: JWK, r?: JWK): boolean {
  * 秘密鍵から公開鍵情報を取り出す。
  */
 function exportPublicKey<K extends 'RSA' | 'EC'>(priv: JWK<K, 'Priv'>): JWK<K, 'Pub'> {
-  if (isJWAKty(priv.kty)) return jwaexportPublicKey(priv) as JWK<K, 'Pub'>;
+  if (isJWAKty(priv.kty)) return exportJWAPublicKey(priv) as JWK<K, 'Pub'>;
   throw new EvalError(`${priv.kty} の公開鍵を抽出できなかった`);
 }
 
@@ -74,29 +74,22 @@ type JWKSet = {
  * 引数が JWK Set かどうか判定する.
  * keys パラメータが存在して、その値が JWK の配列なら OK
  */
-const isJWKSet = (arg: unknown): arg is JWKSet => {
-  if (typeof arg !== 'object') return false;
-  if (arg == null) return false;
-  if ('keys' in arg) {
-    const a = arg as { keys: unknown };
-    if (Array.isArray(a.keys)) {
-      const l = a.keys as Array<unknown>;
-      for (const k of l) {
-        if (!isJWK(k)) return false;
-      }
-      return true;
-    }
-  }
-  return false;
-};
+const isJWKSet = (arg: unknown): arg is JWKSet =>
+  isObject<JWKSet>(arg) && Array.isArray(arg.keys) && arg.keys.every((k) => isJWK(k));
 
 /**
  * JWK が非対称鍵の場合、公開鍵か秘密鍵かのいずれかであるかを表す。
  */
 type AsymKty = 'Pub' | 'Priv';
 
+/**
+ * Alg に応じた Kty を返す型
+ */
 type KtyFromAlg<A extends Alg> = A extends JWASigAlg | JWAMACAlg ? KtyFromJWAJWSAlg<A> : never;
 
+/**
+ * 引数 alg に応じた kty の値を返す関数
+ */
 const ktyFromAlg = (alg: Alg): Kty => {
   if (isJWASigAlg(alg) || isJWAMACAlg(alg)) return ktyFromJWAJWSAlg(alg);
   throw new TypeError(`${alg} に対応する kty がわからなかった`);

@@ -1,6 +1,7 @@
 // --------------------BEGIN JWA symmetric keys --------------------
 
-import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from '../../jwk/common';
+import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from 'jwk/common';
+import { isObject } from 'utility';
 
 export { octKey, isOctKey, equalsOctKey };
 
@@ -13,10 +14,8 @@ type octKey = CommomJWKParams<'oct'> & octKeyParams;
  * 引数が対称鍵か確認する。
  * kty == oct で k をパラメータとして持つか確認する。
  */
-const isOctKey = (arg: unknown): arg is octKey => {
-  if (!isCommonJWKParams(arg) || arg.kty !== 'oct') return false;
-  return 'k' in arg;
-};
+const isOctKey = (arg: unknown): arg is octKey =>
+  isCommonJWKParams(arg) && arg.kty === 'oct' && isoctKeyParams(arg);
 
 function equalsOctKey(l?: octKey, r?: octKey): boolean {
   if (!equalsCommonJWKParams(l, r)) return false;
@@ -35,5 +34,8 @@ type octKeyParams = {
    */
   k: string;
 };
+
+const isoctKeyParams = (arg: unknown): arg is octKeyParams =>
+  isObject<octKeyParams>(arg) && typeof arg.k === 'string';
 
 // --------------------END JWA symmetric keys --------------------

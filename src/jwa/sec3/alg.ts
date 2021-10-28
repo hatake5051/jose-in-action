@@ -1,4 +1,5 @@
-import { MACOperator, SigOperator } from '../../jws';
+// --------------------BEGIN JWA JWS algorithms --------------------
+import { MACOperator, SigOperator } from 'jws';
 import { ECAlg, ECSigOperator, isECAlg } from './ec';
 import { HMACOperator, HSAlg, isHSAlg } from './hmac';
 import { isPSAlg, isRSAlg, PSAlg, RSAlg, RSASigOperator } from './rsa';
@@ -49,6 +50,9 @@ function newJWAMACOperator<A extends JWAMACAlg>(alg: A): MACOperator<A> {
   throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }
 
+/**
+ * JWS Alg に応じた Kty を返す。
+ */
 type KtyFromJWAJWSAlg<A extends JWASigAlg | JWAMACAlg> = A extends RSAlg | PSAlg
   ? 'RSA'
   : A extends ECAlg
@@ -57,9 +61,14 @@ type KtyFromJWAJWSAlg<A extends JWASigAlg | JWAMACAlg> = A extends RSAlg | PSAlg
   ? 'oct'
   : never;
 
+/**
+ * JWS Alg に応じた Kty を返す。
+ */
 function ktyFromJWAJWSAlg<A extends JWASigAlg | JWAMACAlg>(alg: A): KtyFromJWAJWSAlg<A> {
   if (isPSAlg(alg) || isRSAlg(alg)) return 'RSA' as KtyFromJWAJWSAlg<A>;
   if (isECAlg(alg)) return 'EC' as KtyFromJWAJWSAlg<A>;
   if (isHSAlg(alg)) return 'oct' as KtyFromJWAJWSAlg<A>;
   throw new TypeError(`${alg} は JWA で定義された JWS の Alg ではない`);
 }
+
+// --------------------END JWA JWS algorithms --------------------

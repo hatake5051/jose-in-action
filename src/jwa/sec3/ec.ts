@@ -1,7 +1,7 @@
 // --------------------BEGIN JWA EC algorithms --------------------
-import { JWK } from '../../jwk';
-import { JWSSignature, SigOperator } from '../../jws';
-import { JWACrv } from '../sec6/kty';
+import { JWACrv } from 'jwa/sec6/kty';
+import { JWK } from 'jwk';
+import { JWSSignature, SigOperator } from 'jws';
 
 export { ECAlg, isECAlg, ECSigOperator };
 
@@ -18,10 +18,8 @@ type ECAlg = typeof ecAlgList[number];
 /**
  * 引数が ECDSA アルゴリズム識別子か確認する。
  */
-const isECAlg = (arg: unknown): arg is ECAlg => {
-  if (typeof arg !== 'string') return false;
-  return ecAlgList.some((a) => a === arg);
-};
+const isECAlg = (arg: unknown): arg is ECAlg =>
+  typeof arg === 'string' && ecAlgList.some((a) => a === arg);
 
 const ecAlgList = ['ES256', 'ES384', 'ES512'] as const;
 

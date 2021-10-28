@@ -78,8 +78,17 @@ export function CONCAT(A: Uint8Array, B: Uint8Array) {
   return ans;
 }
 
+// ref: https://qiita.com/suin/items/e0f7b7add75092196cd8
+
+/**
+ * T のプロパティを全て unknown | undefined 型に変える
+ */
 export type WouldBe<T> = { [P in keyof T]?: unknown };
 
+/**
+ * value を WouldBE<T> かどうか判定する。
+ * T のプロパティを持つかもしれないところまで。
+ */
 export const isObject = <T extends object>(value: unknown): value is WouldBe<T> =>
   typeof value === 'object' && value !== null;
 

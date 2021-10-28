@@ -1,8 +1,8 @@
 // --------------------BEGIN JWA EC keys --------------------
 
-import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from '../../jwk/common';
-import { BASE64URL_DECODE } from '../../util';
-import { JWACrv } from './kty';
+import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from 'jwk/common';
+import { BASE64URL_DECODE, isObject } from 'utility';
+import { isJWACrv, JWACrv } from './kty';
 
 export {
   ECPublicKey,
@@ -23,11 +23,11 @@ type ECPublicKey = CommomJWKParams<'EC'> & ECPublicKeyParams;
  * 引数が EC公開鍵の JWK 表現か確認する。
  * kty == EC かどうか、 crv に適した x,y のサイズとなっているかどうか。
  */
-const isECPublicKey = (arg: unknown): arg is ECPublicKey => {
-  if (!isCommonJWKParams(arg) || arg.kty !== 'EC') return false;
-  if (!ecPublicKeyParams.every((key) => key in arg)) return false;
-  return validECPublicKeyParams(arg as ECPublicKey);
-};
+const isECPublicKey = (arg: unknown): arg is ECPublicKey =>
+  isCommonJWKParams(arg) &&
+  arg.kty === 'EC' &&
+  isECPublicKeyParams(arg) &&
+  validECPublicKeyParams(arg);
 
 function equalsECPublicKey(l?: ECPublicKey, r?: ECPublicKey): boolean {
   return equalsCommonJWKParams(l, r) && equalsECPublicKeyParams(l, r);
@@ -42,12 +42,8 @@ type ECPrivateKey = ECPublicKey & ECPrivateKeyParams;
  * 引数が EC 秘密鍵の JWK 表現か確認する。
  * EC 公開鍵であり、かつ d をパラメータとして持っていれば。
  */
-const isECPrivateKey = (arg: unknown): arg is ECPrivateKey => {
-  if (!isECPublicKey(arg)) return false;
-  const crv = arg.crv;
-  if (!('d' in arg)) return false;
-  return validECPrivateKeyParams(crv, arg as ECPrivateKey);
-};
+const isECPrivateKey = (arg: unknown): arg is ECPrivateKey =>
+  isECPublicKey(arg) && isECPrivateKeyParams(arg) && validECPrivateKeyParams(arg.crv, arg);
 
 function equalsECPrivateKey(l?: ECPrivateKey, r?: ECPrivateKey): boolean {
   if (!equalsECPublicKey(l, r)) return false;
@@ -87,6 +83,12 @@ type ECPublicKeyParams = {
   y: string;
 };
 const ecPublicKeyParams = ['crv', 'x', 'y'] as const;
+
+const isECPublicKeyParams = (arg: unknown): arg is ECPublicKeyParams =>
+  isObject<ECPublicKeyParams>(arg) &&
+  isJWACrv(arg.crv) &&
+  typeof arg.x === 'string' &&
+  typeof arg.x === 'string';
 
 /**
  * EC 公開鍵パラメータが矛盾した値になってないか確認する
@@ -134,6 +136,9 @@ type ECPrivateKeyParams = {
    */
   d: string;
 };
+
+const isECPrivateKeyParams = (arg: unknown): arg is ECPrivateKeyParams =>
+  isObject<ECPrivateKeyParams>(arg) && typeof arg.d === 'string';
 
 /**
  * EC 秘密鍵パラメータが引数で与えた crv のものか確認する。

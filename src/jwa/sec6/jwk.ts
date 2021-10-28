@@ -1,3 +1,4 @@
+// --------------------BEGIN JWA JWK definition --------------------
 import {
   ECPrivateKey,
   ECPublicKey,
@@ -19,8 +20,13 @@ import {
   RSAPublicKey,
 } from './rsa';
 
-export { JWAJWK, isJWAJWK, equalsJWAJWK, jwaexportPublicKey };
+export { JWAJWK, isJWAJWK, equalsJWAJWK, exportJWAPublicKey };
 
+/**
+ * JWA で定義された JWK を表現する。
+ * K に Kty を指定することで具体的な JWK の型を指定できる。
+ * K が RSA か EC の場合は A に Pub か Priv のどちらかを指定することで公開鍵か秘密鍵かの型も指定できる。
+ */
 type JWAJWK<K extends JWAKty = JWAKty, A extends 'Pub' | 'Priv' = 'Pub' | 'Priv'> = K extends 'oct'
   ? octKey
   : K extends 'EC'
@@ -88,7 +94,7 @@ function equalsJWAJWK(l?: JWAJWK, r?: JWAJWK): boolean {
 /**
  * 秘密鍵から公開鍵情報を取り出す。
  */
-function jwaexportPublicKey<K extends 'RSA' | 'EC'>(priv: JWAJWK<K, 'Priv'>): JWAJWK<K, 'Pub'> {
+function exportJWAPublicKey<K extends 'RSA' | 'EC'>(priv: JWAJWK<K, 'Priv'>): JWAJWK<K, 'Pub'> {
   switch (priv.kty) {
     case 'RSA':
       return exportRSAPublicKey(priv) as JWAJWK<K, 'Pub'>;
@@ -96,3 +102,5 @@ function jwaexportPublicKey<K extends 'RSA' | 'EC'>(priv: JWAJWK<K, 'Priv'>): JW
       return exportECPublicKey(priv) as JWAJWK<K, 'Pub'>;
   }
 }
+
+// --------------------END JWA JWK definition --------------------

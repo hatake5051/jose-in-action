@@ -1,6 +1,67 @@
 'use strict';
 
+/**
+ * ECDSA アルゴリズムで署名の作成と検証を行うオペレータを定義する
+ */
+const ECSigOperator = { sign: sign$2, verify: verify$3 };
+/**
+ * 引数が ECDSA アルゴリズム識別子か確認する。
+ */
+const isECAlg = (arg) => typeof arg === 'string' && ecAlgList.some((a) => a === arg);
+const ecAlgList = ['ES256', 'ES384', 'ES512'];
+/**
+ * ECDSA (alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。
+ */
+async function sign$2(alg, key, m) {
+    const { keyAlg, sigAlg } = params$2(alg, key.crv);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
+    const s = await window.crypto.subtle.sign(sigAlg, k, m);
+    return new Uint8Array(s);
+}
+/**
+ * ECDSA (alg)に従い、与えられたメッセージ(m)と公開鍵(key) を署名(s)で検証する。
+ */
+async function verify$3(alg, key, m, s) {
+    const { keyAlg, sigAlg } = params$2(alg, key.crv);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
+        'verify',
+    ]);
+    const sig = await window.crypto.subtle.verify(sigAlg, k, s, m);
+    return sig;
+}
+function params$2(alg, crv) {
+    return {
+        keyAlg: { name: 'ECDSA', namedCurve: crv },
+        sigAlg: { name: 'ECDSA', hash: 'SHA-' + alg.slice(2) },
+    };
+}
+// --------------------END JWA EC algorithms --------------------
+
 // --------------------BEGIN util functions --------------------
+/**
+ * 文字列を UTF8 バイトエンコードする。(string to Uint8Array)
+ */
+function UTF8(STRING) {
+    const encoder = new TextEncoder();
+    return encoder.encode(STRING);
+}
+/**
+ * 文字列に UTF8 バイトデコードする (Uint8Array to string)
+ */
+function UTF8_DECODE(OCTETS) {
+    const decoder = new TextDecoder();
+    return decoder.decode(OCTETS);
+}
+/**
+ * 文字列を ASCII バイトエンコードする。 (string to Uint8Array)
+ */
+function ASCII(STRING) {
+    const b = new Uint8Array(STRING.length);
+    for (let i = 0; i < STRING.length; i++) {
+        b[i] = STRING.charCodeAt(i);
+    }
+    return b;
+}
 /**
  * バイト列を BASE64URL エンコードする (Uint8Array to string)
  */
@@ -47,23 +108,169 @@ function CONCAT(A, B) {
     ans.set(B, A.length);
     return ans;
 }
+/**
+ * value を WouldBE<T> かどうか判定する。
+ * T のプロパティを持つかもしれないところまで。
+ */
+const isObject = (value) => typeof value === 'object' && value !== null;
 // --------------------END util functions --------------------
+
+/**
+ * HMAC アルゴリズムで MAC の生成と検証を行うオペレータを定義する
+ */
+const HMACOperator = { mac, verify: verify$2 };
+/**
+ * 引数が HMAC アルゴリズム識別子か確認する。
+ */
+const isHSAlg = (arg) => typeof arg === 'string' && hsAlgList.some((a) => a === arg);
+const hsAlgList = ['HS256', 'HS384', 'HS512'];
+/**
+ * HMAC アルゴリズムに従い MAC を計算する。
+ * 計算を行う前に、鍵長が十分かどうか判定を行う。
+ */
+async function mac(alg, key, m) {
+    // ハッシュの出力サイズ以上の鍵長が必要である (RFC8517#3.2)
+    if (BASE64URL_DECODE(key.k).length < parseInt(alg.slice(2)) / 8) {
+        throw new EvalError(`${alg} では鍵長が ${parseInt(alg.slice(2)) / 8} 以上にしてください`);
+    }
+    const { k: keyAlg, s: sigAlg } = params$1(alg);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
+    const s = await window.crypto.subtle.sign(sigAlg, k, m);
+    return new Uint8Array(s);
+}
+/**
+ * HMAC アルゴリズムに従い、与えられた MAC を検証する。
+ */
+async function verify$2(alg, key, m, s) {
+    // ハッシュの出力サイズ以上の鍵長が必要である (RFC8517#3.2)
+    if (BASE64URL_DECODE(key.k).length < parseInt(alg.slice(2)) / 8) {
+        throw new EvalError(`${alg} では鍵長が ${parseInt(alg.slice(2)) / 8} 以上にしてください`);
+    }
+    const { k: keyAlg, s: sigAlg } = params$1(alg);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
+        'verify',
+    ]);
+    const isValid = await window.crypto.subtle.verify(sigAlg, k, s, m);
+    return isValid;
+}
+function params$1(alg) {
+    const name = 'HMAC';
+    const keyAlg = { name, hash: 'SHA-' + alg.slice(2) };
+    const sigAlg = name;
+    return { k: keyAlg, s: sigAlg };
+}
+// --------------------END JWA HMAC algorithms --------------------
+
+/**
+ * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズムで署名の作成と検証を行うオペレータを定義する
+ */
+const RSASigOperator = {
+    sign: sign$1,
+    verify: verify$1,
+};
+/**
+ * 引数が RSA-PKCS1-v1.5 アルゴリズム識別子か確認する。
+ */
+const isRSAlg = (arg) => typeof arg === 'string' && rsAlgList.some((a) => a === arg);
+const rsAlgList = ['RS256', 'RS384', 'RS512'];
+/**
+ * 引数が RSA-PSS アルゴリズム識別子か確認する。
+ */
+const isPSAlg = (arg) => typeof arg === 'string' && psAlgList.some((a) => a === arg);
+const psAlgList = ['PS256', 'PS384', 'PS512'];
+/**
+ * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズム(alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。
+ * 計算を行う前に、鍵長が十分かどうか判定を行う。
+ */
+async function sign$1(alg, key, m) {
+    const { keyAlg, sigAlg } = params(alg);
+    if (BASE64URL_DECODE(key.n).length * 8 < 2048 && BASE64URL_DECODE(key.d).length * 8 < 2048) {
+        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#3.3)
+        throw new EvalError(`RSA sig では鍵長が 2048 以上にしてください`);
+    }
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
+    const s = await window.crypto.subtle.sign(sigAlg, k, m);
+    return new Uint8Array(s);
+}
+/**
+ * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズム(alg)に従い、与えられたメッセージ(m)と公開鍵(key) を署名(sig)で検証する。
+ * 計算を行う前に、鍵長が十分かどうか判定を行う。
+ */
+async function verify$1(alg, key, m, sig) {
+    if (BASE64URL_DECODE(key.n).length * 8 < 2048) {
+        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#3.3)
+        throw new EvalError(`RSA sig では鍵長が 2048 以上にしてください`);
+    }
+    const { keyAlg, sigAlg } = params(alg);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
+        'verify',
+    ]);
+    const s = await window.crypto.subtle.verify(sigAlg, k, sig, m);
+    return s;
+}
+function params(alg) {
+    let name, sigAlg;
+    if (isRSAlg(alg)) {
+        name = 'RSASSA-PKCS1-v1_5';
+        sigAlg = name;
+    }
+    else {
+        // isPSAlg(alg) === true
+        name = 'RSA-PSS';
+        // ソルト値のサイズはハッシュ関数の出力と同じサイズ (RFC7518#3.5)
+        sigAlg = { name, saltLength: parseInt(alg.slice(2)) / 8 };
+    }
+    const keyAlg = { name, hash: 'SHA-' + alg.slice(2) };
+    return { keyAlg, sigAlg };
+}
+// --------------------END JWA RSA algorithms --------------------
+
+const isJWASigAlg = (arg) => isRSAlg(arg) || isPSAlg(arg) || isECAlg(arg);
+/**
+ * JWA で定義されている署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newJWASigOperator(alg) {
+    if (isRSAlg(alg) || isPSAlg(alg))
+        return RSASigOperator;
+    if (isECAlg(alg))
+        return ECSigOperator;
+    throw new TypeError(`SigOperator<${alg}> は実装されていない`);
+}
+/**
+ * 引数が JWS の MAC アルゴリズムか確認する
+ */
+const isJWAMACAlg = (arg) => isHSAlg(arg);
+/**
+ * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newJWAMACOperator(alg) {
+    if (isHSAlg(alg))
+        return HMACOperator;
+    throw TypeError(`MacOperator<${alg}> は実装されていない`);
+}
+/**
+ * JWS Alg に応じた Kty を返す。
+ */
+function ktyFromJWAJWSAlg(alg) {
+    if (isPSAlg(alg) || isRSAlg(alg))
+        return 'RSA';
+    if (isECAlg(alg))
+        return 'EC';
+    if (isHSAlg(alg))
+        return 'oct';
+    throw new TypeError(`${alg} は JWA で定義された JWS の Alg ではない`);
+}
+// --------------------END JWA JWS algorithms --------------------
+
+// --------------------BEGIN JWA Kty and Crv definition --------------------
+const isJWAKty = (arg) => typeof arg == 'string' && jwaKtyList.some((k) => k === arg);
+const jwaKtyList = ['EC', 'RSA', 'oct'];
+const isJWACrv = (arg) => typeof arg === 'string' && jwaCrvList.some((u) => u === arg);
+const jwaCrvList = ['P-256', 'P-384', 'P-521'];
+// --------------------BEGIN JWA Kty and Crv definition --------------------
 
 // --------------------BEGIN iana constants --------------------
 const algList = [
-    'HS256',
-    'HS384',
-    'HS512',
-    'RS256',
-    'RS384',
-    'RS512',
-    'ES256',
-    'ES384',
-    'ES512',
-    'PS256',
-    'PS384',
-    'PS512',
-    'none',
     'RSA1_5',
     'RSA-OAEP',
     'RSA-OAEP-256',
@@ -89,18 +296,16 @@ const algList = [
     'A256GCM',
 ];
 const isAlg = (arg) => {
+    if (isJWASigAlg(arg) || isJWAMACAlg(arg))
+        return true;
     if (typeof arg === 'string') {
+        if (arg === 'none')
+            return true;
         return algList.some((a) => a === arg);
     }
     return false;
 };
-const ktyList = ['EC', 'RSA', 'oct'];
-const isKty = (arg) => {
-    if (typeof arg == 'string') {
-        return ktyList.some((k) => k === arg);
-    }
-    return false;
-};
+const isKty = (arg) => isJWAKty(arg);
 const keyUseList = ['sig', 'enc'];
 const isKeyUse = (arg) => {
     if (typeof arg === 'string') {
@@ -130,30 +335,71 @@ const isKeyOps = (arg) => {
 // --------------------END iana constants --------------------
 
 // --------------------BEGIN JWK common parameters --------------------
+const commonJWKParamNameList = [
+    'kty',
+    'use',
+    'key_ops',
+    'alg',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+];
 /**
  * CommonJWKParams の型ガード。型で表現していない JWK の制限は validJWK でチェックする。
  */
-const isCommonJWKParams = (arg) => {
-    // CommJWKParams は null ではないオブジェクト
-    if (typeof arg !== 'object' || arg == null)
+const isCommonJWKParams = (arg) => isObject(arg) &&
+    commonJWKParamNameList.every((n) => {
+        if (arg[n] == null)
+            return true;
+        switch (n) {
+            case 'kty':
+                return isKty(arg[n]);
+            case 'use':
+                return isKeyUse(arg[n]);
+            case 'key_ops':
+                return isKeyOps(arg[n]);
+            case 'alg':
+                return isAlg(arg[n]);
+            case 'x5c':
+                return Array.isArray(arg['x5c']) && arg['x5c'].every((s) => typeof s === 'string');
+            default:
+                return typeof arg[n] === 'string';
+        }
+    });
+function equalsCommonJWKParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
         return false;
-    // CommonJWKParams は kty をもち、その値は IANA に登録済みの値である
-    if (!('kty' in arg) || !isKty(arg.kty))
-        return false;
-    // CommonJWKParams は use を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-    if ('use' in arg && !isKeyUse(arg.use))
-        return false;
-    // CommonJWKParams は key_ops を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-    if ('key_ops' in arg) {
-        const ops = arg.key_ops;
-        if (!Array.isArray(ops) || !ops.every((o) => isKeyOps(o)))
+    for (const n of commonJWKParamNameList) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
             return false;
+        switch (n) {
+            case 'key_ops':
+            case 'x5t': {
+                const ll = ln;
+                const rr = rn;
+                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
+                    continue;
+                return false;
+            }
+            default: {
+                const ll = ln;
+                const rr = rn;
+                if (ll === rr)
+                    continue;
+                return false;
+            }
+        }
     }
-    // CommonJWKParams は alg を持つことがあり、持つ場合はその値が IANA に登録済みの値である
-    if ('alg' in arg && !isAlg(arg.alg))
-        return false;
     return true;
-};
+}
 /**
  * CommonJWKParams が RFC7517 に準拠しているか確認する
  */
@@ -179,31 +425,38 @@ function validCommonJWKParams(params) {
 }
 // --------------------END JWK common parameters --------------------
 
-// --------------------BEGIN JWK EC parameters --------------------
+// --------------------BEGIN JWA EC keys --------------------
 /**
  * 引数が EC公開鍵の JWK 表現か確認する。
  * kty == EC かどうか、 crv に適した x,y のサイズとなっているかどうか。
  */
-const isECPublicKey = (arg) => {
-    if (!isCommonJWKParams(arg) || arg.kty !== 'EC')
-        return false;
-    if (!ecPublicKeyParams.every((key) => key in arg))
-        return false;
-    return validECPublicKeyParams(arg);
-};
+const isECPublicKey = (arg) => isCommonJWKParams(arg) &&
+    arg.kty === 'EC' &&
+    isECPublicKeyParams(arg) &&
+    validECPublicKeyParams(arg);
+function equalsECPublicKey(l, r) {
+    return equalsCommonJWKParams(l, r) && equalsECPublicKeyParams(l, r);
+}
 /**
  * 引数が EC 秘密鍵の JWK 表現か確認する。
  * EC 公開鍵であり、かつ d をパラメータとして持っていれば。
  */
-const isECPrivateKey = (arg) => {
-    if (!isECPublicKey(arg))
+const isECPrivateKey = (arg) => isECPublicKey(arg) && isECPrivateKeyParams(arg) && validECPrivateKeyParams(arg.crv, arg);
+function equalsECPrivateKey(l, r) {
+    if (!equalsECPublicKey(l, r))
         return false;
-    const crv = arg.crv;
-    if (!('d' in arg))
-        return false;
-    return validECPrivateKeyParams(crv, arg);
+    return l?.d === r?.d;
+}
+const exportECPublicKey = (priv) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { d, ...pub } = priv;
+    return pub;
 };
 const ecPublicKeyParams = ['crv', 'x', 'y'];
+const isECPublicKeyParams = (arg) => isObject(arg) &&
+    isJWACrv(arg.crv) &&
+    typeof arg.x === 'string' &&
+    typeof arg.x === 'string';
 /**
  * EC 公開鍵パラメータが矛盾した値になってないか確認する
  */
@@ -222,6 +475,25 @@ function validECPublicKeyParams(p) {
     }
     return BASE64URL_DECODE(p.x).length === key_len && BASE64URL_DECODE(p.y).length === key_len;
 }
+function equalsECPublicKeyParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of ecPublicKeyParams) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        if (ln === rn)
+            continue;
+        return false;
+    }
+    return true;
+}
+const isECPrivateKeyParams = (arg) => isObject(arg) && typeof arg.d === 'string';
 /**
  * EC 秘密鍵パラメータが引数で与えた crv のものか確認する。
  */
@@ -240,41 +512,154 @@ function validECPrivateKeyParams(crv, p) {
     }
     return BASE64URL_DECODE(p.d).length === key_len;
 }
-// --------------------END JWK EC parameters --------------------
+// --------------------END JWA EC keys --------------------
 
-// --------------------BEGIN JWK oct parameters --------------------
+// --------------------BEGIN JWA symmetric keys --------------------
 /**
  * 引数が対称鍵か確認する。
  * kty == oct で k をパラメータとして持つか確認する。
  */
-const isOctKey = (arg) => {
-    if (!isCommonJWKParams(arg) || arg.kty !== 'oct')
+const isOctKey = (arg) => isCommonJWKParams(arg) && arg.kty === 'oct' && isoctKeyParams(arg);
+function equalsOctKey(l, r) {
+    if (!equalsCommonJWKParams(l, r))
         return false;
-    return 'k' in arg;
-};
-// --------------------END JWK oct parameters --------------------
+    return l?.k === r?.k;
+}
+const isoctKeyParams = (arg) => isObject(arg) && typeof arg.k === 'string';
+// --------------------END JWA symmetric keys --------------------
 
-// --------------------BEGIN JWK RSA parameters --------------------
+// --------------------BEGIN JWA RSA keys --------------------
 /**
  * 引数が RSA 公開鍵かどうか確認する。
  * kty == RSA かどうか、 n,e をパラメータとしてもつか確認する。
  */
-const isRSAPublicKey = (arg) => {
-    if (!isCommonJWKParams(arg) || arg.kty !== 'RSA')
-        return false;
-    return rsaPublicKeyParams.every((s) => s in arg);
-};
+const isRSAPublicKey = (arg) => isCommonJWKParams(arg) && arg.kty === 'RSA' && isRSAPublicKeyParams(arg);
+function equalsRSAPublicKey(l, r) {
+    return equalsCommonJWKParams(l, r) && equalsRSAPublicKeyParams(l, r);
+}
 /**
  * 引数が RSA 秘密鍵かどうか確認する。
  * RSA 公開鍵であるか、また d をパラメータとして持つか確認する。
  */
-const isRSAPrivateKey = (arg) => {
-    if (!isRSAPublicKey(arg))
-        return false;
-    return 'd' in arg;
+const isRSAPrivateKey = (arg) => isRSAPublicKey(arg) && isRSAPrivateKeyParams(arg);
+function equalsRSAPrivateKey(l, r) {
+    return equalsRSAPublicKey(l, r) && equalsRSAPrivateKeyParams(l, r);
+}
+const exportRSAPublicKey = (priv) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { d, p, q, dp, dq, qi, ...pub } = priv;
+    return pub;
 };
 const rsaPublicKeyParams = ['n', 'e'];
-// --------------------END JWK RSA parameters --------------------
+const isRSAPublicKeyParams = (arg) => isObject(arg) && typeof arg.n === 'string' && typeof arg.e === 'string';
+function equalsRSAPublicKeyParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of rsaPublicKeyParams) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        if (ln === rn)
+            continue;
+        return false;
+    }
+    return true;
+}
+const rsaPrivateParams = ['d', 'p', 'q', 'dp', 'dq', 'qi'];
+const isRSAPrivateKeyParams = (arg) => isObject(arg) &&
+    rsaPrivateParams.every((n) => n === 'd' ? typeof arg[n] === 'string' : arg[n] == null || typeof arg[n] === 'string');
+function equalsRSAPrivateKeyParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of rsaPrivateParams) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        if (ln === rn)
+            continue;
+        return false;
+    }
+    return true;
+}
+// --------------------END JWA RSA keys --------------------
+
+// --------------------BEGIN JWA JWK definition --------------------
+function isJWAJWK(arg, kty, asym) {
+    switch (kty) {
+        case 'oct':
+            return isOctKey(arg);
+        case 'EC':
+            if (asym === undefined)
+                return isECPublicKey(arg) || isECPrivateKey(arg);
+            if (asym === 'Pub')
+                return isECPublicKey(arg);
+            return isECPrivateKey(arg);
+        case 'RSA':
+            if (asym === undefined)
+                return isRSAPublicKey(arg) || isRSAPrivateKey(arg);
+            if (asym === 'Pub')
+                return isRSAPublicKey(arg);
+            return isRSAPrivateKey(arg);
+        default:
+            return false;
+    }
+}
+function equalsJWAJWK(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    switch (l.kty) {
+        case 'oct':
+            return r.kty === 'oct' && equalsOctKey(l, r);
+        case 'RSA': {
+            if (r.kty !== 'RSA')
+                return false;
+            if (isRSAPrivateKey(l)) {
+                if (isRSAPrivateKey(r))
+                    return equalsRSAPrivateKey(l, r);
+                return false;
+            }
+            if (isRSAPrivateKey(r))
+                return false;
+            return equalsRSAPublicKey(l, r);
+        }
+        case 'EC': {
+            if (r.kty !== 'EC')
+                return false;
+            if (isECPrivateKey(l)) {
+                if (isECPrivateKey(r))
+                    return equalsECPrivateKey(l, r);
+                return false;
+            }
+            if (isECPrivateKey(r))
+                return false;
+            return equalsECPublicKey(l, r);
+        }
+    }
+}
+/**
+ * 秘密鍵から公開鍵情報を取り出す。
+ */
+function exportJWAPublicKey(priv) {
+    switch (priv.kty) {
+        case 'RSA':
+            return exportRSAPublicKey(priv);
+        case 'EC':
+            return exportECPublicKey(priv);
+    }
+}
+// --------------------END JWA JWK definition --------------------
 
 // --------------------BEGIN X.509 DER praser --------------------
 /**
@@ -693,50 +1078,53 @@ function BASE64_DECODE(STRING) {
  * asym を指定すると非対称暗号鍵のうち指定した鍵（公開鍵か秘密鍵）かであるかも確認する。
  */
 function isJWK(arg, kty, asym) {
-    switch (kty) {
-        // kty を指定しないときは、最低限 JWK が持つべき情報を持っているか確認する
-        case undefined:
-            return isCommonJWKParams(arg);
-        case 'oct':
-            return isOctKey(arg);
-        case 'EC':
-            if (asym === undefined)
-                return isECPublicKey(arg) || isECPrivateKey(arg);
-            if (asym === 'Pub')
-                return isECPublicKey(arg);
-            return isECPrivateKey(arg);
-        case 'RSA':
-            if (asym === undefined)
-                return isRSAPublicKey(arg) || isRSAPrivateKey(arg);
-            if (asym === 'Pub')
-                return isRSAPublicKey(arg);
-            return isRSAPrivateKey(arg);
-        default:
-            return false;
-    }
+    // kty を指定しないときは、最低限 JWK が持つべき情報を持っているか確認する
+    if (kty == null)
+        return isCommonJWKParams(arg);
+    if (isJWAKty(kty))
+        return isJWAJWK(arg, kty, asym);
+    return false;
+}
+function equalsJWK(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    if (isJWAKty(l.kty))
+        return equalsJWAJWK(l, r);
+    return false;
+}
+/**
+ * 秘密鍵から公開鍵情報を取り出す。
+ */
+function exportPublicKey(priv) {
+    if (isJWAKty(priv.kty))
+        return exportJWAPublicKey(priv);
+    throw new EvalError(`${priv.kty} の公開鍵を抽出できなかった`);
 }
 /**
  * 引数が JWK Set かどうか判定する.
  * keys パラメータが存在して、その値が JWK の配列なら OK
  */
-const isJWKSet = (arg) => {
-    if (typeof arg !== 'object')
-        return false;
-    if (arg == null)
-        return false;
-    if ('keys' in arg) {
-        const a = arg;
-        if (Array.isArray(a.keys)) {
-            const l = a.keys;
-            for (const k of l) {
-                if (!isJWK(k))
-                    return false;
-            }
-            return true;
+const isJWKSet = (arg) => isObject(arg) && Array.isArray(arg.keys) && arg.keys.every((k) => isJWK(k));
+/**
+ * 引数 alg に応じた kty の値を返す関数
+ */
+const ktyFromAlg = (alg) => {
+    if (isJWASigAlg(alg) || isJWAMACAlg(alg))
+        return ktyFromJWAJWSAlg(alg);
+    throw new TypeError(`${alg} に対応する kty がわからなかった`);
+};
+function identifyKey(set, h) {
+    for (const key of set.keys) {
+        if ((isJWASigAlg(h.alg) || isJWAMACAlg(h.alg)) &&
+            key.kty === ktyFromAlg(h.alg) &&
+            key.kid === h.kid) {
+            return key;
         }
     }
-    return false;
-};
+    throw RangeError(`JWKSet(${set}) から JOSEheader(${h}) に対応する鍵が存在しなかった`);
+}
 /**
  * 型で表現しきれない JWK の条件を満たすか確認する。
  * options に渡された条件を jwk が満たすか確認する
@@ -1170,6 +1558,551 @@ async function test() {
 }
 // --------------------END RFC7520 Section.3 for RSA test --------------------
 
+// --------------------BEGIN JWS MAC algorithms --------------------
+/**
+ * 引数が JWS の MAC アルゴリズムか確認する
+ */
+const isJWSMACAlg = (arg) => isJWAMACAlg(arg);
+/**
+ * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newMacOperator(alg) {
+    if (isJWAMACAlg(alg))
+        return newJWAMACOperator(alg);
+    throw TypeError(`MacOperator<${alg}> は実装されていない`);
+}
+// --------------------END JWS MAC algorithms --------------------
+
+// --------------------BEGIN JWS Digital Signature algorithms --------------------
+/**
+ * 引数が JWS の署名アルゴリズム識別子か確認する
+ */
+const isJWSSigAlg = (arg) => isJWASigAlg(arg);
+/**
+ * 署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newSigOperator(alg) {
+    if (isJWASigAlg(alg))
+        return newJWASigOperator(alg);
+    throw new TypeError(`SigOperator<${alg}> は実装されていない`);
+}
+function ktyFromJWSSigAlg(alg) {
+    if (isJWASigAlg(alg))
+        return ktyFromJWAJWSAlg(alg);
+    throw new TypeError(`${alg} は JWSSigAlg ではない`);
+}
+// --------------------END JWS Digital Signature algorithms --------------------
+
+const isJWSAlg = (arg) => isJWSSigAlg(arg) || isJWSMACAlg(arg) || (typeof arg === 'string' && arg === 'none');
+
+// --------------------BEGIN JWS Header definition --------------------
+/**
+ * JWS では JOSE Header は JWS Protected Header と JWS Unprotected Header の union で表現されるが、
+ * 内部構造としてヘッダーパラメータが Protected かどうかという情報を保持し続けるためにクラスで定義している。
+ * p と u のいずれか一方は存在することが必要で、どちらかには alg パラメータが含まれている
+ */
+class JWSHeader {
+    constructor(p, u) {
+        const h = { ...u, ...p };
+        if (!isJWSJOSEHeader(h))
+            throw new TypeError('JOSE Header for JWS に必要なパラメータが不足している');
+        this.h = h;
+        this.p = p;
+        this.u = u;
+    }
+    /**
+     * JWS Protected Header と JWS Unprotected Header の Union を返す
+     */
+    get JOSEHeader() {
+        return this.h;
+    }
+    /**
+     * JWS Protected Header があれば返す。
+     */
+    get Protected() {
+        return this.p;
+    }
+    /**
+     * JWS Unprotected Header があれば返す。
+     */
+    get Unprotected() {
+        return this.u;
+    }
+}
+const isJWSProtectedHeader = (arg) => isPartialJWSJOSEHeader(arg);
+const isJWSUnprotectedHeader = (arg) => isPartialJWSJOSEHeader(arg);
+const jwsJOSEHeaderNameList = [
+    'alg',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
+/**
+ * ２つの JWSJOSEHEader が同じか判定する
+ */
+function equalsJWSJOSEHeader(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of jwsJOSEHeaderNameList) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        switch (n) {
+            case 'jwk': {
+                const ll = ln;
+                const rr = rn;
+                if (equalsJWK(ll, rr))
+                    continue;
+                return false;
+            }
+            case 'x5t':
+            case 'crit': {
+                const ll = ln;
+                const rr = rn;
+                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
+                    continue;
+                return false;
+            }
+            default: {
+                const ll = ln;
+                const rr = rn;
+                if (ll === rr)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+/**
+ * 引数が JWSJOSEHeader か確認する。
+ * JWS で定義されている JWSJOSEHeader パラメータをもち、 alg を持っているか確認する。
+ */
+const isJWSJOSEHeader = (arg) => isPartialJWSJOSEHeader(arg) && arg.alg != null;
+/**
+ * 引数が Partial<JWSJOSEHeader> か確認する。
+ * isJWSJOSEHeader は alg が値を持っているか確認するが、これでは undefined でも良いとしている。
+ */
+const isPartialJWSJOSEHeader = (arg) => isObject(arg) &&
+    jwsJOSEHeaderNameList.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isJWSAlg(arg[n])
+            : n === 'jwk'
+                ? isJWK(arg[n])
+                : n === 'x5c' || n === 'crit'
+                    ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                    : typeof arg[n] === 'string'));
+// --------------------END JWS Header definition --------------------
+
+// --------------------BEGIN JWS Serialization definition --------------------
+/**
+ * Serialization された JWS のフォーマットが何か判定する
+ */
+function serializationType(data) {
+    if (typeof data == 'string') {
+        return 'compact';
+    }
+    if (typeof data == 'object' && data != null) {
+        if ('signatures' in data)
+            return 'json';
+        return 'json-flat';
+    }
+    throw TypeError(`${data} は JWSSerialization ではない`);
+}
+/**
+ * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
+ * に JWS をシリアライズする。
+ */
+function serializeCompact(h, m, s) {
+    let ans = BASE64URL(UTF8(JSON.stringify(h))) + '.' + BASE64URL(m);
+    if (s != null)
+        ans += '.' + BASE64URL(s);
+    return ans;
+}
+/**
+ * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
+ * を JWS にデシリアライズする。
+ */
+function deserializeCompact(compact) {
+    const c = compact.split('.');
+    if (c.length !== 3) {
+        throw 'JWS Compact Serialization の形式ではない';
+    }
+    const [header, payload, signature] = c;
+    if (header === '') {
+        throw 'JWS Compact Serialization では Protected Header が必須';
+    }
+    return {
+        h: JSON.parse(UTF8_DECODE(BASE64URL_DECODE(header))),
+        m: BASE64URL_DECODE(payload),
+        s: BASE64URL_DECODE(signature),
+    };
+}
+function isJWSJSONSerialization(arg) {
+    return (isObject(arg) &&
+        typeof arg.payload === 'string' &&
+        Array.isArray(arg.signatures) &&
+        arg.signatures.every((s) => isObject(s) &&
+            typeof s.signature === 'string' &&
+            (s.header == null || isJWSUnprotectedHeader(s.header)) &&
+            (s.protected == null || typeof s.protected === 'string')));
+}
+function serializeJSON(m, hs) {
+    const hsList = Array.isArray(hs) ? hs : [hs];
+    return {
+        payload: BASE64URL(m),
+        signatures: hsList.map((hs) => {
+            if (hs.s === undefined) {
+                throw '署名を終えていない';
+            }
+            return {
+                signature: BASE64URL(hs.s),
+                header: hs.h.Unprotected,
+                protected: hs.h.Protected !== undefined
+                    ? BASE64URL(UTF8(JSON.stringify(hs.h.Protected)))
+                    : undefined,
+            };
+        }),
+    };
+}
+function deserializeJSON(json) {
+    return {
+        m: BASE64URL_DECODE(json.payload),
+        hs: json.signatures.map((sig) => ({
+            s: BASE64URL_DECODE(sig.signature),
+            h: new JWSHeader(sig.protected !== undefined
+                ? JSON.parse(UTF8_DECODE(BASE64URL_DECODE(sig.protected)))
+                : undefined, sig.header),
+        })),
+    };
+}
+function equalsJWSJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of ['payload', 'signatures']) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        if (n === 'payload') {
+            if (ln === rn)
+                continue;
+            return false;
+        }
+        else if (n === 'signatures') {
+            const ll = ln;
+            const rr = rn;
+            if (ll.every((l) => rr.some((r) => equalsSignatureInJWSJSONSerialization(l, r))) &&
+                rr.every((r) => ll.some((l) => equalsSignatureInJWSJSONSerialization(l, r))))
+                continue;
+            return false;
+        }
+    }
+    return true;
+}
+function equalsSignatureInJWSJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of ['signature', 'header', 'protected']) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        switch (n) {
+            case 'header': {
+                const ll = ln;
+                const rr = rn;
+                if (equalsJWSJOSEHeader(ll, rr))
+                    continue;
+                return false;
+            }
+            case 'protected':
+            case 'signature': {
+                if (ln === rn)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+function equalsJWSFlattenedJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    if (l.payload !== r.payload)
+        return false;
+    return equalsSignatureInJWSJSONSerialization(l, r);
+}
+const isJWSFlattenedJSONSerialization = (arg) => isObject(arg) &&
+    typeof arg.payload === 'string' &&
+    (arg.protected == null || typeof arg.protected === 'string') &&
+    typeof arg.signature === 'string' &&
+    (arg.header == null || isJWSUnprotectedHeader(arg.header));
+// --------------------END JWS Serialization definition --------------------
+
+/**
+ * JWS はデジタル署名もしくはメッセージ認証コードで保護されたコンテンツを表現する JSON ベースのデータ構造である。
+ */
+class JWS {
+    constructor(m, hs) {
+        this.m = m;
+        this.hs = hs;
+    }
+    /**
+     *
+     */
+    static async produce(keys, m, h) {
+        const headerList = Array.isArray(h)
+            ? h.map((h) => new JWSHeader(h.p, h.u))
+            : [new JWSHeader(h.p, h.u)];
+        const hsList = await Promise.all(headerList.map(async (h) => ({ h, s: await sign(keys, m, h) })));
+        if (hsList.length === 1) {
+            return new JWS(m, hsList[0]);
+        }
+        return new JWS(m, hsList);
+    }
+    async validate(keys, isAllValidation = true) {
+        const hsList = Array.isArray(this.hs) ? this.hs : [this.hs];
+        const verifiedList = await Promise.all(hsList.map(async (hs) => await verify(keys, this.m, hs)));
+        return verifiedList.reduce((prev, now) => (isAllValidation ? prev && now : prev || now));
+    }
+    static deserialize(data) {
+        switch (serializationType(data)) {
+            case 'compact': {
+                const { h, m, s } = deserializeCompact(data);
+                return new JWS(m, { h: new JWSHeader(h), s });
+            }
+            case 'json': {
+                const { m, hs } = deserializeJSON(data);
+                if (hs.length === 1) {
+                    return new JWS(m, hs[0]);
+                }
+                return new JWS(m, hs);
+            }
+            case 'json-flat': {
+                const d = data;
+                const { m, hs } = deserializeJSON({ payload: d.payload, signatures: [d] });
+                return new JWS(m, hs[0]);
+            }
+        }
+    }
+    serialize(s) {
+        switch (s) {
+            case 'compact':
+                if (Array.isArray(this.hs)) {
+                    throw 'JWS Compact Serialization は複数署名を表現できない';
+                }
+                if (this.hs.h.Protected == null) {
+                    // つまり this.hs.h.u != null
+                    throw 'JWS Compact Serialization は JWS Unprotected Header を表現できない';
+                }
+                if (this.hs.s == null) {
+                    throw '署名を終えていない';
+                }
+                return serializeCompact(this.hs.h.Protected, this.m, this.hs.s);
+            case 'json':
+                return serializeJSON(this.m, this.hs);
+            case 'json-flat': {
+                const json = serializeJSON(this.m, this.hs);
+                if (json.signatures.length > 1) {
+                    throw 'Flattened JWS JSON Serialization は複数署名を表現できない';
+                }
+                return {
+                    payload: json.payload,
+                    signature: json.signatures[0].signature,
+                    header: json.signatures[0].header,
+                    protected: json.signatures[0].protected,
+                };
+            }
+            default:
+                throw TypeError(`${s} はJWSSerialization format ではない`);
+        }
+    }
+}
+async function sign(keys, m, h) {
+    const jh = h.JOSEHeader;
+    const input = jwsinput(m, h.Protected);
+    const alg = jh.alg;
+    if (jh.alg === 'none') {
+        return new Uint8Array();
+    }
+    else if (isJWSSigAlg(alg)) {
+        const key = identifyKey(keys, jh);
+        if (!isJWK(key, ktyFromJWSSigAlg(alg), 'Priv'))
+            throw new TypeError('公開鍵で署名しようとしている');
+        return newSigOperator(alg).sign(alg, key, input);
+    }
+    else if (isJWSMACAlg(alg)) {
+        const key = identifyKey(keys, jh);
+        return newMacOperator(alg).mac(alg, key, input);
+    }
+    throw new EvalError(`sign(alg: ${alg}) is unimplemented`);
+}
+async function verify(keys, m, hs) {
+    const jh = hs.h.JOSEHeader;
+    const alg = jh.alg;
+    if (alg === 'none')
+        return true;
+    if (hs.s === undefined)
+        return false;
+    const input = jwsinput(m, hs.h.Protected);
+    if (isJWSSigAlg(alg)) {
+        const key = identifyKey(keys, jh);
+        if (!isJWK(key, ktyFromJWSSigAlg(alg), 'Pub'))
+            throw new TypeError('秘密鍵で検証しようとしている');
+        return newSigOperator(alg).verify(alg, key, input, hs.s);
+    }
+    else if (isJWSMACAlg(alg)) {
+        const key = identifyKey(keys, jh);
+        return newMacOperator(alg).verify(alg, key, input, hs.s);
+    }
+    throw new EvalError(`verify(alg: $alg) is unimplemented`);
+}
+const jwsinput = (m, p) => ASCII((p !== undefined ? BASE64URL(UTF8(JSON.stringify(p))) : '') + '.' + BASE64URL(m));
+
+async function sec4() {
+    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jws/';
+    const paths = [
+        '4_1.rsa_v15_signature.json',
+        '4_2.rsa-pss_signature.json',
+        '4_3.ecdsa_signature.json',
+        '4_4.hmac-sha2_integrity_protection.json',
+        // "4_5.signature_with_detached_content.json",
+        '4_6.protecting_specific_header_fields.json',
+        '4_7.protecting_content_only.json',
+        '4_8.multiple_signatures.json',
+    ];
+    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
+    for (const path of paths) {
+        console.group('TEST NAME:', path);
+        const data = await fetchData(path);
+        if (!isData(data))
+            throw new EvalError('適切なテストデータの読み取りに失敗');
+        const payload = UTF8(data.input.payload);
+        let header;
+        if (Array.isArray(data.signing)) {
+            header = data.signing.map((sig) => ({ p: sig.protected, u: sig.unprotected }));
+        }
+        else {
+            header = { p: data.signing.protected, u: data.signing.unprotected };
+        }
+        const keys = {
+            keys: Array.isArray(data.input.key) ? data.input.key : [data.input.key],
+        };
+        const jws = await JWS.produce(keys, payload, header);
+        console.log('JWS を生成する', jws);
+        const verifyKeys = {
+            keys: keys.keys.map((k) => {
+                if (isJWK(k, 'oct'))
+                    return k;
+                if (isJWK(k, k.kty))
+                    return exportPublicKey(k);
+                throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
+            }),
+        };
+        let isAllGreen = true;
+        if (data.reproducible) {
+            console.log('テストには再現性があるため、シリアライズした結果を比較する');
+            const output = data.output;
+            if (output.compact) {
+                const compact = jws.serialize('compact');
+                const same = output.compact === compact;
+                isAllGreen &&= same;
+                console.log('Compact Serialiation:', same);
+            }
+            if (output.json) {
+                const json = jws.serialize('json');
+                const same = equalsJWSJSONSerialization(output.json, json);
+                isAllGreen &&= same;
+                console.log('JSON Serialization:', same);
+                console.log('JSON Serialization:', json);
+            }
+            if (output.json_flat) {
+                const flat = jws.serialize('json-flat');
+                const same = equalsJWSFlattenedJSONSerialization(output.json_flat, flat);
+                isAllGreen &&= same;
+                console.log('Flattened JSON Serializatio:', same);
+                console.log(equalsJWSJOSEHeader(flat.header, flat.header));
+                console.log('Flattened JSON Serializatio:', flat);
+            }
+        }
+        else {
+            console.log('テストには再現性がない (e.g. 署名アルゴリズムに乱数がからむ)');
+        }
+        console.log('JWS の検証する');
+        const valid = await jws.validate(verifyKeys);
+        isAllGreen &&= valid;
+        console.log('JWS Produce and Validation ', valid);
+        const output = data.output;
+        if (output.compact) {
+            const jws = JWS.deserialize(output.compact);
+            const valid = await jws.validate(verifyKeys);
+            isAllGreen &&= valid;
+            console.log('Compact Deserialization and Validation:', valid);
+        }
+        if (output.json) {
+            const jws = JWS.deserialize(output.json);
+            const valid = await jws.validate(verifyKeys);
+            isAllGreen &&= valid;
+            console.log('JSON Deserialization and Validation', valid);
+        }
+        if (output.json_flat) {
+            const jws = JWS.deserialize(output.json_flat);
+            const valid = await jws.validate(verifyKeys);
+            isAllGreen &&= valid;
+            console.log('Flattened JSON Deserialization and Validation', valid);
+        }
+        console.log('TEST NAME:', path, 'Is All Green?', isAllGreen);
+        console.groupEnd();
+    }
+}
+function isData(arg) {
+    return (isObject(arg) &&
+        typeof arg.title === 'string' &&
+        (arg.reproducible == null || typeof arg.reproducible === 'boolean') &&
+        isObject(arg.input) &&
+        typeof arg.input.payload === 'string' &&
+        (Array.isArray(arg.input.key)
+            ? arg.input.key.every((k) => isJWK(k))
+            : isJWK(arg.input.key)) &&
+        (Array.isArray(arg.input.alg)
+            ? arg.input.alg.every((a) => isAlg(a))
+            : isAlg(arg.input.alg)) &&
+        isObject(arg.signing) &&
+        (Array.isArray(arg.signing)
+            ? arg.signing.every((s) => isObject(s) &&
+                (s.protected == null || isJWSProtectedHeader(s.protected)) &&
+                (s.unprotected == null || isJWSUnprotectedHeader(s.unprotected)))
+            : (arg.signing.protected == null || isJWSProtectedHeader(arg.signing.protected)) &&
+                (arg.signing.unprotected == null || isJWSUnprotectedHeader(arg.signing.unprotected))) &&
+        isObject(arg.output) &&
+        (arg.output.compact == null || typeof arg.output.compact === 'string') &&
+        isJWSJSONSerialization(arg.output.json) &&
+        (arg.output.json_flat == null || isJWSFlattenedJSONSerialization(arg.output.json_flat)));
+}
+
 // --------------------BEGIN entry point --------------------
 window.document.getElementById('jwk')?.addEventListener('click', test_jwk);
 async function test_jwk() {
@@ -1180,4 +2113,5 @@ async function test_jwk() {
         console.groupEnd();
     }
 }
+sec4();
 // --------------------END entry point --------------------

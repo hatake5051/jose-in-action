@@ -1,3 +1,4 @@
+import { isObject, UTF8 } from 'utility';
 import {
   equalsJWSJOSEHeader,
   JWS,
@@ -9,7 +10,6 @@ import {
 } from '..';
 import { Alg, isAlg } from '../../iana';
 import { exportPublicKey, isJWK, JWK, JWKSet } from '../../jwk';
-import { isObject, UTF8 } from '../../util';
 import { isJWSProtectedHeader, isJWSUnprotectedHeader } from '../internal/header';
 import {
   equalsJWSFlattenedJSONSerialization,

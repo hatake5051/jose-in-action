@@ -5,8 +5,8 @@ import {
   ktyFromJWAJWSAlg,
   KtyFromJWAJWSAlg,
   newJWASigOperator,
-} from '../../jwa/sec3/alg';
-import { JWK } from '../../jwk';
+} from 'jwa/sec3/alg';
+import { JWK } from 'jwk';
 import { JWSSignature } from './types';
 
 export { JWSSigAlg, isJWSSigAlg, SigOperator, newSigOperator, ktyFromJWSSigAlg };

@@ -1,6 +1,7 @@
 // --------------------BEGIN JWA RSA keys --------------------
 
-import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from '../../jwk/common';
+import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from 'jwk/common';
+import { isObject } from 'utility';
 
 export {
   RSAPublicKey,
@@ -21,10 +22,8 @@ type RSAPublicKey = CommomJWKParams<'RSA'> & RSAPublicKeyParams;
  * 引数が RSA 公開鍵かどうか確認する。
  * kty == RSA かどうか、 n,e をパラメータとしてもつか確認する。
  */
-const isRSAPublicKey = (arg: unknown): arg is RSAPublicKey => {
-  if (!isCommonJWKParams(arg) || arg.kty !== 'RSA') return false;
-  return rsaPublicKeyParams.every((s) => s in arg);
-};
+const isRSAPublicKey = (arg: unknown): arg is RSAPublicKey =>
+  isCommonJWKParams(arg) && arg.kty === 'RSA' && isRSAPublicKeyParams(arg);
 
 function equalsRSAPublicKey(l?: RSAPublicKey, r?: RSAPublicKey): boolean {
   return equalsCommonJWKParams(l, r) && equalsRSAPublicKeyParams(l, r);
@@ -39,10 +38,8 @@ type RSAPrivateKey = RSAPublicKey & RSAPrivateKeyParams;
  * 引数が RSA 秘密鍵かどうか確認する。
  * RSA 公開鍵であるか、また d をパラメータとして持つか確認する。
  */
-const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey => {
-  if (!isRSAPublicKey(arg)) return false;
-  return 'd' in arg;
-};
+const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey =>
+  isRSAPublicKey(arg) && isRSAPrivateKeyParams(arg);
 
 function equalsRSAPrivateKey(l?: RSAPrivateKey, r?: RSAPrivateKey): boolean {
   return equalsRSAPublicKey(l, r) && equalsRSAPrivateKeyParams(l, r);
@@ -71,6 +68,9 @@ type RSAPublicKeyParams = {
   e: string;
 };
 const rsaPublicKeyParams = ['n', 'e'] as const;
+
+const isRSAPublicKeyParams = (arg: unknown): arg is RSAPublicKeyParams =>
+  isObject<RSAPublicKeyParams>(arg) && typeof arg.n === 'string' && typeof arg.e === 'string';
 
 function equalsRSAPublicKeyParams(l?: RSAPublicKeyParams, r?: RSAPublicKeyParams): boolean {
   if (l == null && r == null) return true;
@@ -129,7 +129,14 @@ type RSAPrivateKeyParams = {
    */
   qi?: string;
 };
+
 const rsaPrivateParams = ['d', 'p', 'q', 'dp', 'dq', 'qi'] as const;
+
+const isRSAPrivateKeyParams = (arg: unknown): arg is RSAPrivateKeyParams =>
+  isObject<RSAPrivateKeyParams>(arg) &&
+  rsaPrivateParams.every((n) =>
+    n === 'd' ? typeof arg[n] === 'string' : arg[n] == null || typeof arg[n] === 'string'
+  );
 
 function equalsRSAPrivateKeyParams(l?: RSAPrivateKeyParams, r?: RSAPrivateKeyParams): boolean {
   if (l == null && r == null) return true;

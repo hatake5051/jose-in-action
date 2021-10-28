@@ -1,7 +1,7 @@
 // --------------------BEGIN JWA RSA algorithms --------------------
-import { JWK } from '../../jwk';
-import { JWSSignature, SigOperator } from '../../jws';
-import { BASE64URL_DECODE } from '../../util';
+import { JWK } from 'jwk';
+import { JWSSignature, SigOperator } from 'jws';
+import { BASE64URL_DECODE } from 'utility';
 
 export { RSAlg, isRSAlg, PSAlg, isPSAlg, RSASigOperator };
 
@@ -21,10 +21,8 @@ type RSAlg = typeof rsAlgList[number];
 /**
  * 引数が RSA-PKCS1-v1.5 アルゴリズム識別子か確認する。
  */
-const isRSAlg = (arg: unknown): arg is RSAlg => {
-  if (typeof arg !== 'string') return false;
-  return rsAlgList.some((a) => a === arg);
-};
+const isRSAlg = (arg: unknown): arg is RSAlg =>
+  typeof arg === 'string' && rsAlgList.some((a) => a === arg);
 
 const rsAlgList = ['RS256', 'RS384', 'RS512'] as const;
 
@@ -36,10 +34,8 @@ type PSAlg = typeof psAlgList[number];
 /**
  * 引数が RSA-PSS アルゴリズム識別子か確認する。
  */
-const isPSAlg = (arg: unknown): arg is PSAlg => {
-  if (typeof arg !== 'string') return false;
-  return psAlgList.some((a) => a === arg);
-};
+const isPSAlg = (arg: unknown): arg is PSAlg =>
+  typeof arg === 'string' && psAlgList.some((a) => a === arg);
 
 const psAlgList = ['PS256', 'PS384', 'PS512'] as const;
 

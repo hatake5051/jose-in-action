@@ -1,5 +1,5 @@
-import { identifyKey, isJWK, JWKSet } from '../../jwk';
-import { ASCII, BASE64URL, UTF8 } from '../../util';
+import { identifyKey, isJWK, JWKSet } from 'jwk';
+import { ASCII, BASE64URL, UTF8 } from 'utility';
 import { JWSHeader, JWSJOSEHeader, JWSProtectedHeader, JWSUnprotectedHeader } from './header';
 import { isJWSMACAlg, newMacOperator } from './mac';
 import {
@@ -20,7 +20,9 @@ export { JWS };
  * JWS はデジタル署名もしくはメッセージ認証コードで保護されたコンテンツを表現する JSON ベースのデータ構造である。
  */
 class JWS {
+  // 完全性が保護されるコンテンツ
   private m: JWSPayload;
+  // 署名値と署名操作を表すヘッダー。複数署名の場合は配列になる
   private hs: JWSHeaderAndSig | JWSHeaderAndSig[];
 
   private constructor(m: JWSPayload, hs: JWSHeaderAndSig | JWSHeaderAndSig[]) {
@@ -28,6 +30,9 @@ class JWS {
     this.hs = hs;
   }
 
+  /**
+   *
+   */
   static async produce(
     keys: JWKSet,
     m: JWSPayload,

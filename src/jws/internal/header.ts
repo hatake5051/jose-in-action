@@ -1,5 +1,6 @@
-import { equalsJWK, isJWK, JWK } from '../../jwk';
-import { isObject } from '../../util';
+// --------------------BEGIN JWS Header definition --------------------
+import { equalsJWK, isJWK, JWK } from 'jwk';
+import { isObject } from 'utility';
 import { isJWSAlg, JWSAlg } from './types';
 
 export {
@@ -10,7 +11,6 @@ export {
   isJWSUnprotectedHeader,
   JWSJOSEHeader,
   equalsJWSJOSEHeader,
-  isJWSJOSEHeader,
 };
 
 /**
@@ -196,27 +196,25 @@ function equalsJWSJOSEHeader(l?: Partial<JWSJOSEHeader>, r?: Partial<JWSJOSEHead
  * 引数が JWSJOSEHeader か確認する。
  * JWS で定義されている JWSJOSEHeader パラメータをもち、 alg を持っているか確認する。
  */
-const isJWSJOSEHeader = (arg: unknown): arg is JWSJOSEHeader => {
-  return isPartialJWSJOSEHeader(arg) && arg.alg != null;
-};
+const isJWSJOSEHeader = (arg: unknown): arg is JWSJOSEHeader =>
+  isPartialJWSJOSEHeader(arg) && arg.alg != null;
 
 /**
  * 引数が Partial<JWSJOSEHeader> か確認する。
  * isJWSJOSEHeader は alg が値を持っているか確認するが、これでは undefined でも良いとしている。
  */
-function isPartialJWSJOSEHeader(arg: unknown): arg is Partial<JWSJOSEHeader> {
-  return (
-    isObject<Partial<JWSJOSEHeader>>(arg) &&
-    jwsJOSEHeaderNameList.every(
-      (n) =>
-        arg[n] == null ||
-        (n === 'alg'
-          ? isJWSAlg(arg[n])
-          : n === 'jwk'
-          ? isJWK(arg[n])
-          : n === 'x5c' || n === 'crit'
-          ? Array.isArray(arg[n]) && (arg[n] as unknown[]).every((m) => typeof m === 'string')
-          : typeof arg[n] === 'string')
-    )
+const isPartialJWSJOSEHeader = (arg: unknown): arg is Partial<JWSJOSEHeader> =>
+  isObject<Partial<JWSJOSEHeader>>(arg) &&
+  jwsJOSEHeaderNameList.every(
+    (n) =>
+      arg[n] == null ||
+      (n === 'alg'
+        ? isJWSAlg(arg[n])
+        : n === 'jwk'
+        ? isJWK(arg[n])
+        : n === 'x5c' || n === 'crit'
+        ? Array.isArray(arg[n]) && (arg[n] as unknown[]).every((m) => typeof m === 'string')
+        : typeof arg[n] === 'string')
   );
-}
+
+// --------------------END JWS Header definition --------------------

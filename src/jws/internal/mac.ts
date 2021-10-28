@@ -1,6 +1,6 @@
 // --------------------BEGIN JWS MAC algorithms --------------------
-import { isJWAMACAlg, JWAMACAlg, KtyFromJWAJWSAlg, newJWAMACOperator } from '../../jwa/sec3/alg';
-import { JWK } from '../../jwk';
+import { isJWAMACAlg, JWAMACAlg, KtyFromJWAJWSAlg, newJWAMACOperator } from 'jwa/sec3/alg';
+import { JWK } from 'jwk';
 import { JWSSignature } from './types';
 
 export { JWSMACAlg, isJWSMACAlg, MACOperator, newMacOperator };
@@ -40,6 +40,9 @@ function newMacOperator<A extends JWSMACAlg>(alg: A): MACOperator<A> {
   throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }
 
+/**
+ * JWS の MAC アルゴリズム識別子から Kty を返す
+ */
 type KtyFromJWSMACAlg<A extends JWSMACAlg> = A extends JWAMACAlg ? KtyFromJWAJWSAlg<A> : never;
 
 // --------------------END JWS MAC algorithms --------------------
