@@ -31,7 +31,7 @@ type JWK<K extends Kty = Kty, A extends AsymKty = AsymKty> = K extends JWAKty
  * kty を指定するとその鍵タイプの JWK 形式を満たすか確認する。
  * asym を指定すると非対称暗号鍵のうち指定した鍵（公開鍵か秘密鍵）かであるかも確認する。
  */
-function isJWK<K extends Kty, A extends AsymKty>(
+function isJWK<K extends Kty, A extends AsymKty = AsymKty>(
   arg: unknown,
   kty?: K,
   asym?: A

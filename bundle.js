@@ -1186,378 +1186,6 @@ async function validJWKx5c(jwk, selfSigned = false) {
 }
 // --------------------END JWK definition --------------------
 
-// --------------------BEGIN RFC7517 appendix.A test --------------------
-async function test$4() {
-    let allGreen = true;
-    const title = 'RFC7517#A Example JSON Web Key Sets;';
-    let log = 'TEST NAME: A.1.Example Public Keys: ';
-    // JWK Set contains two public keys represented as JWKs
-    if (!isJWKSet(a1)) {
-        log += 'JWK Set と判定できていない\n';
-        allGreen = false;
-    }
-    else {
-        // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
-        if (isJWK(a1.keys[0], 'EC', 'Pub') && isJWK(a1.keys[1], 'RSA', 'Pub')) {
-            log += 'JWKSet([JWK<EC,Pub>, JWK<RSA,Pub>]) と判定できた (OK)\n';
-        }
-        else {
-            log += 'JWK Set に含まれる公開鍵の種類の判定に失敗\n';
-            allGreen = false;
-        }
-    }
-    log += 'TEST NAME: A.2. Example Private Keys: ';
-    if (!isJWKSet(a2)) {
-        log += 'JWK Set と判定できていない\n';
-        allGreen = false;
-    }
-    else {
-        // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
-        if (isJWK(a2.keys[0], 'EC', 'Priv') && isJWK(a2.keys[1], 'RSA', 'Priv')) {
-            log += 'JWKSet([JWK<EC,Priv>, JWK<RSA,Priv>]) と判定できた (OK)\n';
-        }
-        else {
-            log += 'JWK Set に含まれる秘密鍵の種類の判定に失敗\n';
-            allGreen = false;
-        }
-    }
-    log += 'TEST NAME: A.3. Example Symmetric Keys: ';
-    if (!isJWKSet(a3)) {
-        log += 'JWK Set と判定できていない\n';
-        allGreen = false;
-    }
-    else {
-        // JWK Set contains two symmetric keys represented as JWKs:
-        if (isJWK(a3.keys[0], 'oct') && isJWK(a3.keys[1], 'oct')) {
-            log += 'JWKSet([JWK<oct>, JWK<oct>]) と判定できた (OK)\n';
-        }
-        else {
-            log += 'JWK Set に含まれる対称鍵の種類の判定に失敗\n';
-            allGreen = false;
-        }
-    }
-    return { title, log, allGreen };
-}
-const a1 = {
-    keys: [
-        {
-            kty: 'EC',
-            crv: 'P-256',
-            x: 'MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4',
-            y: '4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM',
-            use: 'enc',
-            kid: '1',
-        },
-        {
-            kty: 'RSA',
-            n: '0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw',
-            e: 'AQAB',
-            alg: 'RS256',
-            kid: '2011-04-29',
-        },
-    ],
-};
-const a2 = {
-    keys: [
-        {
-            kty: 'EC',
-            crv: 'P-256',
-            x: 'MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4',
-            y: '4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM',
-            d: '870MB6gfuTJ4HtUnUvYMyJpr5eUZNP4Bk43bVdj3eAE',
-            use: 'enc',
-            kid: '1',
-        },
-        {
-            kty: 'RSA',
-            n: '0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISnnD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw',
-            e: 'AQAB',
-            d: 'X4cTteJY_gn4FYPsXB8rdXix5vwsg1FLN5E3EaG6RJoVH-HLLKD9M7dx5oo7GURknchnrRweUkC7hT5fJLM0WbFAKNLWY2vv7B6NqXSzUvxT0_YSfqijwp3RTzlBaCxWp4doFk5N2o8Gy_nHNKroADIkJ46pRUohsXywbReAdYaMwFs9tv8d_cPVY3i07a3t8MN6TNwm0dSawm9v47UiCl3Sk5ZiG7xojPLu4sbg1U2jx4IBTNBznbJSzFHK66jT8bgkuqsk0GjskDJk19Z4qwjwbsnn4j2WBii3RL-Us2lGVkY8fkFzme1z0HbIkfz0Y6mqnOYtqc0X4jfcKoAC8Q',
-            p: '83i-7IvMGXoMXCskv73TKr8637FiO7Z27zv8oj6pbWUQyLPQBQxtPVnwD20R-60eTDmD2ujnMt5PoqMrm8RfmNhVWDtjjMmCMjOpSXicFHj7XOuVIYQyqVWlWEh6dN36GVZYk93N8Bc9vY41xy8B9RzzOGVQzXvNEvn7O0nVbfs',
-            q: '3dfOR9cuYq-0S-mkFLzgItgMEfFzB2q3hWehMuG0oCuqnb3vobLyumqjVZQO1dIrdwgTnCdpYzBcOfW5r370AFXjiWft_NGEiovonizhKpo9VVS78TzFgxkIdrecRezsZ-1kYd_s1qDbxtkDEgfAITAG9LUnADun4vIcb6yelxk',
-            dp: 'G4sPXkc6Ya9y8oJW9_ILj4xuppu0lzi_H7VTkS8xj5SdX3coE0oimYwxIi2emTAue0UOa5dpgFGyBJ4c8tQ2VF402XRugKDTP8akYhFo5tAA77Qe_NmtuYZc3C3m3I24G2GvR5sSDxUyAN2zq8Lfn9EUms6rY3Ob8YeiKkTiBj0',
-            dq: 's9lAH9fggBsoFR8Oac2R_E2gw282rT2kGOAhvIllETE1efrA6huUUvMfBcMpn8lqeW6vzznYY5SSQF7pMdC_agI3nG8Ibp1BUb0JUiraRNqUfLhcQb_d9GF4Dh7e74WbRsobRonujTYN1xCaP6TO61jvWrX-L18txXw494Q_cgk',
-            qi: 'GyM_p6JrXySiz1toFgKbWV-JdI3jQ4ypu9rbMWx3rQJBfmt0FoYzgUIZEVFEcOqwemRN81zoDAaa-Bk0KWNGDjJHZDdDmFhW3AN7lI-puxk_mHZGJ11rxyR8O55XLSe3SPmRfKwZI6yU24ZxvQKFYItdldUKGzO6Ia6zTKhAVRU',
-            alg: 'RS256',
-            kid: '2011-04-29',
-        },
-    ],
-};
-const a3 = {
-    keys: [
-        { kty: 'oct', alg: 'A128KW', k: 'GawgguFyGrWKav7AX4VKUg' },
-        {
-            kty: 'oct',
-            k: 'AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow',
-            kid: 'HMAC key used in JWS spec Appendix A.1 example',
-        },
-    ],
-};
-// --------------------END RFC7517 appendix.A test --------------------
-
-// --------------------BEGIN RFC7517 appendix.B test --------------------
-async function test$3() {
-    let allGreen = true;
-    const title = 'RFC7517#B.Example Use of "x5c" Parameter;';
-    let log = 'TEST NAME: Self Signed Certificate Verification: ';
-    const cert = parseX509BASE64EncodedDER(b.x5c[0]);
-    const isVerified = await validateSelfSignedCert(cert);
-    if (isVerified) {
-        log += 'X509証明書(RSA) OK ';
-    }
-    else {
-        log += 'X509証明書(RSA) X ';
-        allGreen = false;
-    }
-    const eccert = parseX509BASE64EncodedDER(amazon_root_ca_3.x5c[0]);
-    const isECVerified = await validateSelfSignedCert(eccert);
-    if (isECVerified) {
-        log += 'X509証明書(EC) OK\n';
-    }
-    else {
-        log += 'X509証明書(EC) X\n';
-        allGreen = false;
-    }
-    log += 'TEST NAME: Validate JWK.x5c\n';
-    if (isJWK(b, 'RSA', 'Pub')) {
-        if (await validJWK(b, { x5c: { selfSigned: true } })) {
-            log += 'JWK.x5c (RSA) の検証と整合性の確認に成功\n';
-        }
-        else {
-            log += 'JWK.x5c (RSA) の検証に失敗\n';
-            allGreen = false;
-        }
-    }
-    else {
-        log += 'JWK<RSA,Pub> のパースに失敗\n';
-        allGreen = false;
-    }
-    if (isJWK(amazon_root_ca_3, 'EC', 'Pub')) {
-        if (await validJWK(amazon_root_ca_3, { x5c: { selfSigned: true } })) {
-            log += 'JWK.x5c (EC) の検証と整合性の確認に成功\n';
-        }
-        else {
-            log += 'JWK.x5c (EC) の検証に失敗\n';
-            allGreen = false;
-        }
-    }
-    else {
-        log += 'JWK<EC, Pub> のパースに失敗\n';
-        allGreen = false;
-    }
-    log += "TEST NAME: Validate JWK.x5c of microsoft's JWKSet for oidc: ";
-    const data = await (await fetch('https://login.microsoftonline.com/common/discovery/v2.0/keys')).json();
-    if (!isJWKSet(data)) {
-        log += 'JWKSet の取得に失敗\n';
-        allGreen = false;
-    }
-    else {
-        for (const key of data.keys) {
-            if (isJWK(key, 'RSA', 'Pub')) {
-                if (await validJWK(key, { x5c: { selfSigned: true } })) {
-                    log += 'JWK.x5c の検証と整合性の確認に成功\n';
-                }
-                else {
-                    log += 'JWK.x5c の検証に失敗\n';
-                    allGreen = false;
-                }
-            }
-            else {
-                log += 'MSから取得する鍵は全て RSA 公開鍵のはず\n';
-                allGreen = false;
-            }
-        }
-    }
-    return { title, log, allGreen };
-}
-const b = {
-    kty: 'RSA',
-    use: 'sig',
-    kid: '1b94c',
-    n: 'vrjOfz9Ccdgx5nQudyhdoR17V-IubWMeOZCwX_jj0hgAsz2J_pqYW08PLbK_PdiVGKPrqzmDIsLI7sA25VEnHU1uCLNwBuUiCO11_-7dYbsr4iJmG0Qu2j8DsVyT1azpJC_NG84Ty5KKthuCaPod7iI7w0LK9orSMhBEwwZDCxTWq4aYWAchc8t-emd9qOvWtVMDC2BXksRngh6X5bUYLy6AyHKvj-nUy1wgzjYQDwHMTplCoLtU-o-8SNnZ1tmRoGE9uJkBLdh5gFENabWnU5m1ZqZPdwS-qo-meMvVfJb6jJVWRpl2SUtCnYG2C32qvbWbjZ_jBPD5eunqsIo1vQ',
-    e: 'AQAB',
-    x5c: [
-        'MIIDQjCCAiqgAwIBAgIGATz/FuLiMA0GCSqGSIb3DQEBBQUAMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDAeFw0xMzAyMjEyMzI5MTVaFw0xODA4MTQyMjI5MTVaMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAL64zn8/QnHYMeZ0LncoXaEde1fiLm1jHjmQsF/449IYALM9if6amFtPDy2yvz3YlRij66s5gyLCyO7ANuVRJx1NbgizcAblIgjtdf/u3WG7K+IiZhtELto/A7Fck9Ws6SQvzRvOE8uSirYbgmj6He4iO8NCyvaK0jIQRMMGQwsU1quGmFgHIXPLfnpnfajr1rVTAwtgV5LEZ4Iel+W1GC8ugMhyr4/p1MtcIM42EA8BzE6ZQqC7VPqPvEjZ2dbZkaBhPbiZAS3YeYBRDWm1p1OZtWamT3cEvqqPpnjL1XyW+oyVVkaZdklLQp2Btgt9qr21m42f4wTw+Xrp6rCKNb0CAwEAATANBgkqhkiG9w0BAQUFAAOCAQEAh8zGlfSlcI0o3rYDPBB07aXNswb4ECNIKG0CETTUxmXl9KUL+9gGlqCz5iWLOgWsnrcKcY0vXPG9J1r9AqBNTqNgHq2G03X09266X5CpOe1zFo+Owb1zxtp3PehFdfQJ610CDLEaS9V9Rqp17hCyybEpOGVwe8fnk+fbEL2Bo3UPGrpsHzUoaGpDftmWssZkhpBJKVMJyf/RuP2SmmaIzmnw9JiSlYhzo4tpzd5rFXhjRbg4zW9C+2qok+2+qDM1iJ684gPHMIY8aLWrdgQTxkumGmTqgawR+N5MDtdPTEQ0XfIBc2cJEUyMTY5MPvACWpkA6SdS4xSvdXK3IVfOWA==',
-    ],
-};
-// ref: https://good.sca3a.amazontrust.com/ に基づいて JWK を生成した
-const amazon_root_ca_3 = {
-    kty: 'EC',
-    crv: 'P-256',
-    x: 'KZenxkF_wA2b6AEbVsbyUqW6LbIS6NIu1_rJxdiqbR8',
-    y: 'c4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt4',
-    x5c: [
-        'MIIBtjCCAVugAwIBAgITBmyf1XSXNmY/Owua2eiedgPySjAKBggqhkjOPQQDAjA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6b24gUm9vdCBDQSAzMB4XDTE1MDUyNjAwMDAwMFoXDTQwMDUyNjAwMDAwMFowOTELMAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJvb3QgQ0EgMzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCmXp8ZBf8ANm+gBG1bG8lKlui2yEujSLtf6ycXYqm0fc4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt6jQjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGGMB0GA1UdDgQWBBSrttvXBp43rDCGB5Fwx5zEGbF4wDAKBggqhkjOPQQDAgNJADBGAiEA4IWSoxe3jfkrBqWTrBqYaGFy+uGh0PsceGCmQ5nFuMQCIQCcAu/xlJyzlvnrxir4tiz+OpAUFteMYyRIHN8wfdVoOw==',
-    ],
-};
-// --------------------END RFC7517 appendix.B test --------------------
-
-// --------------------BEGIN RFC7520 Section.3 for EC test --------------------
-async function test$2() {
-    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
-    const urlList = [
-        '3_1.ec_public_key.json',
-        '3_2.ec_private_key.json',
-        '3_3.rsa_public_key.json',
-        '3_4.rsa_private_key.json',
-        '3_5.symmetric_key_mac_computation.json',
-        '3_6.symmetric_key_encryption.json',
-    ];
-    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
-    let allGreen = true;
-    const title = 'RFC7520#3 check EC key;';
-    let log = '';
-    for (const path of urlList) {
-        log += `TEST NAME: ${path}: `;
-        const data = await fetchData(path);
-        if (!path.includes('ec')) {
-            if (isJWK(data, 'EC')) {
-                log += 'EC鍵ではないはずが、EC鍵だと識別されている。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'EC鍵ではないと判定できた(OK)\n';
-            }
-        }
-        else if (path === '3_1.ec_public_key.json') {
-            if (!isJWK(data, 'EC', 'Pub')) {
-                log += 'EC公開鍵の判定に失敗。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'EC公開鍵と判定できた(OK)\n';
-            }
-            continue;
-        }
-        else if (path === '3_2.ec_private_key.json') {
-            if (!isJWK(data, 'EC', 'Priv')) {
-                log += 'EC秘密鍵の判定に失敗。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'EC秘密鍵と判定できた(OK)\n';
-            }
-        }
-        else {
-            log += '想定していないテストケース';
-            allGreen = false;
-        }
-    }
-    return { title, log, allGreen };
-}
-// --------------------END RFC7520 Section.3 for EC test --------------------
-
-// --------------------BEGIN RFC7520 Section.3 for oct test --------------------
-async function test$1() {
-    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
-    const urlList = [
-        '3_1.ec_public_key.json',
-        '3_2.ec_private_key.json',
-        '3_3.rsa_public_key.json',
-        '3_4.rsa_private_key.json',
-        '3_5.symmetric_key_mac_computation.json',
-        '3_6.symmetric_key_encryption.json',
-    ];
-    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
-    let allGreen = true;
-    const title = 'RFC7520#3 check symmetry key;';
-    let log = '';
-    for (const path of urlList) {
-        log += `TEST NAME: ${path}: `;
-        const data = await fetchData(path);
-        if (!path.includes('symmetric_key')) {
-            if (isJWK(data, 'oct')) {
-                log += 'oct鍵ではないはずが、oct鍵だと識別されている。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'oct鍵ではないと判定できた(OK)\n';
-            }
-        }
-        else if (path === '3_5.symmetric_key_mac_computation.json') {
-            if (!isJWK(data, 'oct')) {
-                console.log(data);
-                log += 'oct鍵の判定に失敗。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'oct鍵と判定できた(OK)\n';
-            }
-            continue;
-        }
-        else if (path === '3_6.symmetric_key_encryption.json') {
-            if (!isJWK(data, 'oct')) {
-                log += 'oct鍵の判定に失敗。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'oct鍵と判定できた(OK)\n';
-            }
-        }
-        else {
-            log += '想定していないテストケース';
-            allGreen = false;
-        }
-    }
-    return { title, log, allGreen };
-}
-// --------------------END RFC7520 Section.3 for oct test --------------------
-
-// --------------------BEGIN RFC7520 Section.3 for RSA test --------------------
-async function test() {
-    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
-    const urlList = [
-        '3_1.ec_public_key.json',
-        '3_2.ec_private_key.json',
-        '3_3.rsa_public_key.json',
-        '3_4.rsa_private_key.json',
-        '3_5.symmetric_key_mac_computation.json',
-        '3_6.symmetric_key_encryption.json',
-    ];
-    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
-    let allGreen = true;
-    const title = 'RFC7520#3 check RSA key;';
-    let log = '';
-    for (const path of urlList) {
-        log += `TEST NAME: ${path}: `;
-        const data = await fetchData(path);
-        if (!path.includes('rsa')) {
-            if (isJWK(data, 'RSA')) {
-                log += 'RSA鍵ではないはずが、RSA鍵だと識別されている。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'RSA鍵ではないと判定できた(OK)\n';
-            }
-        }
-        else if (path === '3_3.rsa_public_key.json') {
-            if (!isJWK(data, 'RSA', 'Pub')) {
-                log += 'RSA公開鍵の判定に失敗。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'RSA公開鍵と判定できた(OK)\n';
-            }
-            continue;
-        }
-        else if (path === '3_4.rsa_private_key.json') {
-            if (!isJWK(data, 'RSA', 'Priv')) {
-                log += 'RSA秘密鍵の判定に失敗。\n';
-                allGreen = false;
-            }
-            else {
-                log += 'RSA秘密鍵と判定できた(OK)\n';
-            }
-        }
-        else {
-            log += '想定していないテストケース';
-            allGreen = false;
-        }
-    }
-    return { title, log, allGreen };
-}
-// --------------------END RFC7520 Section.3 for RSA test --------------------
-
 // --------------------BEGIN JWS MAC algorithms --------------------
 /**
  * 引数が JWS の MAC アルゴリズムか確認する
@@ -1982,101 +1610,23 @@ async function verify(keys, m, hs) {
 }
 const jwsinput = (m, p) => ASCII((p !== undefined ? BASE64URL(UTF8(JSON.stringify(p))) : '') + '.' + BASE64URL(m));
 
-async function sec4() {
-    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jws/';
-    const paths = [
-        '4_1.rsa_v15_signature.json',
-        '4_2.rsa-pss_signature.json',
-        '4_3.ecdsa_signature.json',
-        '4_4.hmac-sha2_integrity_protection.json',
-        // "4_5.signature_with_detached_content.json",
-        '4_6.protecting_specific_header_fields.json',
-        '4_7.protecting_content_only.json',
-        '4_8.multiple_signatures.json',
-    ];
-    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
-    for (const path of paths) {
-        console.group('TEST NAME:', path);
-        const data = await fetchData(path);
-        if (!isData(data))
-            throw new EvalError('適切なテストデータの読み取りに失敗');
-        const payload = UTF8(data.input.payload);
-        let header;
-        if (Array.isArray(data.signing)) {
-            header = data.signing.map((sig) => ({ p: sig.protected, u: sig.unprotected }));
-        }
-        else {
-            header = { p: data.signing.protected, u: data.signing.unprotected };
-        }
-        const keys = {
-            keys: Array.isArray(data.input.key) ? data.input.key : [data.input.key],
-        };
-        const jws = await JWS.produce(keys, payload, header);
-        console.log('JWS を生成する', jws);
-        const verifyKeys = {
-            keys: keys.keys.map((k) => {
-                if (isJWK(k, 'oct'))
-                    return k;
-                if (isJWK(k, k.kty))
-                    return exportPublicKey(k);
-                throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
-            }),
-        };
-        let isAllGreen = true;
-        if (data.reproducible) {
-            console.log('テストには再現性があるため、シリアライズした結果を比較する');
-            const output = data.output;
-            if (output.compact) {
-                const compact = jws.serialize('compact');
-                const same = output.compact === compact;
-                isAllGreen &&= same;
-                console.log('Compact Serialiation:', same);
-            }
-            if (output.json) {
-                const json = jws.serialize('json');
-                const same = equalsJWSJSONSerialization(output.json, json);
-                isAllGreen &&= same;
-                console.log('JSON Serialization:', same);
-                console.log('JSON Serialization:', json);
-            }
-            if (output.json_flat) {
-                const flat = jws.serialize('json-flat');
-                const same = equalsJWSFlattenedJSONSerialization(output.json_flat, flat);
-                isAllGreen &&= same;
-                console.log('Flattened JSON Serializatio:', same);
-                console.log(equalsJWSJOSEHeader(flat.header, flat.header));
-                console.log('Flattened JSON Serializatio:', flat);
-            }
-        }
-        else {
-            console.log('テストには再現性がない (e.g. 署名アルゴリズムに乱数がからむ)');
-        }
-        console.log('JWS の検証する');
-        const valid = await jws.validate(verifyKeys);
-        isAllGreen &&= valid;
-        console.log('JWS Produce and Validation ', valid);
-        const output = data.output;
-        if (output.compact) {
-            const jws = JWS.deserialize(output.compact);
-            const valid = await jws.validate(verifyKeys);
-            isAllGreen &&= valid;
-            console.log('Compact Deserialization and Validation:', valid);
-        }
-        if (output.json) {
-            const jws = JWS.deserialize(output.json);
-            const valid = await jws.validate(verifyKeys);
-            isAllGreen &&= valid;
-            console.log('JSON Deserialization and Validation', valid);
-        }
-        if (output.json_flat) {
-            const jws = JWS.deserialize(output.json_flat);
-            const valid = await jws.validate(verifyKeys);
-            isAllGreen &&= valid;
-            console.log('Flattened JSON Deserialization and Validation', valid);
-        }
-        console.log('TEST NAME:', path, 'Is All Green?', isAllGreen);
-        console.groupEnd();
-    }
+const paths = [
+    '4_1.rsa_v15_signature.json',
+    '4_2.rsa-pss_signature.json',
+    '4_3.ecdsa_signature.json',
+    '4_4.hmac-sha2_integrity_protection.json',
+    // "4_5.signature_with_detached_content.json",
+    '4_6.protecting_specific_header_fields.json',
+    '4_7.protecting_content_only.json',
+    '4_8.multiple_signatures.json',
+];
+const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jws/';
+async function fetchData(path) {
+    const resp = await fetch(baseURL + path);
+    const data = await resp.json();
+    if (isData(data))
+        return data;
+    throw new EvalError('テストデータの取得に失敗');
 }
 function isData(arg) {
     return (isObject(arg) &&
@@ -2103,15 +1653,476 @@ function isData(arg) {
         (arg.output.json_flat == null || isJWSFlattenedJSONSerialization(arg.output.json_flat)));
 }
 
+// --------------------BEGIN RFC7517 appendix.A test --------------------
+async function test$5() {
+    let allGreen = true;
+    const title = 'RFC7517#A Example JSON Web Key Sets;';
+    let log = 'TEST NAME: A.1.Example Public Keys: ';
+    // JWK Set contains two public keys represented as JWKs
+    if (!isJWKSet(a1)) {
+        log += 'JWK Set と判定できていない\n';
+        allGreen = false;
+    }
+    else {
+        // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
+        if (isJWK(a1.keys[0], 'EC', 'Pub') && isJWK(a1.keys[1], 'RSA', 'Pub')) {
+            log += 'JWKSet([JWK<EC,Pub>, JWK<RSA,Pub>]) と判定できた (OK)\n';
+        }
+        else {
+            log += 'JWK Set に含まれる公開鍵の種類の判定に失敗\n';
+            allGreen = false;
+        }
+    }
+    log += 'TEST NAME: A.2. Example Private Keys: ';
+    if (!isJWKSet(a2)) {
+        log += 'JWK Set と判定できていない\n';
+        allGreen = false;
+    }
+    else {
+        // one using an Elliptic Curve algorithm and a second one using an RSA algorithm.
+        if (isJWK(a2.keys[0], 'EC', 'Priv') && isJWK(a2.keys[1], 'RSA', 'Priv')) {
+            log += 'JWKSet([JWK<EC,Priv>, JWK<RSA,Priv>]) と判定できた (OK)\n';
+        }
+        else {
+            log += 'JWK Set に含まれる秘密鍵の種類の判定に失敗\n';
+            allGreen = false;
+        }
+    }
+    log += 'TEST NAME: A.3. Example Symmetric Keys: ';
+    if (!isJWKSet(a3)) {
+        log += 'JWK Set と判定できていない\n';
+        allGreen = false;
+    }
+    else {
+        // JWK Set contains two symmetric keys represented as JWKs:
+        if (isJWK(a3.keys[0], 'oct') && isJWK(a3.keys[1], 'oct')) {
+            log += 'JWKSet([JWK<oct>, JWK<oct>]) と判定できた (OK)\n';
+        }
+        else {
+            log += 'JWK Set に含まれる対称鍵の種類の判定に失敗\n';
+            allGreen = false;
+        }
+    }
+    return { title, log, allGreen };
+}
+const a1 = {
+    keys: [
+        {
+            kty: 'EC',
+            crv: 'P-256',
+            x: 'MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4',
+            y: '4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM',
+            use: 'enc',
+            kid: '1',
+        },
+        {
+            kty: 'RSA',
+            n: '0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw',
+            e: 'AQAB',
+            alg: 'RS256',
+            kid: '2011-04-29',
+        },
+    ],
+};
+const a2 = {
+    keys: [
+        {
+            kty: 'EC',
+            crv: 'P-256',
+            x: 'MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4',
+            y: '4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM',
+            d: '870MB6gfuTJ4HtUnUvYMyJpr5eUZNP4Bk43bVdj3eAE',
+            use: 'enc',
+            kid: '1',
+        },
+        {
+            kty: 'RSA',
+            n: '0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISnnD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw',
+            e: 'AQAB',
+            d: 'X4cTteJY_gn4FYPsXB8rdXix5vwsg1FLN5E3EaG6RJoVH-HLLKD9M7dx5oo7GURknchnrRweUkC7hT5fJLM0WbFAKNLWY2vv7B6NqXSzUvxT0_YSfqijwp3RTzlBaCxWp4doFk5N2o8Gy_nHNKroADIkJ46pRUohsXywbReAdYaMwFs9tv8d_cPVY3i07a3t8MN6TNwm0dSawm9v47UiCl3Sk5ZiG7xojPLu4sbg1U2jx4IBTNBznbJSzFHK66jT8bgkuqsk0GjskDJk19Z4qwjwbsnn4j2WBii3RL-Us2lGVkY8fkFzme1z0HbIkfz0Y6mqnOYtqc0X4jfcKoAC8Q',
+            p: '83i-7IvMGXoMXCskv73TKr8637FiO7Z27zv8oj6pbWUQyLPQBQxtPVnwD20R-60eTDmD2ujnMt5PoqMrm8RfmNhVWDtjjMmCMjOpSXicFHj7XOuVIYQyqVWlWEh6dN36GVZYk93N8Bc9vY41xy8B9RzzOGVQzXvNEvn7O0nVbfs',
+            q: '3dfOR9cuYq-0S-mkFLzgItgMEfFzB2q3hWehMuG0oCuqnb3vobLyumqjVZQO1dIrdwgTnCdpYzBcOfW5r370AFXjiWft_NGEiovonizhKpo9VVS78TzFgxkIdrecRezsZ-1kYd_s1qDbxtkDEgfAITAG9LUnADun4vIcb6yelxk',
+            dp: 'G4sPXkc6Ya9y8oJW9_ILj4xuppu0lzi_H7VTkS8xj5SdX3coE0oimYwxIi2emTAue0UOa5dpgFGyBJ4c8tQ2VF402XRugKDTP8akYhFo5tAA77Qe_NmtuYZc3C3m3I24G2GvR5sSDxUyAN2zq8Lfn9EUms6rY3Ob8YeiKkTiBj0',
+            dq: 's9lAH9fggBsoFR8Oac2R_E2gw282rT2kGOAhvIllETE1efrA6huUUvMfBcMpn8lqeW6vzznYY5SSQF7pMdC_agI3nG8Ibp1BUb0JUiraRNqUfLhcQb_d9GF4Dh7e74WbRsobRonujTYN1xCaP6TO61jvWrX-L18txXw494Q_cgk',
+            qi: 'GyM_p6JrXySiz1toFgKbWV-JdI3jQ4ypu9rbMWx3rQJBfmt0FoYzgUIZEVFEcOqwemRN81zoDAaa-Bk0KWNGDjJHZDdDmFhW3AN7lI-puxk_mHZGJ11rxyR8O55XLSe3SPmRfKwZI6yU24ZxvQKFYItdldUKGzO6Ia6zTKhAVRU',
+            alg: 'RS256',
+            kid: '2011-04-29',
+        },
+    ],
+};
+const a3 = {
+    keys: [
+        { kty: 'oct', alg: 'A128KW', k: 'GawgguFyGrWKav7AX4VKUg' },
+        {
+            kty: 'oct',
+            k: 'AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow',
+            kid: 'HMAC key used in JWS spec Appendix A.1 example',
+        },
+    ],
+};
+// --------------------END RFC7517 appendix.A test --------------------
+
+// --------------------BEGIN RFC7517 appendix.B test --------------------
+async function test$4() {
+    let allGreen = true;
+    const title = 'RFC7517#B.Example Use of "x5c" Parameter;';
+    let log = 'TEST NAME: Self Signed Certificate Verification: ';
+    const cert = parseX509BASE64EncodedDER(b.x5c[0]);
+    const isVerified = await validateSelfSignedCert(cert);
+    if (isVerified) {
+        log += 'X509証明書(RSA) OK ';
+    }
+    else {
+        log += 'X509証明書(RSA) X ';
+        allGreen = false;
+    }
+    const eccert = parseX509BASE64EncodedDER(amazon_root_ca_3.x5c[0]);
+    const isECVerified = await validateSelfSignedCert(eccert);
+    if (isECVerified) {
+        log += 'X509証明書(EC) OK\n';
+    }
+    else {
+        log += 'X509証明書(EC) X\n';
+        allGreen = false;
+    }
+    log += 'TEST NAME: Validate JWK.x5c\n';
+    if (isJWK(b, 'RSA', 'Pub')) {
+        if (await validJWK(b, { x5c: { selfSigned: true } })) {
+            log += 'JWK.x5c (RSA) の検証と整合性の確認に成功\n';
+        }
+        else {
+            log += 'JWK.x5c (RSA) の検証に失敗\n';
+            allGreen = false;
+        }
+    }
+    else {
+        log += 'JWK<RSA,Pub> のパースに失敗\n';
+        allGreen = false;
+    }
+    if (isJWK(amazon_root_ca_3, 'EC', 'Pub')) {
+        if (await validJWK(amazon_root_ca_3, { x5c: { selfSigned: true } })) {
+            log += 'JWK.x5c (EC) の検証と整合性の確認に成功\n';
+        }
+        else {
+            log += 'JWK.x5c (EC) の検証に失敗\n';
+            allGreen = false;
+        }
+    }
+    else {
+        log += 'JWK<EC, Pub> のパースに失敗\n';
+        allGreen = false;
+    }
+    log += "TEST NAME: Validate JWK.x5c of microsoft's JWKSet for oidc: ";
+    const data = await (await fetch('https://login.microsoftonline.com/common/discovery/v2.0/keys')).json();
+    if (!isJWKSet(data)) {
+        log += 'JWKSet の取得に失敗\n';
+        allGreen = false;
+    }
+    else {
+        for (const key of data.keys) {
+            if (isJWK(key, 'RSA', 'Pub')) {
+                if (await validJWK(key, { x5c: { selfSigned: true } })) {
+                    log += 'JWK.x5c の検証と整合性の確認に成功\n';
+                }
+                else {
+                    log += 'JWK.x5c の検証に失敗\n';
+                    allGreen = false;
+                }
+            }
+            else {
+                log += 'MSから取得する鍵は全て RSA 公開鍵のはず\n';
+                allGreen = false;
+            }
+        }
+    }
+    return { title, log, allGreen };
+}
+const b = {
+    kty: 'RSA',
+    use: 'sig',
+    kid: '1b94c',
+    n: 'vrjOfz9Ccdgx5nQudyhdoR17V-IubWMeOZCwX_jj0hgAsz2J_pqYW08PLbK_PdiVGKPrqzmDIsLI7sA25VEnHU1uCLNwBuUiCO11_-7dYbsr4iJmG0Qu2j8DsVyT1azpJC_NG84Ty5KKthuCaPod7iI7w0LK9orSMhBEwwZDCxTWq4aYWAchc8t-emd9qOvWtVMDC2BXksRngh6X5bUYLy6AyHKvj-nUy1wgzjYQDwHMTplCoLtU-o-8SNnZ1tmRoGE9uJkBLdh5gFENabWnU5m1ZqZPdwS-qo-meMvVfJb6jJVWRpl2SUtCnYG2C32qvbWbjZ_jBPD5eunqsIo1vQ',
+    e: 'AQAB',
+    x5c: [
+        'MIIDQjCCAiqgAwIBAgIGATz/FuLiMA0GCSqGSIb3DQEBBQUAMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDAeFw0xMzAyMjEyMzI5MTVaFw0xODA4MTQyMjI5MTVaMGIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJDTzEPMA0GA1UEBxMGRGVudmVyMRwwGgYDVQQKExNQaW5nIElkZW50aXR5IENvcnAuMRcwFQYDVQQDEw5CcmlhbiBDYW1wYmVsbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAL64zn8/QnHYMeZ0LncoXaEde1fiLm1jHjmQsF/449IYALM9if6amFtPDy2yvz3YlRij66s5gyLCyO7ANuVRJx1NbgizcAblIgjtdf/u3WG7K+IiZhtELto/A7Fck9Ws6SQvzRvOE8uSirYbgmj6He4iO8NCyvaK0jIQRMMGQwsU1quGmFgHIXPLfnpnfajr1rVTAwtgV5LEZ4Iel+W1GC8ugMhyr4/p1MtcIM42EA8BzE6ZQqC7VPqPvEjZ2dbZkaBhPbiZAS3YeYBRDWm1p1OZtWamT3cEvqqPpnjL1XyW+oyVVkaZdklLQp2Btgt9qr21m42f4wTw+Xrp6rCKNb0CAwEAATANBgkqhkiG9w0BAQUFAAOCAQEAh8zGlfSlcI0o3rYDPBB07aXNswb4ECNIKG0CETTUxmXl9KUL+9gGlqCz5iWLOgWsnrcKcY0vXPG9J1r9AqBNTqNgHq2G03X09266X5CpOe1zFo+Owb1zxtp3PehFdfQJ610CDLEaS9V9Rqp17hCyybEpOGVwe8fnk+fbEL2Bo3UPGrpsHzUoaGpDftmWssZkhpBJKVMJyf/RuP2SmmaIzmnw9JiSlYhzo4tpzd5rFXhjRbg4zW9C+2qok+2+qDM1iJ684gPHMIY8aLWrdgQTxkumGmTqgawR+N5MDtdPTEQ0XfIBc2cJEUyMTY5MPvACWpkA6SdS4xSvdXK3IVfOWA==',
+    ],
+};
+// ref: https://good.sca3a.amazontrust.com/ に基づいて JWK を生成した
+const amazon_root_ca_3 = {
+    kty: 'EC',
+    crv: 'P-256',
+    x: 'KZenxkF_wA2b6AEbVsbyUqW6LbIS6NIu1_rJxdiqbR8',
+    y: 'c4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt4',
+    x5c: [
+        'MIIBtjCCAVugAwIBAgITBmyf1XSXNmY/Owua2eiedgPySjAKBggqhkjOPQQDAjA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6b24gUm9vdCBDQSAzMB4XDTE1MDUyNjAwMDAwMFoXDTQwMDUyNjAwMDAwMFowOTELMAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJvb3QgQ0EgMzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCmXp8ZBf8ANm+gBG1bG8lKlui2yEujSLtf6ycXYqm0fc4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt6jQjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGGMB0GA1UdDgQWBBSrttvXBp43rDCGB5Fwx5zEGbF4wDAKBggqhkjOPQQDAgNJADBGAiEA4IWSoxe3jfkrBqWTrBqYaGFy+uGh0PsceGCmQ5nFuMQCIQCcAu/xlJyzlvnrxir4tiz+OpAUFteMYyRIHN8wfdVoOw==',
+    ],
+};
+// --------------------END RFC7517 appendix.B test --------------------
+
+// --------------------BEGIN RFC7520 Section.3 for EC test --------------------
+async function test$3() {
+    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
+    const urlList = [
+        '3_1.ec_public_key.json',
+        '3_2.ec_private_key.json',
+        '3_3.rsa_public_key.json',
+        '3_4.rsa_private_key.json',
+        '3_5.symmetric_key_mac_computation.json',
+        '3_6.symmetric_key_encryption.json',
+    ];
+    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
+    let allGreen = true;
+    const title = 'RFC7520#3 check EC key;';
+    let log = '';
+    for (const path of urlList) {
+        log += `TEST NAME: ${path}: `;
+        const data = await fetchData(path);
+        if (!path.includes('ec')) {
+            if (isJWK(data, 'EC')) {
+                log += 'EC鍵ではないはずが、EC鍵だと識別されている。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'EC鍵ではないと判定できた(OK)\n';
+            }
+        }
+        else if (path === '3_1.ec_public_key.json') {
+            if (!isJWK(data, 'EC', 'Pub')) {
+                log += 'EC公開鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'EC公開鍵と判定できた(OK)\n';
+            }
+            continue;
+        }
+        else if (path === '3_2.ec_private_key.json') {
+            if (!isJWK(data, 'EC', 'Priv')) {
+                log += 'EC秘密鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'EC秘密鍵と判定できた(OK)\n';
+            }
+        }
+        else {
+            log += '想定していないテストケース';
+            allGreen = false;
+        }
+    }
+    return { title, log, allGreen };
+}
+// --------------------END RFC7520 Section.3 for EC test --------------------
+
+// --------------------BEGIN RFC7520 Section.3 for oct test --------------------
+async function test$2() {
+    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
+    const urlList = [
+        '3_1.ec_public_key.json',
+        '3_2.ec_private_key.json',
+        '3_3.rsa_public_key.json',
+        '3_4.rsa_private_key.json',
+        '3_5.symmetric_key_mac_computation.json',
+        '3_6.symmetric_key_encryption.json',
+    ];
+    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
+    let allGreen = true;
+    const title = 'RFC7520#3 check symmetry key;';
+    let log = '';
+    for (const path of urlList) {
+        log += `TEST NAME: ${path}: `;
+        const data = await fetchData(path);
+        if (!path.includes('symmetric_key')) {
+            if (isJWK(data, 'oct')) {
+                log += 'oct鍵ではないはずが、oct鍵だと識別されている。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'oct鍵ではないと判定できた(OK)\n';
+            }
+        }
+        else if (path === '3_5.symmetric_key_mac_computation.json') {
+            if (!isJWK(data, 'oct')) {
+                console.log(data);
+                log += 'oct鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'oct鍵と判定できた(OK)\n';
+            }
+            continue;
+        }
+        else if (path === '3_6.symmetric_key_encryption.json') {
+            if (!isJWK(data, 'oct')) {
+                log += 'oct鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'oct鍵と判定できた(OK)\n';
+            }
+        }
+        else {
+            log += '想定していないテストケース';
+            allGreen = false;
+        }
+    }
+    return { title, log, allGreen };
+}
+// --------------------END RFC7520 Section.3 for oct test --------------------
+
+// --------------------BEGIN RFC7520 Section.3 for RSA test --------------------
+async function test$1() {
+    const baseURL = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwk/';
+    const urlList = [
+        '3_1.ec_public_key.json',
+        '3_2.ec_private_key.json',
+        '3_3.rsa_public_key.json',
+        '3_4.rsa_private_key.json',
+        '3_5.symmetric_key_mac_computation.json',
+        '3_6.symmetric_key_encryption.json',
+    ];
+    const fetchData = async (path) => await (await fetch(baseURL + path)).json();
+    let allGreen = true;
+    const title = 'RFC7520#3 check RSA key;';
+    let log = '';
+    for (const path of urlList) {
+        log += `TEST NAME: ${path}: `;
+        const data = await fetchData(path);
+        if (!path.includes('rsa')) {
+            if (isJWK(data, 'RSA')) {
+                log += 'RSA鍵ではないはずが、RSA鍵だと識別されている。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'RSA鍵ではないと判定できた(OK)\n';
+            }
+        }
+        else if (path === '3_3.rsa_public_key.json') {
+            if (!isJWK(data, 'RSA', 'Pub')) {
+                log += 'RSA公開鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'RSA公開鍵と判定できた(OK)\n';
+            }
+            continue;
+        }
+        else if (path === '3_4.rsa_private_key.json') {
+            if (!isJWK(data, 'RSA', 'Priv')) {
+                log += 'RSA秘密鍵の判定に失敗。\n';
+                allGreen = false;
+            }
+            else {
+                log += 'RSA秘密鍵と判定できた(OK)\n';
+            }
+        }
+        else {
+            log += '想定していないテストケース';
+            allGreen = false;
+        }
+    }
+    return { title, log, allGreen };
+}
+// --------------------END RFC7520 Section.3 for RSA test --------------------
+
+async function test(path) {
+    const data = await fetchData(path);
+    let allGreen = true;
+    const title = 'RFC7520#4 TEST NAME: ' + data.title;
+    let log = '';
+    // 準備
+    const payload = UTF8(data.input.payload);
+    let header;
+    if (Array.isArray(data.signing)) {
+        header = data.signing.map((sig) => ({ p: sig.protected, u: sig.unprotected }));
+    }
+    else {
+        header = { p: data.signing.protected, u: data.signing.unprotected };
+    }
+    const keys = {
+        keys: Array.isArray(data.input.key) ? data.input.key : [data.input.key],
+    };
+    // 生成
+    const jws = await JWS.produce(keys, payload, header);
+    // 検証の準備
+    const verifyKeys = {
+        keys: keys.keys.map((k) => {
+            if (isJWK(k, 'oct'))
+                return k;
+            if (isJWK(k, k.kty))
+                return exportPublicKey(k);
+            throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
+        }),
+    };
+    if (data.reproducible) {
+        log += 'テストには再現性があるため、シリアライズした結果を比較する\n';
+        const output = data.output;
+        if (output.compact) {
+            const compact = jws.serialize('compact');
+            const same = output.compact === compact;
+            allGreen &&= same;
+            log += 'Compact: ' + (same ? '(OK) ' : 'X ');
+        }
+        if (output.json) {
+            const json = jws.serialize('json');
+            const same = equalsJWSJSONSerialization(output.json, json);
+            allGreen &&= same;
+            log += 'JSON: ' + (same ? '(OK) ' : 'X ');
+        }
+        if (output.json_flat) {
+            const flat = jws.serialize('json-flat');
+            const same = equalsJWSFlattenedJSONSerialization(output.json_flat, flat);
+            allGreen &&= same;
+            log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');
+        }
+        log += '\n';
+    }
+    else {
+        log += 'テストには再現性がない (e.g. 署名アルゴリズムに乱数がからむ)\n';
+    }
+    log += 'JWS の検証する\n';
+    const valid = await jws.validate(verifyKeys);
+    allGreen &&= valid;
+    log += 'Produce and Validate JWS' + (valid ? '(OK) ' : 'X ') + '\n';
+    const output = data.output;
+    if (output.compact) {
+        const jws = JWS.deserialize(output.compact);
+        const valid = await jws.validate(verifyKeys);
+        allGreen &&= valid;
+        log += 'Deserialize Compact and Validate JWS' + (valid ? '(OK) ' : 'X ') + '\n';
+    }
+    if (output.json) {
+        const jws = JWS.deserialize(output.json);
+        const valid = await jws.validate(verifyKeys);
+        allGreen &&= valid;
+        log += 'Deserialize JSON and Validate JWS' + (valid ? '(OK) ' : 'X ') + '\n';
+    }
+    if (output.json_flat) {
+        const jws = JWS.deserialize(output.json_flat);
+        const valid = await jws.validate(verifyKeys);
+        allGreen &&= valid;
+        log += 'Deserialize FlattendJSON and Validate JWS' + (valid ? '(OK) ' : 'X ') + '\n';
+    }
+    return { title, allGreen, log };
+}
+
 // --------------------BEGIN entry point --------------------
 window.document.getElementById('jwk')?.addEventListener('click', test_jwk);
+window.document.getElementById('jws')?.addEventListener('click', test_jws);
 async function test_jwk() {
-    for (const test$5 of [test$4, test$3, test$2, test$1, test]) {
-        const { title, log, allGreen } = await test$5();
+    const logs = await Promise.all([test$5, test$4, test$3, test$2, test$1].map(async (test) => await test()));
+    logs.forEach(({ title, log, allGreen }) => {
         console.group(title, allGreen);
         console.log(log);
         console.groupEnd();
-    }
+    });
 }
-sec4();
+async function test_jws() {
+    const logs = await Promise.all(paths.map(async (path) => await test(path)));
+    logs.forEach(({ title, log, allGreen }) => {
+        console.group(title, allGreen);
+        console.log(log);
+        console.groupEnd();
+    });
+}
 // --------------------END entry point --------------------

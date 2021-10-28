@@ -8,6 +8,8 @@ import {
 import { JWS } from './internal/jws';
 import { MACOperator } from './internal/mac';
 import {
+  equalsJWSFlattenedJSONSerialization,
+  equalsJWSJSONSerialization,
   isJWSFlattenedJSONSerialization,
   isJWSJSONSerialization,
   JWSCompactSerialization,
@@ -30,6 +32,8 @@ export {
   JWSFlattenedJSONSerialization,
   isJWSJSONSerialization,
   isJWSFlattenedJSONSerialization,
+  equalsJWSJSONSerialization,
+  equalsJWSFlattenedJSONSerialization,
   SigOperator,
   MACOperator,
 };
