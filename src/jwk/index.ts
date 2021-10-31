@@ -1,7 +1,7 @@
 import {
   equalsJWK,
   exportPublicKey,
-  identifyKey,
+  identifyJWK,
   isJWK,
   isJWKSet,
   JWK,
@@ -9,4 +9,4 @@ import {
   validJWK,
 } from './internal';
 
-export { JWK, JWKSet, isJWKSet, isJWK, validJWK, equalsJWK, identifyKey, exportPublicKey };
+export { JWK, JWKSet, isJWKSet, isJWK, validJWK, equalsJWK, identifyJWK, exportPublicKey };

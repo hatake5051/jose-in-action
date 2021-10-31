@@ -1,6 +1,6 @@
 // --------------------BEGIN JWK definition --------------------
 
-import { Alg, JOSEHeader, KeyUse, Kty } from 'iana';
+import { Alg, isAlg, JOSEHeader, KeyUse, Kty } from 'iana';
 import {
   isJWAMACAlg,
   isJWASigAlg,
@@ -15,7 +15,7 @@ import { BASE64URL, isObject } from 'utility';
 import { isCommonJWKParams, validCommonJWKParams } from './common';
 import { isX509SPKI, parseX509BASE64EncodedDER, validateSelfSignedCert } from './x509';
 
-export { JWK, JWKSet, isJWKSet, isJWK, equalsJWK, validJWK, identifyKey, exportPublicKey };
+export { JWK, JWKSet, isJWKSet, isJWK, equalsJWK, validJWK, identifyJWK, exportPublicKey };
 
 /**
  * RFC7517#4
@@ -95,20 +95,24 @@ const ktyFromAlg = (alg: Alg): Kty => {
   throw new TypeError(`${alg} に対応する kty がわからなかった`);
 };
 
-function identifyKey<A extends Alg>(
-  set: JWKSet,
-  h: Required<Pick<JOSEHeader<A>, 'alg'>> & Pick<JOSEHeader<A>, 'kid'>
-): JWK<KtyFromAlg<A>> {
-  for (const key of set.keys) {
-    if (
-      (isJWASigAlg(h.alg) || isJWAMACAlg(h.alg)) &&
-      key.kty === ktyFromAlg(h.alg) &&
-      key.kid === h.kid
-    ) {
-      return key as JWK<KtyFromAlg<A>>;
+/**
+ * RFC7515(JWS)#6 Key Identification
+ *
+ */
+function identifyJWK<A extends Alg>(h: JOSEHeader<A>, set?: JWKSet): JWK<KtyFromAlg<A>> {
+  // JWKSet が JOSE Header 外の情報で取得できていれば、そこから必要な鍵を選ぶ
+  if (set) {
+    for (const key of set.keys) {
+      // RFC7515#4.5 kid Parameter
+      // JWK Set のなかで kid が使われつとき、異なる鍵に別々の "kid" 値が使われるべき (SHOULD)
+      // (異なる鍵で同じ "kid" 値が使われる例: 異なる "kty" で、それらを使うアプリで同等の代替鍵としてみなされる場合)
+      if (isAlg(h.alg) && key.kty === ktyFromAlg(h.alg) && key.kid === h.kid) {
+        return key as JWK<KtyFromAlg<A>>;
+      }
     }
   }
-  throw RangeError(`JWKSet(${set}) から JOSEheader(${h}) に対応する鍵が存在しなかった`);
+  // JOSE Header のパラメータを読み取るのは未実装
+  throw new EvalError(` JOSEheader(${h}) と JWKSet(${set}) から鍵を識別できなかった`);
 }
 
 /**

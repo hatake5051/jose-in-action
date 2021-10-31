@@ -27,7 +27,10 @@ export {
 };
 
 /**
- * JWS の Serialization は compact と json(json-flatを含め) の２種類
+ * JWS には2つのシリアライぜーションがあり、
+ * スペースに制約のある環境向けの compact で url-safe な表現である JWS Compact Serialization と
+ * 複数の署名や MAC を１つのコンテンツに適用したものを JSON で表現する JWS JSON Serialization がある。
+ * さらに、 JWS JSON Serialization は署名が１つだけの場合に JWS Flattened JSON Serializatino がある。
  */
 type JWSSerialization = 'compact' | 'json' | 'json-flat';
 

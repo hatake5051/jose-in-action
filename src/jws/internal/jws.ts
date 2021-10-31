@@ -1,6 +1,6 @@
-import { identifyKey, isJWK, JWKSet } from 'jwk';
+import { identifyJWK, isJWK, JWKSet } from 'jwk';
 import { ASCII, BASE64URL, UTF8 } from 'utility';
-import { JWSHeader, JWSJOSEHeader, JWSProtectedHeader, JWSUnprotectedHeader } from './header';
+import { JWSHeader, JWSProtectedHeader, JWSUnprotectedHeader } from './header';
 import { isJWSMACAlg, newMacOperator } from './mac';
 import {
   deserializeCompact,
@@ -31,11 +31,18 @@ class JWS {
   }
 
   /**
+   * RFC7515#5.1 Message Signature or MAC Computation
    *
    */
   static async produce(
     keys: JWKSet,
+    /**
+     * JWS Payload として使用するコンテンツ。
+     */
     m: JWSPayload,
+    /**
+     * JOSE ヘッダー。複数署名を行う場合は配列で表現。
+     */
     h:
       | { p?: JWSProtectedHeader; u?: JWSUnprotectedHeader }
       | { p?: JWSProtectedHeader; u?: JWSUnprotectedHeader }[]
@@ -43,12 +50,12 @@ class JWS {
     const headerList = Array.isArray(h)
       ? h.map((h) => new JWSHeader(h.p, h.u))
       : [new JWSHeader(h.p, h.u)];
+    // ヘッダーごとにコンテンツに対して署名や MAC 計算を行う。
+    // 計算の実体は sign で実装。
     const hsList = await Promise.all<JWSHeaderAndSig>(
       headerList.map(async (h) => ({ h, s: await sign(keys, m, h) }))
     );
-    if (hsList.length === 1) {
-      return new JWS(m, hsList[0]);
-    }
+    if (hsList.length === 1) return new JWS(m, hsList[0]);
     return new JWS(m, hsList);
   }
 
@@ -115,19 +122,29 @@ class JWS {
   }
 }
 
+/**
+ * RFC7515#5.1
+ * ヘッダーに応じて署名アルゴリズムの選択と、署名鍵を keys から選択する。
+ * 署名鍵と署名アルゴリズムを用いて、 JWS Payload と JWS Protected Header に対して署名 or MAC 計算を行い、
+ * その結果を返す。
+ */
 async function sign(keys: JWKSet, m: JWSPayload, h: JWSHeader): Promise<JWSSignature> {
-  const jh = h.JOSEHeader;
   const input = jwsinput(m, h.Protected);
+  const jh = h.JOSEHeader;
   const alg = jh.alg;
   if (jh.alg === 'none') {
+    // Unsecured JWS の場合は、署名値がない。
     return new Uint8Array();
   } else if (isJWSSigAlg(alg)) {
-    const key = identifyKey<typeof alg>(keys, jh as JWSJOSEHeader<typeof alg>);
+    // JOSE Header の alg がデジタル署名の場合
+    const key = identifyJWK<typeof alg>(jh, keys);
+    // key が秘密鍵かどうか、型ガードを行う
     if (!isJWK<'EC' | 'RSA', 'Priv'>(key, ktyFromJWSSigAlg(alg), 'Priv'))
       throw new TypeError('公開鍵で署名しようとしている');
     return newSigOperator<typeof alg>(alg).sign(alg, key, input);
   } else if (isJWSMACAlg(alg)) {
-    const key = identifyKey<typeof alg>(keys, jh as JWSJOSEHeader<typeof alg>);
+    // JOSE Header の alg が MAC の場合
+    const key = identifyJWK<typeof alg>(jh, keys);
     return newMacOperator<typeof alg>(alg).mac(alg, key, input);
   }
   throw new EvalError(`sign(alg: ${alg}) is unimplemented`);
@@ -140,16 +157,20 @@ async function verify(keys: JWKSet, m: JWSPayload, hs: JWSHeaderAndSig): Promise
   if (hs.s === undefined) return false;
   const input = jwsinput(m, hs.h.Protected);
   if (isJWSSigAlg(alg)) {
-    const key = identifyKey<typeof alg>(keys, jh as JWSJOSEHeader<typeof alg>);
+    const key = identifyJWK<typeof alg>(jh, keys);
     if (!isJWK<'EC' | 'RSA', 'Pub'>(key, ktyFromJWSSigAlg(alg), 'Pub'))
       throw new TypeError('秘密鍵で検証しようとしている');
     return newSigOperator<typeof alg>(alg).verify(alg, key, input, hs.s);
   } else if (isJWSMACAlg(alg)) {
-    const key = identifyKey<typeof alg>(keys, jh as JWSJOSEHeader<typeof alg>);
+    const key = identifyJWK<typeof alg>(jh, keys);
     return newMacOperator<typeof alg>(alg).verify(alg, key, input, hs.s);
   }
   throw new EvalError(`verify(alg: $alg) is unimplemented`);
 }
 
+/**
+ * RFC7515#2 JWS Signing Input はデジタル署名や MAC の計算に対する入力。
+ * この値は、ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload))
+ */
 const jwsinput = (m: JWSPayload, p?: JWSProtectedHeader): Uint8Array =>
   ASCII((p !== undefined ? BASE64URL(UTF8(JSON.stringify(p))) : '') + '.' + BASE64URL(m));

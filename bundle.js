@@ -1115,15 +1115,24 @@ const ktyFromAlg = (alg) => {
         return ktyFromJWAJWSAlg(alg);
     throw new TypeError(`${alg} に対応する kty がわからなかった`);
 };
-function identifyKey(set, h) {
-    for (const key of set.keys) {
-        if ((isJWASigAlg(h.alg) || isJWAMACAlg(h.alg)) &&
-            key.kty === ktyFromAlg(h.alg) &&
-            key.kid === h.kid) {
-            return key;
+/**
+ * RFC7515(JWS)#6 Key Identification
+ *
+ */
+function identifyJWK(h, set) {
+    // JWKSet が JOSE Header 外の情報で取得できていれば、そこから必要な鍵を選ぶ
+    if (set) {
+        for (const key of set.keys) {
+            // RFC7515#4.5 kid Parameter
+            // JWK Set のなかで kid が使われつとき、異なる鍵に別々の "kid" 値が使われるべき (SHOULD)
+            // (異なる鍵で同じ "kid" 値が使われる例: 異なる "kty" で、それらを使うアプリで同等の代替鍵としてみなされる場合)
+            if (isAlg(h.alg) && key.kty === ktyFromAlg(h.alg) && key.kid === h.kid) {
+                return key;
+            }
         }
     }
-    throw RangeError(`JWKSet(${set}) から JOSEheader(${h}) に対応する鍵が存在しなかった`);
+    // JOSE Header のパラメータを読み取るのは未実装
+    throw new EvalError(` JOSEheader(${h}) と JWKSet(${set}) から鍵を識別できなかった`);
 }
 /**
  * 型で表現しきれない JWK の条件を満たすか確認する。
@@ -1499,16 +1508,26 @@ class JWS {
         this.hs = hs;
     }
     /**
+     * RFC7515#5.1 Message Signature or MAC Computation
      *
      */
-    static async produce(keys, m, h) {
+    static async produce(keys, 
+    /**
+     * JWS Payload として使用するコンテンツ。
+     */
+    m, 
+    /**
+     * JOSE ヘッダー。複数署名を行う場合は配列で表現。
+     */
+    h) {
         const headerList = Array.isArray(h)
             ? h.map((h) => new JWSHeader(h.p, h.u))
             : [new JWSHeader(h.p, h.u)];
+        // ヘッダーごとにコンテンツに対して署名や MAC 計算を行う。
+        // 計算の実体は sign で実装。
         const hsList = await Promise.all(headerList.map(async (h) => ({ h, s: await sign(keys, m, h) })));
-        if (hsList.length === 1) {
+        if (hsList.length === 1)
             return new JWS(m, hsList[0]);
-        }
         return new JWS(m, hsList);
     }
     async validate(keys, isAllValidation = true) {
@@ -1569,21 +1588,31 @@ class JWS {
         }
     }
 }
+/**
+ * RFC7515#5.1
+ * ヘッダーに応じて署名アルゴリズムの選択と、署名鍵を keys から選択する。
+ * 署名鍵と署名アルゴリズムを用いて、 JWS Payload と JWS Protected Header に対して署名 or MAC 計算を行い、
+ * その結果を返す。
+ */
 async function sign(keys, m, h) {
-    const jh = h.JOSEHeader;
     const input = jwsinput(m, h.Protected);
+    const jh = h.JOSEHeader;
     const alg = jh.alg;
     if (jh.alg === 'none') {
+        // Unsecured JWS の場合は、署名値がない。
         return new Uint8Array();
     }
     else if (isJWSSigAlg(alg)) {
-        const key = identifyKey(keys, jh);
+        // JOSE Header の alg がデジタル署名の場合
+        const key = identifyJWK(jh, keys);
+        // key が秘密鍵かどうか、型ガードを行う
         if (!isJWK(key, ktyFromJWSSigAlg(alg), 'Priv'))
             throw new TypeError('公開鍵で署名しようとしている');
         return newSigOperator(alg).sign(alg, key, input);
     }
     else if (isJWSMACAlg(alg)) {
-        const key = identifyKey(keys, jh);
+        // JOSE Header の alg が MAC の場合
+        const key = identifyJWK(jh, keys);
         return newMacOperator(alg).mac(alg, key, input);
     }
     throw new EvalError(`sign(alg: ${alg}) is unimplemented`);
@@ -1597,17 +1626,21 @@ async function verify(keys, m, hs) {
         return false;
     const input = jwsinput(m, hs.h.Protected);
     if (isJWSSigAlg(alg)) {
-        const key = identifyKey(keys, jh);
+        const key = identifyJWK(jh, keys);
         if (!isJWK(key, ktyFromJWSSigAlg(alg), 'Pub'))
             throw new TypeError('秘密鍵で検証しようとしている');
         return newSigOperator(alg).verify(alg, key, input, hs.s);
     }
     else if (isJWSMACAlg(alg)) {
-        const key = identifyKey(keys, jh);
+        const key = identifyJWK(jh, keys);
         return newMacOperator(alg).verify(alg, key, input, hs.s);
     }
     throw new EvalError(`verify(alg: $alg) is unimplemented`);
 }
+/**
+ * RFC7515#2 JWS Signing Input はデジタル署名や MAC の計算に対する入力。
+ * この値は、ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload))
+ */
 const jwsinput = (m, p) => ASCII((p !== undefined ? BASE64URL(UTF8(JSON.stringify(p))) : '') + '.' + BASE64URL(m));
 
 const paths = [
