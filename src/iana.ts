@@ -24,13 +24,14 @@ import {
   ktyFromJWAJWEAlg,
   KtyFromJWAJWEAlg,
 } from 'jwa/sec4/alg';
+import { isJWAEncAlg, JWAEncAlg, KtyFromJWAEncAlg } from 'jwa/sec5/encalg';
 import { isJWACrv, isJWAKty, JWACrv, JWAKty } from 'jwa/sec6/kty';
 import { JWSJOSEHeader } from 'jws';
 
 export {
   JOSEHeader,
   Alg,
-  Enc,
+  EncAlg,
   Kty,
   KtyFromAlg,
   ktyFromAlg,
@@ -64,7 +65,7 @@ type Alg =
   | JWADKAAlg
   | JWAKAKWAlg
   | JWADEAlg
-  | typeof encList[number];
+  | EncAlg;
 const isAlg = (arg: unknown): arg is Alg =>
   isJWASigAlg(arg) ||
   isJWAMACAlg(arg) ||
@@ -74,17 +75,10 @@ const isAlg = (arg: unknown): arg is Alg =>
   isJWADKAAlg(arg) ||
   isJWAKAKWAlg(arg) ||
   isJWADEAlg(arg) ||
-  encList.some((a) => a === arg);
+  isEncAlg(arg);
 
-const encList = [
-  'A128CBC-HS256',
-  'A192CBC-HS384',
-  'A256CBC-HS512',
-  'A128GCM',
-  'A192GCM',
-  'A256GCM',
-] as const;
-type Enc = typeof encList[number];
+type EncAlg = JWAEncAlg;
+const isEncAlg = (arg: unknown): arg is EncAlg => isJWAEncAlg(arg);
 
 /**
  * Kty は JSON Web Key Types を列挙する。
@@ -97,8 +91,8 @@ type KtyFromAlg<A extends Alg> = A extends JWASigAlg | JWAMACAlg | JWANoneAlg
   ? KtyFromJWAJWSAlg<A>
   : A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
   ? KtyFromJWAJWEAlg<A>
-  : A extends Enc
-  ? 'oct'
+  : A extends JWAEncAlg
+  ? KtyFromJWAEncAlg
   : never;
 
 function ktyFromAlg<A extends Alg>(alg: A): KtyFromAlg<A> {
@@ -114,7 +108,7 @@ function ktyFromAlg<A extends Alg>(alg: A): KtyFromAlg<A> {
   ) {
     return ktyFromJWAJWEAlg(alg) as KtyFromAlg<A>;
   }
-  if (encList.some((a) => a === alg)) {
+  if (isEncAlg(alg)) {
     return 'oct' as KtyFromAlg<A>;
   }
   throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);

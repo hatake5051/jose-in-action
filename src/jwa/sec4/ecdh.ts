@@ -1,4 +1,4 @@
-import { Enc } from 'iana';
+import { EncAlg } from 'iana';
 import { DirectAgreementer, JWECEK, JWEEncryptedKey, KeyAgreementerWithKeyWrapping } from 'jwe';
 import { JWK } from 'jwk';
 import { ASCII, BASE64URL, BASE64URL_DECODE, CONCAT } from 'utility';
@@ -65,7 +65,7 @@ const ecdhEsKwAlgList = ['ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'] a
  */
 type JWEECDHHeaderParams = {
   alg: ECDHAlg;
-  enc: Enc;
+  enc: EncAlg;
   /**
    * RFC8518#4.6.1.1 Ephemeral Public Key Header Parameter
    * 鍵合意アルゴリズム使用される、 originator が作成した公開鍵であり、 JWK で表現。
@@ -191,7 +191,7 @@ async function ConcatKDF(
  * ECDHAlg に応じて、 Concat KDF で使用する keydatalen parameter を決める。
  * ECDH-ES の場合は enc algorithm identifier の鍵長に依存するので、引数でそれも渡している。
  */
-function genkeydatalen(alg: ECDHAlg, enc: Enc): number {
+function genkeydatalen(alg: ECDHAlg, enc: EncAlg): number {
   switch (alg) {
     case 'ECDH-ES':
       switch (enc) {

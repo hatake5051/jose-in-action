@@ -292,6 +292,14 @@ const isJWADKAAlg = (arg) => isECDH_ESAlg(arg);
 const isJWAKAKWAlg = (arg) => isECDH_ESKWAlg(arg);
 const isJWADEAlg = (arg) => typeof arg === 'string' && arg === 'dir';
 
+const isACBCEnc = (arg) => acbcEncList.some((a) => a === arg);
+const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'];
+
+const isAGCMEnc = (arg) => agcmEncList.some((a) => a === arg);
+const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'];
+
+const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
+
 // --------------------BEGIN JWA Kty and Crv definition --------------------
 const isJWAKty = (arg) => typeof arg == 'string' && jwaKtyList.some((k) => k === arg);
 const jwaKtyList = ['EC', 'RSA', 'oct'];
@@ -308,15 +316,7 @@ const isAlg = (arg) => isJWASigAlg(arg) ||
     isJWADKAAlg(arg) ||
     isJWAKAKWAlg(arg) ||
     isJWADEAlg(arg) ||
-    encList.some((a) => a === arg);
-const encList = [
-    'A128CBC-HS256',
-    'A192CBC-HS384',
-    'A256CBC-HS512',
-    'A128GCM',
-    'A192GCM',
-    'A256GCM',
-];
+    isJWAEncAlg(arg);
 const isKty = (arg) => isJWAKty(arg);
 const keyUseList = ['sig', 'enc'];
 const isKeyUse = (arg) => {
