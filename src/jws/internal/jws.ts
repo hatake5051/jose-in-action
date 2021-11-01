@@ -1,7 +1,9 @@
+// --------------------BEGIN JWS implementation --------------------
+
 import { identifyJWK, isJWK, JWKSet } from 'jwk';
 import { ASCII, BASE64URL, UTF8 } from 'utility';
+import { isJWSMACAlg, isJWSSigAlg, ktyFromJWSSigAlg, newMacOperator, newSigOperator } from './di';
 import { JWSHeader, JWSProtectedHeader, JWSUnprotectedHeader } from './header';
-import { isJWSMACAlg, newMacOperator } from './mac';
 import {
   deserializeCompact,
   deserializeJSON,
@@ -11,7 +13,6 @@ import {
   serializeCompact,
   serializeJSON,
 } from './serialize';
-import { isJWSSigAlg, ktyFromJWSSigAlg, newSigOperator } from './sig';
 import { JWSHeaderAndSig, JWSPayload, JWSSignature } from './types';
 
 export { JWS };
@@ -174,3 +175,5 @@ async function verify(keys: JWKSet, m: JWSPayload, hs: JWSHeaderAndSig): Promise
  */
 const jwsinput = (m: JWSPayload, p?: JWSProtectedHeader): Uint8Array =>
   ASCII((p !== undefined ? BASE64URL(UTF8(JSON.stringify(p))) : '') + '.' + BASE64URL(m));
+
+// --------------------END JWS implementation --------------------

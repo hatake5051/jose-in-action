@@ -1,6 +1,14 @@
+// --------------------BEGIN JWS Teminology definition --------------------
+
+import {
+  isJWSMACAlg,
+  isJWSSigAlg,
+  isJWSUnsecureAlg,
+  JWSMACAlg,
+  JWSSigAlg,
+  JWSUnsecureAlg,
+} from './di';
 import { JWSHeader } from './header';
-import { isJWSMACAlg, JWSMACAlg } from './mac';
-import { isJWSSigAlg, JWSSigAlg } from './sig';
 
 export { JWSHeaderAndSig, JWSPayload, JWSSignature, JWSAlg, isJWSAlg };
 
@@ -24,7 +32,9 @@ type JWSSignature = Uint8Array;
 /**
  * JWS のために定義されたアルゴリズムを列挙する。
  */
-type JWSAlg = JWSSigAlg | JWSMACAlg | 'none';
+type JWSAlg = JWSSigAlg | JWSMACAlg | JWSUnsecureAlg;
 
 const isJWSAlg = (arg: unknown): arg is JWSAlg =>
-  isJWSSigAlg(arg) || isJWSMACAlg(arg) || (typeof arg === 'string' && arg === 'none');
+  isJWSSigAlg(arg) || isJWSMACAlg(arg) || isJWSUnsecureAlg(arg);
+
+// --------------------END JWS Teminology definition --------------------

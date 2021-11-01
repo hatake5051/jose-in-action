@@ -1,50 +1,80 @@
 // --------------------BEGIN iana constants --------------------
 
-import { isJWAMACAlg, isJWASigAlg, JWAMACAlg, JWASigAlg } from './jwa/sec3/alg';
-import { isJWACrv, isJWAKty, JWACrv, JWAKty } from './jwa/sec6/kty';
-import { JWSJOSEHeader } from './jws/internal/header';
-import { JWSAlg } from './jws/internal/types';
+import {
+  isJWAMACAlg,
+  isJWANoneAlg,
+  isJWASigAlg,
+  JWAMACAlg,
+  JWANoneAlg,
+  JWASigAlg,
+  ktyFromJWAJWSAlg,
+  KtyFromJWAJWSAlg,
+} from 'jwa/sec3/alg';
+import {
+  isJWADEAlg,
+  isJWADKAAlg,
+  isJWAKAKWAlg,
+  isJWAKEAlg,
+  isJWAKWAlg,
+  JWADEAlg,
+  JWADKAAlg,
+  JWAKAKWAlg,
+  JWAKEAlg,
+  JWAKWAlg,
+  ktyFromJWAJWEAlg,
+  KtyFromJWAJWEAlg,
+} from 'jwa/sec4/alg';
+import { isJWACrv, isJWAKty, JWACrv, JWAKty } from 'jwa/sec6/kty';
+import { JWSJOSEHeader } from 'jws';
 
-export { JOSEHeader, Alg, Enc, Kty, KeyUse, KeyOps, Crv, isAlg, isKty, isKeyUse, isKeyOps, isCrv };
+export {
+  JOSEHeader,
+  Alg,
+  Enc,
+  Kty,
+  KtyFromAlg,
+  ktyFromAlg,
+  KeyUse,
+  KeyOps,
+  Crv,
+  isAlg,
+  isKty,
+  isKeyUse,
+  isKeyOps,
+  isCrv,
+};
 
 /**
  * 暗号操作や使用されるパラメータを表現する JSON オブジェクト
  */
-type JOSEHeader<A extends Alg> = A extends JWSAlg ? Partial<JWSJOSEHeader> : never;
-
-const algList = [
-  'RSA1_5',
-  'RSA-OAEP',
-  'RSA-OAEP-256',
-  'A128KW',
-  'A192KW',
-  'A256KW',
-  'dir',
-  'ECDH-ES',
-  'ECDH-ES+A128KW',
-  'ECDH-ES+A192KW',
-  'ECDH-ES+A256KW',
-  'A128GCMKW',
-  'A192GCMKW',
-  'A256GCMKW',
-  'PBES2-HS256+A128KW',
-  'PBES2-HS384+A192KW',
-  'PBES2-HS512+A256KW',
-] as const;
+type JOSEHeader<A extends Alg> = A extends JWASigAlg | JWAMACAlg | JWANoneAlg
+  ? Partial<JWSJOSEHeader>
+  : never;
 
 /**
  * Alg は暗号アルゴリズムを列挙する。
  * RFC7518 に定義されているもののみ今回は実装の対象としている。
  */
-type Alg = JWASigAlg | JWAMACAlg | 'none' | typeof algList[number];
-const isAlg = (arg: unknown): arg is Alg => {
-  if (isJWASigAlg(arg) || isJWAMACAlg(arg)) return true;
-  if (typeof arg === 'string') {
-    if (arg === 'none') return true;
-    return algList.some((a) => a === arg);
-  }
-  return false;
-};
+type Alg =
+  | JWASigAlg
+  | JWAMACAlg
+  | JWANoneAlg
+  | JWAKEAlg
+  | JWAKWAlg
+  | JWADKAAlg
+  | JWAKAKWAlg
+  | JWADEAlg
+  | typeof encList[number];
+const isAlg = (arg: unknown): arg is Alg =>
+  isJWASigAlg(arg) ||
+  isJWAMACAlg(arg) ||
+  isJWANoneAlg(arg) ||
+  isJWAKEAlg(arg) ||
+  isJWAKWAlg(arg) ||
+  isJWADKAAlg(arg) ||
+  isJWAKAKWAlg(arg) ||
+  isJWADEAlg(arg) ||
+  encList.some((a) => a === arg);
 
 const encList = [
   'A128CBC-HS256',
@@ -62,6 +92,33 @@ type Enc = typeof encList[number];
  */
 type Kty = JWAKty;
 const isKty = (arg: unknown): arg is Kty => isJWAKty(arg);
+
+type KtyFromAlg<A extends Alg> = A extends JWASigAlg | JWAMACAlg | JWANoneAlg
+  ? KtyFromJWAJWSAlg<A>
+  : A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
+  ? KtyFromJWAJWEAlg<A>
+  : A extends Enc
+  ? 'oct'
+  : never;
+
+function ktyFromAlg<A extends Alg>(alg: A): KtyFromAlg<A> {
+  if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
+    return ktyFromJWAJWSAlg(alg) as KtyFromAlg<A>;
+  }
+  if (
+    isJWAKEAlg(alg) ||
+    isJWAKWAlg(alg) ||
+    isJWADKAAlg(alg) ||
+    isJWAKAKWAlg(alg) ||
+    isJWADEAlg(alg)
+  ) {
+    return ktyFromJWAJWEAlg(alg) as KtyFromAlg<A>;
+  }
+  if (encList.some((a) => a === alg)) {
+    return 'oct' as KtyFromAlg<A>;
+  }
+  throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
+}
 
 const keyUseList = ['sig', 'enc'] as const;
 /**

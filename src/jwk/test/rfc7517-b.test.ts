@@ -1,6 +1,6 @@
 // --------------------BEGIN RFC7517 appendix.B test --------------------
 
-import { isJWK, isJWKSet, validJWK } from '..';
+import { isJWK, isJWKSet, validJWK } from 'jwk';
 import { parseX509BASE64EncodedDER, validateSelfSignedCert } from '../internal/x509';
 
 export { test };

@@ -1,6 +1,8 @@
+// --------------------BEGIN RFC7520 Section 4 test --------------------
+
 import { exportPublicKey, isJWK, JWKSet } from 'jwk';
+import { equalsJWSFlattenedJSONSerialization, equalsJWSJSONSerialization, JWS } from 'jws';
 import { UTF8 } from 'utility';
-import { equalsJWSFlattenedJSONSerialization, equalsJWSJSONSerialization, JWS } from '..';
 import { fetchData } from './rfc7520.4.test';
 
 export { test };
@@ -87,3 +89,5 @@ async function test(path: string): Promise<{
   }
   return { title, allGreen, log };
 }
+
+// --------------------END RFC7520 Section 4 test --------------------

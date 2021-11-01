@@ -1,4 +1,5 @@
 // --------------------BEGIN JWA RSA algorithms --------------------
+
 import { JWK } from 'jwk';
 import { JWSSignature, SigOperator } from 'jws';
 import { BASE64URL_DECODE } from 'utility';

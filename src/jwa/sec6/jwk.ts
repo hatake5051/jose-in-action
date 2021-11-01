@@ -1,4 +1,5 @@
 // --------------------BEGIN JWA JWK definition --------------------
+
 import {
   ECPrivateKey,
   ECPublicKey,

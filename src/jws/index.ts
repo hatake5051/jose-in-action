@@ -2,6 +2,7 @@ import {
   equalsJWSJOSEHeader,
   isJWSProtectedHeader,
   isJWSUnprotectedHeader,
+  JWSJOSEHeader,
   JWSProtectedHeader,
   JWSUnprotectedHeader,
 } from './internal/header';
@@ -25,6 +26,7 @@ export {
   isJWSProtectedHeader,
   JWSUnprotectedHeader,
   isJWSUnprotectedHeader,
+  JWSJOSEHeader,
   equalsJWSJOSEHeader,
   JWSSignature,
   JWSCompactSerialization,

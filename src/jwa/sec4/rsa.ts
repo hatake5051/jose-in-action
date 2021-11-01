@@ -1,5 +1,4 @@
-import { JWECEK, JWEEncryptedKey } from 'jwe';
-import { KeyEncryptor } from 'jwe/internal/keymgmt';
+import { JWECEK, JWEEncryptedKey, KeyEncryptor } from 'jwe';
 import { JWK } from 'jwk';
 import { BASE64URL_DECODE, CONCAT } from 'utility';
 

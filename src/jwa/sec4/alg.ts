@@ -16,6 +16,7 @@ export {
   JWADEAlg,
   isJWADEAlg,
   KtyFromJWAJWEAlg,
+  ktyFromJWAJWEAlg,
 };
 
 type JWAKEAlg = RSA1_5Alg | RSAOAEPAlg;
@@ -43,3 +44,12 @@ type KtyFromJWAJWEAlg<A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | J
     : A extends JWADKAAlg | JWAKAKWAlg
     ? 'EC'
     : never;
+
+function ktyFromJWAJWEAlg<A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg>(
+  alg: A
+): KtyFromJWAJWEAlg<A> {
+  if (isJWAKEAlg(alg)) return 'RSA' as KtyFromJWAJWEAlg<A>;
+  if (isJWAKWAlg(alg) || isJWADEAlg(alg)) return 'oct' as KtyFromJWAJWEAlg<A>;
+  if (isJWADKAAlg(alg) || isJWAKAKWAlg(alg)) return 'EC' as KtyFromJWAJWEAlg<A>;
+  throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
+}

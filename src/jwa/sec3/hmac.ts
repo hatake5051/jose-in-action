@@ -1,4 +1,5 @@
 // --------------------BEGIN JWA HMAC algorithms --------------------
+
 import { JWK } from 'jwk';
 import { JWSSignature, MACOperator } from 'jws';
 import { BASE64URL_DECODE } from 'utility';

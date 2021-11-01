@@ -1,6 +1,6 @@
 // --------------------BEGIN RFC7517 appendix.A test --------------------
 
-import { isJWK, isJWKSet } from '..';
+import { isJWK, isJWKSet } from 'jwk';
 
 export { test };
 

@@ -1,6 +1,5 @@
 import { Enc } from 'iana';
-import { JWECEK, JWEEncryptedKey } from 'jwe';
-import { DirectAgreementer, KeyAgreementerWithKeyWrapping } from 'jwe/internal/keymgmt';
+import { DirectAgreementer, JWECEK, JWEEncryptedKey, KeyAgreementerWithKeyWrapping } from 'jwe';
 import { JWK } from 'jwk';
 import { ASCII, BASE64URL, BASE64URL_DECODE, CONCAT } from 'utility';
 import { AKWKeyWrapper } from './aeskw';

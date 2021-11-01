@@ -1,4 +1,5 @@
 // --------------------BEGIN JWS Header definition --------------------
+
 import { equalsJWK, isJWK, JWK } from 'jwk';
 import { isObject } from 'utility';
 import { isJWSAlg, JWSAlg } from './types';

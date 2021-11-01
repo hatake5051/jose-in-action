@@ -1,4 +1,5 @@
 // --------------------BEGIN JWS Serialization definition --------------------
+
 import { BASE64URL, BASE64URL_DECODE, isObject, UTF8, UTF8_DECODE } from 'utility';
 import {
   equalsJWSJOSEHeader,

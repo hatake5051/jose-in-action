@@ -1,3 +1,5 @@
+// --------------------BEGIN RFC7520 Section 4 test data definition --------------------
+
 import { Alg, isAlg } from 'iana';
 import { isJWK, JWK, JWKSet } from 'jwk';
 import {
@@ -95,3 +97,5 @@ function isData(arg: unknown): arg is Data {
     (arg.output.json_flat == null || isJWSFlattenedJSONSerialization(arg.output.json_flat))
   );
 }
+
+// --------------------END RFC7520 Section 4 test data definition --------------------
