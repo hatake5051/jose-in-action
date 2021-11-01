@@ -5,7 +5,7 @@ import { isJWACrv, isJWAKty, JWACrv, JWAKty } from './jwa/sec6/kty';
 import { JWSJOSEHeader } from './jws/internal/header';
 import { JWSAlg } from './jws/internal/types';
 
-export { JOSEHeader, Alg, Kty, KeyUse, KeyOps, Crv, isAlg, isKty, isKeyUse, isKeyOps, isCrv };
+export { JOSEHeader, Alg, Enc, Kty, KeyUse, KeyOps, Crv, isAlg, isKty, isKeyUse, isKeyOps, isCrv };
 
 /**
  * 暗号操作や使用されるパラメータを表現する JSON オブジェクト
@@ -30,12 +30,6 @@ const algList = [
   'PBES2-HS256+A128KW',
   'PBES2-HS384+A192KW',
   'PBES2-HS512+A256KW',
-  'A128CBC-HS256',
-  'A192CBC-HS384',
-  'A256CBC-HS512',
-  'A128GCM',
-  'A192GCM',
-  'A256GCM',
 ] as const;
 
 /**
@@ -51,6 +45,16 @@ const isAlg = (arg: unknown): arg is Alg => {
   }
   return false;
 };
+
+const encList = [
+  'A128CBC-HS256',
+  'A192CBC-HS384',
+  'A256CBC-HS512',
+  'A128GCM',
+  'A192GCM',
+  'A256GCM',
+] as const;
+type Enc = typeof encList[number];
 
 /**
  * Kty は JSON Web Key Types を列挙する。

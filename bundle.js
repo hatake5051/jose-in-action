@@ -288,12 +288,6 @@ const algList = [
     'PBES2-HS256+A128KW',
     'PBES2-HS384+A192KW',
     'PBES2-HS512+A256KW',
-    'A128CBC-HS256',
-    'A192CBC-HS384',
-    'A256CBC-HS512',
-    'A128GCM',
-    'A192GCM',
-    'A256GCM',
 ];
 const isAlg = (arg) => {
     if (isJWASigAlg(arg) || isJWAMACAlg(arg))
