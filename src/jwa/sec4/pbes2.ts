@@ -1,11 +1,23 @@
-import { JWECEK, JWEEncryptedKey, KeyWrapper } from 'jwe';
+import { KeyWrapper } from 'jwe/ineterface';
+import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { JWK } from 'jwk';
-import { BASE64URL, BASE64URL_DECODE, CONCAT, UTF8 } from 'utility';
+import { BASE64URL, BASE64URL_DECODE, CONCAT, isObject, UTF8 } from 'utility';
 import { AKWKeyWrapper } from './aeskw';
 
-export { PBES2Alg, isPBES2Alg, JWEPBES2HeaderParams, PBES2KeyWrapper };
+export { PBES2Alg, isPBES2Alg, PBES2HeaderParams, isPBES2HeaderParams, PBES2KeyWrapper };
 
-const PBES2KeyWrapper: KeyWrapper<PBES2Alg> = { wrap, unwrap };
+const PBES2KeyWrapper: KeyWrapper<PBES2Alg> = {
+  wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: Partial<PBES2HeaderParams>) => {
+    if (!isPBES2HeaderParams(h))
+      throw new TypeError('JOSE Header に必須パラメータがない(p2c, p2s)');
+    return wrap(key, cek, h);
+  },
+  unwrap: async (key: JWK<'oct'>, ek: JWEEncryptedKey, h?: Partial<PBES2HeaderParams>) => {
+    if (!isPBES2HeaderParams(h))
+      throw new TypeError('JOSE Header に必須パラメータがない(p2c, p2s)');
+    return unwrap(key, ek, h);
+  },
+};
 
 /**
  * RFC7518#4.8.  Key Encryption with PBES2
@@ -18,7 +30,7 @@ const pbes2AlgList = ['PBES2-HS256+A128KW', 'PBES2-HS384+A192KW', 'PBES2-HS512+A
 /**
  * RFC7518#4.8.1 PBES2 Key Encryption 用のヘッダーパラメータ
  */
-type JWEPBES2HeaderParams = {
+type PBES2HeaderParams = {
   alg: PBES2Alg;
   /**
    * RFC7518#4.8.1.2 PBES2 Count Header Parameter は PBKDF2 iteration count を表現する。
@@ -32,15 +44,17 @@ type JWEPBES2HeaderParams = {
   p2s: string;
 };
 
+const isPBES2HeaderParams = (arg: unknown): arg is PBES2HeaderParams =>
+  isObject<PBES2HeaderParams>(arg) &&
+  isPBES2Alg(arg.alg) &&
+  typeof arg.p2c === 'number' &&
+  typeof arg.p2s === 'string';
+
 /**
  * RFC2898#6.2.1 に基づいて、ユーザが指定したパスワードで CEK をラップする。
  * パスワードは JWK<oct> で表現されているが、k にはパスワードの UTF-8 表現を BASE64URL エンコードしたものが入る。
  */
-async function wrap(
-  key: JWK<'oct'>,
-  cek: JWECEK,
-  h?: JWEPBES2HeaderParams
-): Promise<JWEEncryptedKey> {
+async function wrap(key: JWK<'oct'>, cek: JWECEK, h?: PBES2HeaderParams): Promise<JWEEncryptedKey> {
   if (!h) throw new TypeError('PBES2Alg にはヘッダーにあるパラメータが必須');
   const { HASH_ALG, KEY_LEN } = algParams(h.alg);
   /**
@@ -77,7 +91,7 @@ async function wrap(
 async function unwrap(
   key: JWK<'oct'>,
   ek: JWEEncryptedKey,
-  h?: JWEPBES2HeaderParams
+  h?: PBES2HeaderParams
 ): Promise<JWECEK> {
   if (!h) throw TypeError('PBES2Alg にはヘッダーにあるパラメータが必須');
   const { HASH_ALG, KEY_LEN } = algParams(h.alg);

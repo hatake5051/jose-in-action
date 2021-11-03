@@ -1,10 +1,21 @@
-import { JWECEK, JWEEncryptedKey, KeyWrapper } from 'jwe';
+import { KeyWrapper } from 'jwe/ineterface';
+import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { JWK } from 'jwk';
-import { BASE64URL, BASE64URL_DECODE, CONCAT } from 'utility';
+import { BASE64URL, BASE64URL_DECODE, CONCAT, isObject } from 'utility';
 
-export { AGCMKWAlg, isAGCMKWAlg, JWEAGCMKWHeaderParams, AGCMKeyWrapper };
+export { AGCMKWAlg, isAGCMKWAlg, AGCMKWHeaderParams, isAGCMKWHeaderParams, AGCMKeyWrapper };
 
-const AGCMKeyWrapper: KeyWrapper<AGCMKWAlg> = { wrap, unwrap };
+const AGCMKeyWrapper: KeyWrapper<AGCMKWAlg> = {
+  wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: Partial<AGCMKWHeaderParams>) => {
+    if (!h?.iv) throw new TypeError(`JOSE Header に必須パラメータがない(iv)`);
+    return wrap(key, cek, h as { iv: string });
+  },
+  unwrap: async (key: JWK<'oct'>, ek: JWEEncryptedKey, h?: Partial<AGCMKWHeaderParams>) => {
+    if (!isAGCMKWHeaderParams(h))
+      throw new TypeError(`JOSE Header に必須パラメータがない(iv, tag)`);
+    return unwrap(key, ek, h);
+  },
+};
 
 /**
  * RFC7518#4.7.  Key Encryption with AES GCM のアルゴリズムを列挙する
@@ -17,8 +28,7 @@ const agcmAlgList = ['A128GCMKW', 'A192GCMKW', 'A256GCMKW'] as const;
 /**
  * RFC7518#4.7.1 AES GCM Key Encryption で使用されるヘッダーパラメータ
  */
-type JWEAGCMKWHeaderParams = {
-  alg: AGCMKWAlg;
+type AGCMKWHeaderParams = {
   /**
    * Initialization Vector Parameter はキー暗号化に使用される 96 bit の iv を base64url-encode した文字列
    */
@@ -29,6 +39,9 @@ type JWEAGCMKWHeaderParams = {
   tag: string;
 };
 
+const isAGCMKWHeaderParams = (arg: unknown): arg is AGCMKWHeaderParams =>
+  isObject<AGCMKWHeaderParams>(arg) && typeof arg.iv === 'string' && typeof arg.tag === 'string';
+
 /**
  * AES GCM アルゴリズムを使って CEK を暗号化する。
  * h には認証タグ情報を書き加えるため mutable で渡してください。
@@ -36,9 +49,8 @@ type JWEAGCMKWHeaderParams = {
 async function wrap(
   key: JWK<'oct'>,
   cek: JWECEK,
-  h?: Pick<JWEAGCMKWHeaderParams, 'iv'> & Partial<Pick<JWEAGCMKWHeaderParams, 'tag'>>
+  h: Pick<AGCMKWHeaderParams, 'iv'> & Partial<Pick<AGCMKWHeaderParams, 'tag'>>
 ): Promise<JWEEncryptedKey> {
-  if (!h) throw new TypeError('Header Parameter が必須');
   const iv = BASE64URL_DECODE(h.iv);
   // IV は 96bit である必要がある (REQUIRED)
   if (iv.length * 8 !== 96) {
@@ -65,9 +77,8 @@ async function wrap(
 async function unwrap(
   key: JWK<'oct'>,
   ek: JWEEncryptedKey,
-  h?: JWEAGCMKWHeaderParams
+  h: AGCMKWHeaderParams
 ): Promise<JWECEK> {
-  if (!h) throw new TypeError('Header Parameter が必須');
   const iv = BASE64URL_DECODE(h.iv);
   // IV は 96bit である必要がある (REQUIRED)
   if (iv.length * 8 !== 96) {

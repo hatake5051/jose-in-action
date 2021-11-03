@@ -1,4 +1,5 @@
-import { JWECEK, JWEEncryptedKey, KeyWrapper } from 'jwe';
+import { KeyWrapper } from 'jwe/ineterface';
+import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { JWK } from 'jwk';
 
 export { AKWAlg, isAKWAlg, AKWKeyWrapper };

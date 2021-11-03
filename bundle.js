@@ -291,6 +291,15 @@ const isJWAKWAlg = (arg) => isAKWAlg(arg) || isAGCMKWAlg(arg) || isPBES2Alg(arg)
 const isJWADKAAlg = (arg) => isECDH_ESAlg(arg);
 const isJWAKAKWAlg = (arg) => isECDH_ESKWAlg(arg);
 const isJWADEAlg = (arg) => typeof arg === 'string' && arg === 'dir';
+function ktyFromJWAJWEAlg(alg) {
+    if (isJWAKEAlg(alg))
+        return 'RSA';
+    if (isJWAKWAlg(alg) || isJWADEAlg(alg))
+        return 'oct';
+    if (isJWADKAAlg(alg) || isJWAKAKWAlg(alg))
+        return 'EC';
+    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
+}
 
 const isACBCEnc = (arg) => acbcEncList.some((a) => a === arg);
 const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'];
@@ -316,8 +325,25 @@ const isAlg = (arg) => isJWASigAlg(arg) ||
     isJWADKAAlg(arg) ||
     isJWAKAKWAlg(arg) ||
     isJWADEAlg(arg) ||
-    isJWAEncAlg(arg);
+    isEncAlg(arg);
+const isEncAlg = (arg) => isJWAEncAlg(arg);
 const isKty = (arg) => isJWAKty(arg);
+function ktyFromAlg(alg) {
+    if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
+        return ktyFromJWAJWSAlg(alg);
+    }
+    if (isJWAKEAlg(alg) ||
+        isJWAKWAlg(alg) ||
+        isJWADKAAlg(alg) ||
+        isJWAKAKWAlg(alg) ||
+        isJWADEAlg(alg)) {
+        return ktyFromJWAJWEAlg(alg);
+    }
+    if (isEncAlg(alg)) {
+        return 'oct';
+    }
+    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
+}
 const keyUseList = ['sig', 'enc'];
 const isKeyUse = (arg) => {
     if (typeof arg === 'string') {
@@ -1119,14 +1145,6 @@ function exportPublicKey(priv) {
  * keys パラメータが存在して、その値が JWK の配列なら OK
  */
 const isJWKSet = (arg) => isObject(arg) && Array.isArray(arg.keys) && arg.keys.every((k) => isJWK(k));
-/**
- * 引数 alg に応じた kty の値を返す関数
- */
-const ktyFromAlg = (alg) => {
-    if (isJWASigAlg(alg) || isJWAMACAlg(alg))
-        return ktyFromJWAJWSAlg(alg);
-    throw new TypeError(`${alg} に対応する kty がわからなかった`);
-};
 /**
  * RFC7515(JWS)#6 Key Identification
  *

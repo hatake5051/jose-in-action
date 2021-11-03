@@ -1,14 +1,6 @@
 // --------------------BEGIN JWK definition --------------------
 
-import { Alg, isAlg, JOSEHeader, KeyUse, Kty } from 'iana';
-import {
-  isJWAMACAlg,
-  isJWASigAlg,
-  JWAMACAlg,
-  JWASigAlg,
-  ktyFromJWAJWSAlg,
-  KtyFromJWAJWSAlg,
-} from 'jwa/sec3/alg';
+import { Alg, isAlg, JOSEHeader, KeyUse, Kty, KtyFromAlg, ktyFromAlg } from 'iana';
 import { equalsJWAJWK, exportJWAPublicKey, isJWAJWK, JWAJWK } from 'jwa/sec6/jwk';
 import { isJWAKty, JWAKty } from 'jwa/sec6/kty';
 import { BASE64URL, isObject } from 'utility';
@@ -81,19 +73,6 @@ const isJWKSet = (arg: unknown): arg is JWKSet =>
  * JWK が非対称鍵の場合、公開鍵か秘密鍵かのいずれかであるかを表す。
  */
 type AsymKty = 'Pub' | 'Priv';
-
-/**
- * Alg に応じた Kty を返す型
- */
-type KtyFromAlg<A extends Alg> = A extends JWASigAlg | JWAMACAlg ? KtyFromJWAJWSAlg<A> : never;
-
-/**
- * 引数 alg に応じた kty の値を返す関数
- */
-const ktyFromAlg = (alg: Alg): Kty => {
-  if (isJWASigAlg(alg) || isJWAMACAlg(alg)) return ktyFromJWAJWSAlg(alg);
-  throw new TypeError(`${alg} に対応する kty がわからなかった`);
-};
 
 /**
  * RFC7515(JWS)#6 Key Identification

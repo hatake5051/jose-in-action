@@ -1,76 +1,70 @@
 import { Alg, JOSEHeader, KtyFromAlg } from 'iana';
-import { JWECEK, JWEEncryptedKey } from 'jwe';
 import { JWK } from 'jwk';
+import { JWEAAD, JWECEK, JWECiphertext, JWEEncryptedKey, JWEIV, JWETag } from './type';
 
 export {
+  KeyMgmtMode,
   KeyEncryptor,
   KeyWrapper,
-  DirectAgreementer,
+  DirectKeyAgreementer,
   KeyAgreementerWithKeyWrapping,
   DirectEncryptor,
+  EncOperator,
 };
 
-type KeyMgmtMode =
-  | 'KeyEncryption'
-  | 'KeyWrapping'
-  | 'DirectKeyAgreement'
-  | 'KeyAgreementWithKeyWrapping'
-  | 'DirectEncryption';
-
-// type JWEAlg = JWEKEAlg | JWEKWAlg | JWEDKAAlg | JWEKAKWAlg | JWEDEAlg;
-
-// type JWEKEAlg = JWAKEAlg;
+type KeyMgmtMode = 'KE' | 'KW' | 'DKA' | 'KAKW' | 'DE';
 
 interface KeyEncryptor<A extends Alg> {
   enc: (alg: A, key: JWK<KtyFromAlg<A>, 'Pub'>, cek: JWECEK) => Promise<JWEEncryptedKey>;
   dec: (alg: A, key: JWK<KtyFromAlg<A>, 'Priv'>, ek: JWEEncryptedKey) => Promise<JWECEK>;
 }
 
-// type JWEKWAlg = JWAKWAlg;
-
 interface KeyWrapper<A extends Alg> {
   wrap: (key: JWK<KtyFromAlg<A>>, cek: JWECEK, h?: JOSEHeader<A>) => Promise<JWEEncryptedKey>;
   unwrap: (key: JWK<KtyFromAlg<A>>, ek: JWEEncryptedKey, h?: JOSEHeader<A>) => Promise<JWECEK>;
 }
 
-// type JWEDKAAlg = JWADKAAlg;
-
-interface DirectAgreementer<A extends Alg> {
+interface DirectKeyAgreementer<A extends Alg> {
   partyU: (
-    h: JOSEHeader<A>,
     key: JWK<KtyFromAlg<A>, 'Pub'>,
+    h: JOSEHeader<A>,
     eprivk: JWK<KtyFromAlg<A>, 'Priv'>
   ) => Promise<JWECEK>;
-  partyV: (h: JOSEHeader<A>, key: JWK<KtyFromAlg<A>, 'Priv'>) => Promise<JWECEK>;
+  partyV: (key: JWK<KtyFromAlg<A>, 'Priv'>, h: JOSEHeader<A>) => Promise<JWECEK>;
 }
-
-// type JWEKAKWAlg = JWAKAKWAlg;
 
 interface KeyAgreementerWithKeyWrapping<A extends Alg> {
   wrap: (
-    h: JOSEHeader<A>,
     key: JWK<KtyFromAlg<A>, 'Pub'>,
-    eprivk: JWK<KtyFromAlg<A>, 'Priv'>,
-    cek: JWECEK
+    cek: JWECEK,
+    h: JOSEHeader<A>,
+    eprivk: JWK<KtyFromAlg<A>, 'Priv'>
   ) => Promise<JWEEncryptedKey>;
   unwrap: (
-    h: JOSEHeader<A>,
     key: JWK<KtyFromAlg<A>, 'Priv'>,
-    ek: JWEEncryptedKey
+    ek: JWEEncryptedKey,
+    h: JOSEHeader<A>
   ) => Promise<JWECEK>;
 }
-
-// type JWEDEAlg = JWADEAlg;
 
 interface DirectEncryptor<A extends Alg> {
   extract: (alg: A, key: JWK<KtyFromAlg<A>>) => Promise<JWECEK>;
 }
 
-// type KtyFromJWEAlg<A extends JWEAlg = JWEAlg> = A extends
-//   | JWAKEAlg
-//   | JWAKWAlg
-//   | JWADKAAlg
-//   | JWAKAKWAlg
-//   | JWADEAlg
-//   ? KtyFromJWAJWEAlg<A>
-//   : never;
+interface EncOperator<E extends Alg> {
+  enc: (
+    enc: E,
+    cek: JWECEK,
+    iv: JWEIV,
+    aad: JWEAAD,
+    m: Uint8Array
+  ) => Promise<{ c: JWECiphertext; tag: JWETag }>;
+  dec: (
+    enc: E,
+    cek: JWECEK,
+    iv: JWEIV,
+    aad: JWEAAD,
+    c: JWECiphertext,
+    tag: JWETag
+  ) => Promise<Uint8Array>;
+}

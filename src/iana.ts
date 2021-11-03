@@ -16,6 +16,7 @@ import {
   isJWAKAKWAlg,
   isJWAKEAlg,
   isJWAKWAlg,
+  JWAAlgSpecificJOSEHeader,
   JWADEAlg,
   JWADKAAlg,
   JWAKAKWAlg,
@@ -26,6 +27,7 @@ import {
 } from 'jwa/sec4/alg';
 import { isJWAEncAlg, JWAEncAlg, KtyFromJWAEncAlg } from 'jwa/sec5/encalg';
 import { isJWACrv, isJWAKty, JWACrv, JWAKty } from 'jwa/sec6/kty';
+import { JWEJOSEHeader } from 'jwe';
 import { JWSJOSEHeader } from 'jws';
 
 export {
@@ -39,6 +41,7 @@ export {
   KeyOps,
   Crv,
   isAlg,
+  isEncAlg,
   isKty,
   isKeyUse,
   isKeyOps,
@@ -50,6 +53,10 @@ export {
  */
 type JOSEHeader<A extends Alg> = A extends JWASigAlg | JWAMACAlg | JWANoneAlg
   ? Partial<JWSJOSEHeader>
+  : A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
+  ? Partial<JWEJOSEHeader> & Partial<JWAAlgSpecificJOSEHeader<A>>
+  : A extends EncAlg
+  ? Partial<JWEJOSEHeader>
   : never;
 
 /**

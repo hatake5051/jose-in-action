@@ -1,4 +1,5 @@
-import { EncOperator, JWEAAD, JWECEK, JWECiphertext, JWEIV, JWETag } from 'jwe';
+import { EncOperator } from 'jwe/ineterface';
+import { JWEAAD, JWECEK, JWECiphertext, JWEIV, JWETag } from 'jwe/type';
 import { CONCAT } from 'utility';
 
 export { AGCMEnc, isAGCMEnc, AGCMEncOperator };
