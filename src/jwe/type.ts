@@ -7,8 +7,8 @@ export { JWECEK, JWEEncryptedKey, JWECiphertext, JWETag, JWEAAD, JWEIV };
 type JWECEK = Uint8Array;
 
 /**
- * JWEEncryptedKey は CEK を暗号化した結果を表す.
- * CEK を暗号化しない場合(DirectKeyEncrytion or DirectKeyAgreement) は omit される
+ * JWEEncryptedKey は CEK を暗号化した値を表す
+ * CEK を暗号化しない場合(DirectKeyEncrytion or DirectKeyAgreement) は empty octet sequence である。
  */
 type JWEEncryptedKey = Uint8Array;
 
@@ -23,13 +23,14 @@ type JWECiphertext = Uint8Array;
 type JWETag = Uint8Array;
 
 /**
- * JWEAAD は Additional Authenticated Data を表す.
- * Compact Format 化する際は用いることができない.
+ * JWEAAD は the authenticated encryption operatoion で integrity が保護される Additional Authenticated Data を表す.
+ * Compact Serialization では用いることができない.
  */
 type JWEAAD = Uint8Array;
 
 /**
  * JWEIV は Initialization Vector を表す.
  * Content を暗号化するときに使う.
+ * IV を使わないアルゴリズムでは the empty octed sequence である。
  */
 type JWEIV = Uint8Array;

@@ -20,8 +20,11 @@ export {
   JWEHeader,
   JWEJOSEHeader,
   JWEProtectedHeader,
+  isJWEProtectedHeader,
   JWESharedUnprotectedHeader,
+  isJWESharedUnprotectedHeader,
   JWEPerRecipientUnprotectedHeader,
+  isJWEPerRecipientUnprotectedHeader,
 };
 
 class JWEHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> {
@@ -89,13 +92,25 @@ class JWEHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> {
 type JWESharedUnprotectedHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> = Partial<
   JWEJOSEHeader<A, E> & AlgSpecificJOSEHeader<A>
 >;
+
+const isJWESharedUnprotectedHeader = (arg: unknown): arg is JWESharedUnprotectedHeader =>
+  isPartialJWEJOSEHeader(arg);
+
 type JWEPerRecipientUnprotectedHeader<
   A extends JWEAlg = JWEAlg,
   E extends JWEEnc = JWEEnc
 > = Partial<JWEJOSEHeader<A, E> & AlgSpecificJOSEHeader<A>>;
+
+const isJWEPerRecipientUnprotectedHeader = (
+  arg: unknown
+): arg is JWEPerRecipientUnprotectedHeader => isPartialJWEJOSEHeader(arg);
+
 type JWEProtectedHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> = Partial<
   JWEJOSEHeader<A, E> & AlgSpecificJOSEHeader<A>
 >;
+
+const isJWEProtectedHeader = (arg: unknown): arg is JWEProtectedHeader =>
+  isPartialJWEJOSEHeader(arg);
 
 type JWEJOSEHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> = {
   /**

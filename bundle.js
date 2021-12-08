@@ -269,108 +269,91 @@ function ktyFromJWAJWSAlg(alg) {
 }
 // --------------------END JWA JWS algorithms --------------------
 
+const AGCMKeyWrapper = {
+    wrap: async (key, cek, h) => {
+        if (!h?.iv)
+            throw new TypeError(`JOSE Header に必須パラメータがない(iv)`);
+        return wrap$3(key, cek, h);
+    },
+    unwrap: async (key, ek, h) => {
+        if (!isAGCMKWHeaderParams(h))
+            throw new TypeError(`JOSE Header に必須パラメータがない(iv, tag)`);
+        return unwrap$3(key, ek, h);
+    },
+};
 const isAGCMKWAlg = (arg) => typeof arg === 'string' && agcmAlgList.some((a) => a === arg);
 const agcmAlgList = ['A128GCMKW', 'A192GCMKW', 'A256GCMKW'];
+const isAGCMKWHeaderParams = (arg) => isObject(arg) && typeof arg.iv === 'string' && typeof arg.tag === 'string';
+/**
+ * AES GCM アルゴリズムを使って CEK を暗号化する。
+ * h には認証タグ情報を書き加えるため mutable で渡してください。
+ */
+async function wrap$3(key, cek, h) {
+    const iv = BASE64URL_DECODE(h.iv);
+    // IV は 96bit である必要がある (REQUIRED)
+    if (iv.length * 8 !== 96) {
+        throw new TypeError('IV は 96bit である必要がある。');
+    }
+    // WecCryptoAPI を使うと JWK.alg チェックでエラーが出てしまう c.f.) https://w3c.github.io/webcrypto/#aes-gcm-operations
+    // WebCryptoAPI は JWE.alg に対応できていないのかな...
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { alg, ...keyWithoutAlg } = key;
+    const k = await window.crypto.subtle.importKey('jwk', keyWithoutAlg, { name: 'AES-GCM' }, false, [
+        'encrypt',
+    ]);
+    const e = new Uint8Array(await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, cek));
+    const ek = e.slice(0, e.length - 16);
+    // tag は Header に格納される。
+    const tag = e.slice(e.length - 16);
+    h.tag = BASE64URL(tag);
+    return ek;
+}
+/**
+ * AES GCM アルゴリズムを使って Encrypted Key を復号する。
+ */
+async function unwrap$3(key, ek, h) {
+    const iv = BASE64URL_DECODE(h.iv);
+    // IV は 96bit である必要がある (REQUIRED)
+    if (iv.length * 8 !== 96) {
+        throw new TypeError('IV は 96bit である必要がある。');
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { alg, ...keyWithoutAlg } = key;
+    const k = await window.crypto.subtle.importKey('jwk', keyWithoutAlg, { name: 'AES-GCM' }, false, [
+        'decrypt',
+    ]);
+    const e = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, k, CONCAT(ek, BASE64URL_DECODE(h.tag)));
+    return new Uint8Array(e);
+}
 
+const AKWKeyWrapper = { wrap: wrap$2, unwrap: unwrap$2 };
 const isAKWAlg = (arg) => typeof arg === 'string' && akwAlgList.some((a) => a === arg);
 const akwAlgList = ['A128KW', 'A192KW', 'A256KW'];
-
-const isECDH_ESAlg = (arg) => typeof arg === 'string' && arg === 'ECDH-ES';
-const isECDH_ESKWAlg = (arg) => typeof arg === 'string' && ecdhEsKwAlgList.some((a) => a === arg);
-const ecdhEsKwAlgList = ['ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'];
-
-const isPBES2Alg = (arg) => typeof arg === 'string' && pbes2AlgList.some((a) => a === arg);
-const pbes2AlgList = ['PBES2-HS256+A128KW', 'PBES2-HS384+A192KW', 'PBES2-HS512+A256KW'];
-
-const isRSA1_5Alg = (arg) => typeof arg === 'string' && arg === 'RSA1_5';
-const isRSAOAEPAlg = (arg) => typeof arg === 'string' && rsaoaepAlgList.some((a) => a === arg);
-const rsaoaepAlgList = ['RSA-OAEP', 'RSA-OAEP-256'];
-
-const isJWAKEAlg = (arg) => isRSA1_5Alg(arg) || isRSAOAEPAlg(arg);
-const isJWAKWAlg = (arg) => isAKWAlg(arg) || isAGCMKWAlg(arg) || isPBES2Alg(arg);
-const isJWADKAAlg = (arg) => isECDH_ESAlg(arg);
-const isJWAKAKWAlg = (arg) => isECDH_ESKWAlg(arg);
-const isJWADEAlg = (arg) => typeof arg === 'string' && arg === 'dir';
-function ktyFromJWAJWEAlg(alg) {
-    if (isJWAKEAlg(alg))
-        return 'RSA';
-    if (isJWAKWAlg(alg) || isJWADEAlg(alg))
-        return 'oct';
-    if (isJWADKAAlg(alg) || isJWAKAKWAlg(alg))
-        return 'EC';
-    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
-}
-
-const isACBCEnc = (arg) => acbcEncList.some((a) => a === arg);
-const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'];
-
-const isAGCMEnc = (arg) => agcmEncList.some((a) => a === arg);
-const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'];
-
-const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
-
-// --------------------BEGIN JWA Kty and Crv definition --------------------
-const isJWAKty = (arg) => typeof arg == 'string' && jwaKtyList.some((k) => k === arg);
-const jwaKtyList = ['EC', 'RSA', 'oct'];
-const isJWACrv = (arg) => typeof arg === 'string' && jwaCrvList.some((u) => u === arg);
-const jwaCrvList = ['P-256', 'P-384', 'P-521'];
-// --------------------BEGIN JWA Kty and Crv definition --------------------
-
-// --------------------BEGIN iana constants --------------------
-const isAlg = (arg) => isJWASigAlg(arg) ||
-    isJWAMACAlg(arg) ||
-    isJWANoneAlg(arg) ||
-    isJWAKEAlg(arg) ||
-    isJWAKWAlg(arg) ||
-    isJWADKAAlg(arg) ||
-    isJWAKAKWAlg(arg) ||
-    isJWADEAlg(arg) ||
-    isEncAlg(arg);
-const isEncAlg = (arg) => isJWAEncAlg(arg);
-const isKty = (arg) => isJWAKty(arg);
-function ktyFromAlg(alg) {
-    if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
-        return ktyFromJWAJWSAlg(alg);
-    }
-    if (isJWAKEAlg(alg) ||
-        isJWAKWAlg(alg) ||
-        isJWADKAAlg(alg) ||
-        isJWAKAKWAlg(alg) ||
-        isJWADEAlg(alg)) {
-        return ktyFromJWAJWEAlg(alg);
-    }
-    if (isEncAlg(alg)) {
-        return 'oct';
-    }
-    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
-}
-const keyUseList = ['sig', 'enc'];
-const isKeyUse = (arg) => {
-    if (typeof arg === 'string') {
-        return keyUseList.some((u) => u === arg);
-    }
-    return false;
-};
 /**
- * JSON Web Key Operations を列挙する。
+ * AES Key Wrapping アルゴリズムに従い、 Content Encryption Key をラッピングして暗号化する。
  */
-const keyOpsList = [
-    'sign',
-    'verify',
-    'encrypt',
-    'decrypt',
-    'wrapKey',
-    'unwrapKey',
-    'deriveKey',
-    'deriveBits',
-];
-const isKeyOps = (arg) => {
-    if (typeof arg === 'string') {
-        return keyOpsList.some((u) => u === arg);
-    }
-    return false;
-};
-// --------------------END iana constants --------------------
+async function wrap$2(key, cek) {
+    // Crypto API の wrapKey を使って CEK をラッピングするが、
+    // wrapKey の引数には Crypt API の CryptoKey 形式にして、 CEK を渡す必要がある。
+    // また、 CryptoKey をインポートする際は鍵の仕様用途などを指定する必要がある。
+    // しかし指定した情報はラッピングに同梱されないため、適当に AES-GCM の鍵として CEK をインポートしている。
+    const apiCEK = await window.crypto.subtle.importKey('raw', cek, 'AES-GCM', true, ['encrypt']);
+    const k = await window.crypto.subtle.importKey('jwk', key, { name: 'AES-KW' }, false, [
+        'wrapKey',
+    ]);
+    const e = await window.crypto.subtle.wrapKey('raw', apiCEK, k, { name: 'AES-KW' });
+    return new Uint8Array(e);
+}
+/**
+ * AES Key Wrapping アルゴリズムに従い、 JWE Encrypted Key を案ラップして CEK を復号する。
+ */
+async function unwrap$2(key, ek) {
+    const k = await window.crypto.subtle.importKey('jwk', key, { name: 'AES-KW' }, false, [
+        'unwrapKey',
+    ]);
+    const e = await window.crypto.subtle.unwrapKey('raw', ek, k, { name: 'AES-KW' }, 'AES-GCM', true, ['decrypt']);
+    return new Uint8Array(await window.crypto.subtle.exportKey('raw', e));
+}
 
 // --------------------BEGIN JWK common parameters --------------------
 const commonJWKParamNameList = [
@@ -462,6 +445,13 @@ function validCommonJWKParams(params) {
     return true;
 }
 // --------------------END JWK common parameters --------------------
+
+// --------------------BEGIN JWA Kty and Crv definition --------------------
+const isJWAKty = (arg) => typeof arg == 'string' && jwaKtyList.some((k) => k === arg);
+const jwaKtyList = ['EC', 'RSA', 'oct'];
+const isJWACrv = (arg) => typeof arg === 'string' && jwaCrvList.some((u) => u === arg);
+const jwaCrvList = ['P-256', 'P-384', 'P-521'];
+// --------------------BEGIN JWA Kty and Crv definition --------------------
 
 // --------------------BEGIN JWA EC keys --------------------
 /**
@@ -1224,6 +1214,1369 @@ async function validJWKx5c(jwk, selfSigned = false) {
     }
 }
 // --------------------END JWK definition --------------------
+
+const ECDHDirectKeyAgreementer = {
+    partyU: async (key, h, eprivk) => {
+        if (!is_omie_epk_ECDH_ESHeaderParams(h))
+            throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc)');
+        return agree(key, eprivk, h);
+    },
+    partyV: async (key, h) => {
+        if (!isECDH_ESHeaderParams(h))
+            throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc, epk)');
+        return agree(h.epk, key, h);
+    },
+};
+const ECDHKeyAgreementerWithKeyWrapping = {
+    wrap: async (key, cek, h, eprivk) => {
+        if (!is_omie_epk_ECDH_ESHeaderParams(h))
+            throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc)');
+        return wrap$1(key, cek, h, eprivk);
+    },
+    unwrap: async (key, ek, h) => {
+        if (!isECDH_ESHeaderParams(h))
+            throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc, epk)');
+        return unwrap$1(key, ek, h);
+    },
+};
+const isECDH_ESAlg = (arg) => typeof arg === 'string' && arg === 'ECDH-ES';
+const isECDH_ESKWAlg = (arg) => typeof arg === 'string' && ecdhEsKwAlgList.some((a) => a === arg);
+const ecdhEsKwAlgList = ['ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'];
+const isECDH_ESHeaderParams = (arg) => isObject(arg) &&
+    (isECDH_ESAlg(arg.alg) || isECDH_ESKWAlg(arg.alg)) &&
+    isEncAlg(arg.enc) &&
+    isJWK(arg.epk) &&
+    (arg.apu == null || typeof arg.apu === 'string') &&
+    (arg.apv == null || typeof arg.apv === 'string');
+const is_omie_epk_ECDH_ESHeaderParams = (arg) => isObject(arg) &&
+    (isECDH_ESAlg(arg.alg) || isECDH_ESKWAlg(arg.alg)) &&
+    isEncAlg(arg.enc) &&
+    (arg.apu == null || typeof arg.apu === 'string') &&
+    (arg.apv == null || typeof arg.apv === 'string');
+/**
+ * RFC7518#4.6.2 に基づいて鍵合意を行う。
+ * Party U の場合は generated Ephemeral Private Key と Static Public Key for Party V を使って計算する。
+ * Party V の場合は Ephemeral Public Key in Header と Own Private Key を使って計算する。
+ */
+async function agree(pub, priv, h) {
+    // ECDH は CryptoAPI 関数で行うので CryptoAPI 用の鍵に変換する
+    const privKey = await window.crypto.subtle.importKey('jwk', priv, { name: 'ECDH', namedCurve: priv.crv }, true, ['deriveBits']);
+    const pubKey = await window.crypto.subtle.importKey('jwk', pub, { name: 'ECDH', namedCurve: pub.crv }, true, []);
+    // ECDH algorithm を用いて確立された shared secret Z
+    const Z = new Uint8Array(await window.crypto.subtle.deriveBits({ name: 'ECDH', public: pubKey }, privKey, 
+    // null でもいいはずなんだけどなあ c.f. https://w3c.github.io/webcrypto/#ecdh-operations
+    // 結果のビット長は基本的に Crv の値と同じだけど P-521 だけは 66 bytes なので。
+    pub.crv === 'P-521' ? 528 : parseInt(pub.crv.slice(2))));
+    // Concat KDF を行い、鍵を導出する
+    const keydatalen = genkeydatalen(h.alg, h.enc);
+    const OtherInfo = genOtherInfo(h, keydatalen);
+    const keyAgreementResult = ConcatKDF(Z, { keydatalen, OtherInfo });
+    return keyAgreementResult;
+}
+/**
+ * RFC7518#4.6.2 に基づいて鍵合意を行い、行った結果をラッピング用の鍵として AES KW を使って CEK をラッピングする。
+ */
+async function wrap$1(key, cek, h, eprivk) {
+    const keyAgreementResult = await agree(key, eprivk, h);
+    return AKWKeyWrapper.wrap({ kty: 'oct', k: BASE64URL(keyAgreementResult) }, cek);
+}
+/**
+ * RFC7518#4.6.2 に基づいて鍵合意を行い、行った結果をアンラッピング用の鍵として AES KW を使って EK をアンラップする。
+ */
+async function unwrap$1(key, ek, h) {
+    const keyAgreementResult = await agree(h.epk, key, h);
+    return AKWKeyWrapper.unwrap({ kty: 'oct', k: BASE64URL(keyAgreementResult) }, ek);
+}
+/**
+ * NIST SP 800-56A2#5.8.1.1 に基づいて The Single Step KDF を実装する。
+ * Z が the shared secret を表すバイト列で、 keydatalen が導出される keying material のビット長。
+ * OtherInfo が文脈依存のデータを表すバイト列
+ */
+async function ConcatKDF(Z, OtherInput) {
+    const { keydatalen, OtherInfo } = OtherInput;
+    // Implementation-Dependent Parameters
+    // RFC7518 で、 hash は SHA-256 を使う
+    const hashlen = 256;
+    const H = async (data) => new Uint8Array(await window.crypto.subtle.digest('SHA-256', data));
+    // Process
+    // Step1
+    const reps = Math.ceil(keydatalen / hashlen);
+    // Step2 は keydatalen が短いのが明らかなのでスキップ
+    // Step3 Counter の初期化
+    let counter = intToOctets$1(1, 4);
+    let DerivedKeyingMaterial = new Uint8Array();
+    // Step4 も超えなさそうなのでスキップ
+    for (let i = 1; i <= reps; i++) {
+        counter = intToOctets$1(i, 4);
+        const Ki = await H(CONCAT(CONCAT(counter, Z), OtherInfo));
+        DerivedKeyingMaterial = CONCAT(DerivedKeyingMaterial, Ki);
+    }
+    return DerivedKeyingMaterial.slice(0, keydatalen / 8);
+}
+/**
+ * NIST.SP.800-56Ar2#5.8.1.1
+ * keydatalen は導出される the secret keying material のビット長を示す。
+ * ECDHAlg に応じて、 Concat KDF で使用する keydatalen parameter を決める。
+ * ECDH-ES の場合は enc algorithm identifier の鍵長に依存するので、引数でそれも渡している。
+ */
+function genkeydatalen(alg, enc) {
+    switch (alg) {
+        case 'ECDH-ES':
+            switch (enc) {
+                case 'A128CBC-HS256':
+                    return 32 * 8;
+                case 'A192CBC-HS384':
+                    return 48 * 8;
+                case 'A256CBC-HS512':
+                    return 64 * 8;
+                case 'A128GCM':
+                    return 128;
+                case 'A192GCM':
+                    return 192;
+                case 'A256GCM':
+                    return 256;
+            }
+            break;
+        case 'ECDH-ES+A128KW':
+            return 128;
+        case 'ECDH-ES+A192KW':
+            return 192;
+        case 'ECDH-ES+A256KW':
+            return 256;
+    }
+}
+/**
+ * NIST.SP.800-56Ar2#5.8.1.2 OtherInfo
+ * 導出されたキーマテリアルが the key-agreement transaction の文脈に適切に「バインド」されていることを保証するために使う。(should)
+ * 例えば、OtherInfo のそれぞれの値は DataLen || Data の形式で表現されるべき(shall)。
+ * Data は可変長の文字列で、DataLen は固定長のビックエンディアンのデータオクテット長表現。
+ */
+function genOtherInfo(h, keydatalen) {
+    /**
+     * AlgorithmID: the derived keying material をパースする方法と the derived secret keying を使うであろうアルゴリズムを示す。
+     * RFC7518 において、Data は ECDH-ES の場合は enc アルゴリズム識別子であり、それ以外は alg アルゴリズム識別子である。
+     * DataLen は Data のオクテット長を示す 4bytes の非負整数（オクテット表現）。
+     */
+    const AlgorithmID = representOtherInfo(ASCII(isECDH_ESAlg(h.alg) ? h.enc : h.alg), 4);
+    /**
+     * PartyUinfo: party U (Ephemeral Key Pair を作る側) に関するパブリックな情報を含める。
+     * RFC7518 において、Data は Header.apu の値を BASE64url decode した値である。
+     * apu がなければ、Data は空のオクテット列で、 datalen は 0になる。
+     */
+    const PartyUInfo = representOtherInfo(h.apu ? BASE64URL_DECODE(h.apu) : new Uint8Array(), 4);
+    /**
+     * PartyVInfo: party V (static pub を提供する側) に関するパブリックな情報を含める。
+     * PartyUinfo と同じフォーマットだが、使用するパラメータは Header.apv
+     */
+    const PartyVInfo = representOtherInfo(h.apv ? BASE64URL_DECODE(h.apv) : new Uint8Array(), 4);
+    /**
+     * SuppPubInfo: 互いに既知の public information を持つ。(例えば keydatalen)
+     * RFC7518 では keydatalen を 32bit でビックエンディアン表現した整数
+     */
+    const SuppPubInfo = intToOctets$1(keydatalen, 4);
+    /**
+     * SuppPrivInfo: 互いに既知の private information を持つ。(例えば、別チャネルで伝えた共有鍵)
+     * RFC7518 では空オクテット列。
+     */
+    const SuppPrivInfo = new Uint8Array();
+    /**
+     * NIST.SP.800-56Ar2#5.8.1.2.1 The Concatnation Format for OtherInfo
+     * に従って OtherInfo を表現する。
+     */
+    const OtherInfo = CONCAT(AlgorithmID, CONCAT(PartyUInfo, CONCAT(PartyVInfo, CONCAT(SuppPubInfo, SuppPrivInfo))));
+    return OtherInfo;
+}
+/**
+ * OtherInfo の各値を Datalen || Data の形にする。
+ */
+function representOtherInfo(data, datalenlen) {
+    const datalen = intToOctets$1(data.length, datalenlen);
+    return CONCAT(datalen, data);
+}
+/**
+ * 非負整数を xLen の長さのオクテットで表現する。
+ * 表現はビックエンディアン。
+ */
+function intToOctets$1(x, xLen) {
+    let xStr = x.toString(16);
+    if (xStr.length % 2 == 1) {
+        xStr = '0' + xStr;
+    }
+    if (xStr.length / 2 > xLen) {
+        throw 'integer too long';
+    }
+    if (xStr.length / 2 < xLen) {
+        xStr = '00'.repeat(xLen - xStr.length / 2) + xStr;
+    }
+    const ans = new Uint8Array(xLen);
+    for (let i = 0; i < xLen; i++) {
+        ans[i] = parseInt(xStr.substr(i * 2, 2), 16);
+    }
+    return ans;
+}
+
+const PBES2KeyWrapper = {
+    wrap: async (key, cek, h) => {
+        if (!isPBES2HeaderParams(h))
+            throw new TypeError('JOSE Header に必須パラメータがない(p2c, p2s)');
+        return wrap(key, cek, h);
+    },
+    unwrap: async (key, ek, h) => {
+        if (!isPBES2HeaderParams(h))
+            throw new TypeError('JOSE Header に必須パラメータがない(p2c, p2s)');
+        return unwrap(key, ek, h);
+    },
+};
+const isPBES2Alg = (arg) => typeof arg === 'string' && pbes2AlgList.some((a) => a === arg);
+const pbes2AlgList = ['PBES2-HS256+A128KW', 'PBES2-HS384+A192KW', 'PBES2-HS512+A256KW'];
+const isPBES2HeaderParams = (arg) => isObject(arg) &&
+    isPBES2Alg(arg.alg) &&
+    typeof arg.p2c === 'number' &&
+    typeof arg.p2s === 'string';
+/**
+ * RFC2898#6.2.1 に基づいて、ユーザが指定したパスワードで CEK をラップする。
+ * パスワードは JWK<oct> で表現されているが、k にはパスワードの UTF-8 表現を BASE64URL エンコードしたものが入る。
+ */
+async function wrap(key, cek, h) {
+    if (!h)
+        throw new TypeError('PBES2Alg にはヘッダーにあるパラメータが必須');
+    const { HASH_ALG, KEY_LEN } = algParams$1(h.alg);
+    /**
+     * P はパスワードの UTF-8 表現である。
+     */
+    const P = BASE64URL_DECODE(key.k);
+    /**
+     * RFC2898#6.1.1 Step1 salt(S) と iteration count(c) を決める
+     * RFC7518#4.8.1.1 では salt を (UTF8(Alg) || 0x00 || Header.p2s) として定めている。
+     * RFC7518#4.8.1.2 では iteration count を Header.p2c として定めている。
+     */
+    const S = CONCAT(CONCAT(UTF8(h.alg), new Uint8Array([0])), BASE64URL_DECODE(h.p2s));
+    const c = h.p2c;
+    /**
+     * RFC2898#6.1.1 Step2 導出される鍵のオクテット長を決める。
+     * RFC7518#4.8.1 では AES KW でラップするとしているので、 Header.alg アルゴリズムに応じて鍵長が決まる。
+     */
+    const dkLen = KEY_LEN;
+    /**
+     * RFC2898#6.1.1 Step3  KDF を適用する。 PBKDF2 で使用するハッシュ関数は Header.alg に応じて決まる。
+     */
+    const DK = await PBKDF2(P, S, c, dkLen, HASH_ALG);
+    /**
+     * RFC2898#6.1.1 Step4 cek を暗号化する。
+     * RFC7518 では AES KW を使うとしているので AKWKeyWrapper 実装を用いている。
+     */
+    return AKWKeyWrapper.wrap({ kty: 'oct', k: BASE64URL(DK) }, cek);
+}
+/**
+ * RFC2898#6.2.2 に基づいて、ユーザが指定したパスワードで EK を復号する。
+ * パスワードは JWK<oct> で表現されているが、k にはパスワードの UTF-8 表現を BASE64URL エンコードしたものが入る。
+ */
+async function unwrap(key, ek, h) {
+    if (!h)
+        throw TypeError('PBES2Alg にはヘッダーにあるパラメータが必須');
+    const { HASH_ALG, KEY_LEN } = algParams$1(h.alg);
+    const P = BASE64URL_DECODE(key.k);
+    // Step1
+    const S = CONCAT(CONCAT(UTF8(h.alg), new Uint8Array([0])), BASE64URL_DECODE(h.p2s));
+    // Step2
+    const c = h.p2c;
+    // Step3
+    const dkLen = KEY_LEN;
+    // Step4
+    const DK = await PBKDF2(P, S, c, dkLen, HASH_ALG);
+    // Step5
+    return AKWKeyWrapper.unwrap({ kty: 'oct', k: BASE64URL(DK) }, ek);
+}
+function algParams$1(alg) {
+    switch (alg) {
+        case 'PBES2-HS256+A128KW':
+            return { HASH_ALG: 'SHA-256', KEY_LEN: 128 };
+        case 'PBES2-HS384+A192KW':
+            return { HASH_ALG: 'SHA-384', KEY_LEN: 192 };
+        case 'PBES2-HS512+A256KW':
+            return { HASH_ALG: 'SHA-512', KEY_LEN: 256 };
+    }
+}
+/**
+ * RFC2898#5.2 PBKDF2 を実装する。実体は CryptoAPI.deriveBits で行っている。
+ */
+async function PBKDF2(P, S, c, dkLen, hash) {
+    const cP = await window.crypto.subtle.importKey('raw', P, 'PBKDF2', false, ['deriveBits']);
+    const DK = await window.crypto.subtle.deriveBits({ name: 'PBKDF2', hash, salt: S, iterations: c }, cP, dkLen);
+    return new Uint8Array(DK);
+}
+
+const RSAKeyEncryptor = { enc: enc$3, dec: dec$3 };
+const isRSA1_5Alg = (arg) => typeof arg === 'string' && arg === 'RSA1_5';
+const isRSAOAEPAlg = (arg) => typeof arg === 'string' && rsaoaepAlgList.some((a) => a === arg);
+const rsaoaepAlgList = ['RSA-OAEP', 'RSA-OAEP-256'];
+/**
+ * RSAES-PKCS1-v1_5 か RSA-OAEP アルゴリズム(alg) に従い、与えられた Content Encryption Key を key を使って暗号化する。
+ * 計算を行う前に、鍵長が 2048 以上か確認する。
+ */
+async function enc$3(alg, key, cek) {
+    if (BASE64URL_DECODE(key.n).length * 8 < 2048) {
+        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#4.2)
+        throw new EvalError(`RSA enc では鍵長が 2048 以上にしてください`);
+    }
+    if (isRSA1_5Alg(alg)) {
+        return await encryptRSA1_5(key, cek);
+    }
+    else if (isRSAOAEPAlg(alg)) {
+        const hash = alg === 'RSA-OAEP' ? 'SHA-1' : 'SHA-256';
+        const keyAlg = { name: 'RSA-OAEP', hash };
+        const encAlg = { name: 'RSA-OAEP' };
+        const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['encrypt']);
+        const e = await window.crypto.subtle.encrypt(encAlg, k, cek);
+        return new Uint8Array(e);
+    }
+    throw new EvalError(`unrecognized alg(${alg})`);
+}
+async function dec$3(alg, key, ek) {
+    if (BASE64URL_DECODE(key.n).length * 8 < 2048 && BASE64URL_DECODE(key.d).length * 8 < 2048) {
+        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#4.2)
+        throw new EvalError(`RSA dec では鍵長が 2048 以上にしてください`);
+    }
+    if (isRSA1_5Alg(alg)) {
+        return await decryptRSA1_5(key, ek);
+    }
+    if (isRSAOAEPAlg(alg)) {
+        const hash = alg === 'RSA-OAEP' ? 'SHA-1' : 'SHA-256';
+        const keyAlg = { name: 'RSA-OAEP', hash };
+        const encAlg = { name: 'RSA-OAEP' };
+        const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['decrypt']);
+        const e = await window.crypto.subtle.decrypt(encAlg, k, ek);
+        return new Uint8Array(e);
+    }
+    throw EvalError('alg は列挙できているはず');
+}
+// RFC3447#7.2.1 RSAES-PKCS1-V1_5-ENCRYPT を実装
+async function encryptRSA1_5(key, message) {
+    // k denotes the length in octets of the modulus n
+    const k = BASE64URL_DECODE(key.n).length;
+    // message to be encrypted, an octet string of length mLen,
+    const mLen = message.length;
+    // Step1
+    if (mLen > k - 11) {
+        throw 'message too long';
+    }
+    // Step2.a
+    // const PS = genNonZeroUint8Array(k - mLen - 3);
+    // 例示データを複合して PS に使用した値を逆算したもの
+    const PS = BASE64URL_DECODE('wx6eRzOkz9TWarNXjlU1eAwOlBN3b7fq9BgksROinirQYwVNNb6GzUMt0fYjbRlEbHdklsK8z1H-L4ZRdgeoPzuE4yNShwteN6hZkofbYRT9iX6kSEYmEs0CRBWUKBeEuFQD4NOGzc5QpfarwLV1U8Djut1l49wr84OH1YaO9X7rn6iclHa_JrgSNWDzITFkr2-X-5uHzDE0HZvvW2v4P8PxS9jbEcsDkROp3KL1NJoEncU5BQk3IB8GghM-kQnIdOdrRmaG0MFHfRs4d1U3OIxK0JjW8xccqpSGlII');
+    // Step2.b
+    const EM = CONCAT(CONCAT(CONCAT(new Uint8Array([0, 2]), PS), new Uint8Array([0])), message);
+    // Step3.a
+    const m = OS2IP(EM);
+    // Step3.b
+    const c = await RSAEP(OS2IP(BASE64URL_DECODE(key.n)), OS2IP(BASE64URL_DECODE(key.e)), m);
+    return I2OSP(c, k);
+}
+async function decryptRSA1_5(key, ciphertext) {
+    // k is the length in octets of the RSA modulus n
+    const k = BASE64URL_DECODE(key.n).length;
+    // Step1
+    if (ciphertext.length !== k || k < 11) {
+        throw 'decryption error';
+    }
+    // Step2.a
+    const c = OS2IP(ciphertext);
+    // Step2.b
+    let m;
+    try {
+        m = await RSADP(OS2IP(BASE64URL_DECODE(key.n)), OS2IP(BASE64URL_DECODE(key.d)), c);
+    }
+    catch (err) {
+        throw 'decryption error';
+    }
+    // Step2.c
+    const EM = I2OSP(m, k);
+    // Step3
+    if (EM[0] === 0 && EM[1] === 2) {
+        let pslen = 0;
+        for (let i = 2; i < EM.length; i++) {
+            if (EM[i] !== 0) {
+                pslen++;
+            }
+            else {
+                break;
+            }
+        }
+        if (pslen < EM.length - 2 && pslen >= 8) {
+            return EM.slice(2 + pslen + 1);
+        }
+    }
+    throw 'decryption error';
+}
+// RFC3447#4.1 I2OSP
+// 整数 x を受け取って長さ xLen のバイナリ列表現を返す
+function I2OSP(x, xLen) {
+    let xStr = x.toString(16);
+    if (xStr.length % 2 == 1) {
+        xStr = '0' + xStr;
+    }
+    if (xStr.length / 2 > xLen) {
+        throw 'integer too long';
+    }
+    if (xStr.length / 2 < xLen) {
+        xStr = '00'.repeat(xLen - xStr.length / 2) + xStr;
+    }
+    const ans = new Uint8Array(xLen);
+    for (let i = 0; i < xLen; i++) {
+        ans[i] = parseInt(xStr.substr(i * 2, 2), 16);
+    }
+    return ans;
+}
+// RFC3447#4.2 OS2IP
+// バイナリ列 X を受け取って、その非不整数表現を返す
+function OS2IP(X) {
+    // Uint8Array を16進表現にする
+    const hexStr = Array.from(X)
+        .map((e) => {
+        let hexchar = e.toString(16);
+        if (hexchar.length == 1) {
+            hexchar = '0' + hexchar;
+        }
+        return hexchar;
+    })
+        .join('');
+    return BigInt('0x' + hexStr);
+}
+// RFC3447#5.1.1 RSA Encryption Primitives
+async function RSAEP(n, e, m) {
+    if (0n > m || m > n) {
+        throw 'message representative out of range';
+    }
+    return await modPow(m, e, n);
+}
+// RFC3447#5.1.2 RSA Decryption Primitives
+// 一番簡単なやつだけ実装
+async function RSADP(n, d, c) {
+    if (0n > c || c > n) {
+        throw 'ciphertext representative out of range';
+    }
+    return await modPow(c, d, n);
+}
+// g を k 乗した値を n で割った余りを返す。 with バイナリ法
+async function modPow(g, k, n) {
+    const k_bin = k.toString(2);
+    let r = 1n;
+    for (const k of k_bin) {
+        r = (r * r) % n;
+        if (k == '1') {
+            r = (r * g) % n;
+        }
+    }
+    return r;
+}
+
+const isJWAKEAlg = (arg) => isRSA1_5Alg(arg) || isRSAOAEPAlg(arg);
+function newJWAKeyEncryptor(alg) {
+    if (isRSA1_5Alg(alg) || isRSAOAEPAlg(alg))
+        return RSAKeyEncryptor;
+    throw TypeError(`KeyEncryptor<$alg> は実装されていない`);
+}
+const isJWAKWAlg = (arg) => isAKWAlg(arg) || isAGCMKWAlg(arg) || isPBES2Alg(arg);
+function newJWAKeyWrapper(alg) {
+    if (isAKWAlg(alg))
+        return AKWKeyWrapper;
+    if (isAGCMKWAlg(alg))
+        return AGCMKeyWrapper;
+    if (isPBES2Alg(alg))
+        return PBES2KeyWrapper;
+    throw TypeError(`KeyWrapper<$alg> is not implemented`);
+}
+const isJWADKAAlg = (arg) => isECDH_ESAlg(arg);
+function newJWADirectAgreementer(alg) {
+    if (isECDH_ESAlg(alg))
+        return ECDHDirectKeyAgreementer;
+    throw TypeError(`KeyAgreement<$alg> is not implemented`);
+}
+const isJWAKAKWAlg = (arg) => isECDH_ESKWAlg(arg);
+function newJWAKeyAgreementerWithKeyWrapping(alg) {
+    if (isECDH_ESKWAlg(alg))
+        return ECDHKeyAgreementerWithKeyWrapping;
+    throw TypeError(`KeyAgreementerWithKeyWrapping<$alg> is not implemented`);
+}
+const isJWADEAlg = (arg) => typeof arg === 'string' && arg === 'dir';
+function newJWADirectEncryptor(alg) {
+    if (isJWADEAlg(alg))
+        return {
+            extract: async (alg, key) => BASE64URL_DECODE(key.k),
+        };
+    throw TypeError(`DirecyEncryptor<$alg> is not implemented`);
+}
+function ktyFromJWAJWEAlg(alg) {
+    if (isJWAKEAlg(alg))
+        return 'RSA';
+    if (isJWAKWAlg(alg) || isJWADEAlg(alg))
+        return 'oct';
+    if (isJWADKAAlg(alg) || isJWAKAKWAlg(alg))
+        return 'EC';
+    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
+}
+const isJWAAlgSpecificJOSEHeader = (arg) => {
+    if (!isObject(arg))
+        return false;
+    if (isAGCMKWAlg(arg.alg))
+        return isAGCMKWHeaderParams(arg);
+    if (isECDH_ESAlg(arg.alg) || isECDH_ESKWAlg(arg.alg))
+        return isECDH_ESHeaderParams(arg);
+    if (isPBES2Alg(arg.alg))
+        return isPBES2HeaderParams(arg);
+    return true;
+};
+
+/**
+ * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムの実装.
+ */
+const ACBCEncOperator = { enc: enc$2, dec: dec$2 };
+const isACBCEnc = (arg) => acbcEncList.some((a) => a === arg);
+const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'];
+/**
+ * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムに従って暗号化する。
+ */
+async function enc$2(enc, cek, iv, aad, m) {
+    const { E, T } = await encryptAES_CBC_HMAC_SHA2(enc, cek, m, aad, iv);
+    return { c: E, tag: T };
+}
+async function dec$2(enc, cek, iv, aad, c, tag) {
+    return await decryptAES_CBC_HMAC_SHA2(enc, cek, aad, iv, c, tag);
+}
+/**
+ * RFC7518#5.2.2.1 AES_CBC_HMAC_SHA2 Encryption を実装する。
+ */
+async function encryptAES_CBC_HMAC_SHA2(enc, K, P, A, IV) {
+    // Step1 enc に基づいて鍵長のチェックを行い、HMAC 計算用の鍵と 暗号化鍵を用意する。
+    const { MAC_KEY_LEN, ENC_KEY_LEN, HASH_ALG, T_LEN } = algParams(enc);
+    if (K.length !== MAC_KEY_LEN + ENC_KEY_LEN) {
+        throw 'K の長さが不一致';
+    }
+    const MAC_KEY = K.slice(0, MAC_KEY_LEN);
+    const ENC_KEY = K.slice(ENC_KEY_LEN);
+    // Step2 IV を用意する
+    if (!IV) {
+        IV = new Uint8Array(16);
+        window.crypto.getRandomValues(IV);
+    }
+    // Step3 AES-CBC で暗号化する。
+    const acKey = await window.crypto.subtle.importKey('raw', ENC_KEY, { name: 'AES-CBC' }, false, [
+        'encrypt',
+    ]);
+    const E = new Uint8Array(await window.crypto.subtle.encrypt({ name: 'AES-CBC', iv: IV }, acKey, P));
+    // Step4
+    const AL = intToOctets(A.length * 8, 64 / 8);
+    // Step5 HMAC で認証タグを生成する。
+    const hKey = await window.crypto.subtle.importKey('raw', MAC_KEY, { name: 'HMAC', hash: HASH_ALG }, false, ['sign']);
+    const hSig = await window.crypto.subtle.sign('HMAC', hKey, CONCAT(CONCAT(CONCAT(A, IV), E), AL));
+    const T = new Uint8Array(hSig).slice(0, T_LEN);
+    return { E, T };
+}
+/**
+ * RFC7518#5.2.2.2 AES_BC_HMAC_SHA2 Decryption を実装する。
+ */
+async function decryptAES_CBC_HMAC_SHA2(enc, K, A, IV, E, T) {
+    // Step1
+    const { MAC_KEY_LEN, ENC_KEY_LEN, HASH_ALG, T_LEN } = algParams(enc);
+    if (K.length != MAC_KEY_LEN + ENC_KEY_LEN) {
+        throw 'K の長さが不一致';
+    }
+    const MAC_KEY = K.slice(0, MAC_KEY_LEN);
+    const ENC_KEY = K.slice(ENC_KEY_LEN);
+    // Step2
+    const AL = intToOctets(A.length * 8, 64 / 8);
+    // verify としたいところだが、 HMAC の結果をそのまま署名の値とはしていないので
+    const hKey = await window.crypto.subtle.importKey('raw', MAC_KEY, { name: 'HMAC', hash: HASH_ALG }, false, ['sign']);
+    const hSig = await window.crypto.subtle.sign('HMAC', hKey, CONCAT(CONCAT(CONCAT(A, IV), E), AL));
+    const dervivedT = new Uint8Array(hSig).slice(0, T_LEN);
+    // 配列の比較がめんどくさいので文字列に直して比較した
+    if (BASE64URL(dervivedT) !== BASE64URL(T)) {
+        throw 'decryption failed';
+    }
+    // Step3
+    const acKey = await window.crypto.subtle.importKey('raw', ENC_KEY, { name: 'AES-CBC' }, false, [
+        'decrypt',
+    ]);
+    const acDec = await window.crypto.subtle.decrypt({ name: 'AES-CBC', iv: IV }, acKey, E);
+    const P = new Uint8Array(acDec);
+    return P;
+}
+function algParams(enc) {
+    switch (enc) {
+        case 'A128CBC-HS256':
+            return {
+                MAC_KEY_LEN: 16,
+                ENC_KEY_LEN: 16,
+                HASH_ALG: 'SHA-256',
+                T_LEN: 16,
+            };
+        case 'A192CBC-HS384':
+            return {
+                MAC_KEY_LEN: 24,
+                ENC_KEY_LEN: 24,
+                HASH_ALG: 'SHA-384',
+                T_LEN: 24,
+            };
+        case 'A256CBC-HS512':
+            return {
+                MAC_KEY_LEN: 32,
+                ENC_KEY_LEN: 32,
+                HASH_ALG: 'SHA-512',
+                T_LEN: 32,
+            };
+    }
+}
+function intToOctets(x, xLen) {
+    let xStr = x.toString(16);
+    if (xStr.length % 2 == 1) {
+        xStr = '0' + xStr;
+    }
+    if (xStr.length / 2 > xLen) {
+        throw 'integer too long';
+    }
+    if (xStr.length / 2 < xLen) {
+        xStr = '00'.repeat(xLen - xStr.length / 2) + xStr;
+    }
+    const ans = new Uint8Array(xLen);
+    for (let i = 0; i < xLen; i++) {
+        ans[i] = parseInt(xStr.substr(i * 2, 2), 16);
+    }
+    return ans;
+}
+
+const AGCMEncOperator = { enc: enc$1, dec: dec$1 };
+const isAGCMEnc = (arg) => agcmEncList.some((a) => a === arg);
+const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'];
+async function enc$1(enc, cek, iv, aad, m) {
+    const k = await window.crypto.subtle.importKey('raw', cek, { name: 'AES-GCM' }, false, [
+        'encrypt',
+    ]);
+    const e = new Uint8Array(await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: aad }, k, m));
+    const ciphertext = e.slice(0, e.length - 16);
+    const tag = e.slice(e.length - 16);
+    return { c: ciphertext, tag };
+}
+async function dec$1(enc, cek, iv, aad, c, tag) {
+    const k = await window.crypto.subtle.importKey('raw', cek, { name: 'AES-GCM' }, false, [
+        'decrypt',
+    ]);
+    const e = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv, additionalData: aad }, k, CONCAT(c, tag));
+    return new Uint8Array(e);
+}
+
+const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
+function newJWAEncOperator(enc) {
+    if (isACBCEnc(enc))
+        return ACBCEncOperator;
+    if (isAGCMEnc(enc))
+        return AGCMEncOperator;
+    throw TypeError(`EncOperator<$alg> is not implemented`);
+}
+
+// --------------------BEGIN iana constants --------------------
+const isAlg = (arg) => isJWASigAlg(arg) ||
+    isJWAMACAlg(arg) ||
+    isJWANoneAlg(arg) ||
+    isJWAKEAlg(arg) ||
+    isJWAKWAlg(arg) ||
+    isJWADKAAlg(arg) ||
+    isJWAKAKWAlg(arg) ||
+    isJWADEAlg(arg) ||
+    isEncAlg(arg);
+const isEncAlg = (arg) => isJWAEncAlg(arg);
+const isKty = (arg) => isJWAKty(arg);
+function ktyFromAlg(alg) {
+    if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
+        return ktyFromJWAJWSAlg(alg);
+    }
+    if (isJWAKEAlg(alg) ||
+        isJWAKWAlg(alg) ||
+        isJWADKAAlg(alg) ||
+        isJWAKAKWAlg(alg) ||
+        isJWADEAlg(alg)) {
+        return ktyFromJWAJWEAlg(alg);
+    }
+    if (isEncAlg(alg)) {
+        return 'oct';
+    }
+    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
+}
+const keyUseList = ['sig', 'enc'];
+const isKeyUse = (arg) => {
+    if (typeof arg === 'string') {
+        return keyUseList.some((u) => u === arg);
+    }
+    return false;
+};
+/**
+ * JSON Web Key Operations を列挙する。
+ */
+const keyOpsList = [
+    'sign',
+    'verify',
+    'encrypt',
+    'decrypt',
+    'wrapKey',
+    'unwrapKey',
+    'deriveKey',
+    'deriveBits',
+];
+const isKeyOps = (arg) => {
+    if (typeof arg === 'string') {
+        return keyOpsList.some((u) => u === arg);
+    }
+    return false;
+};
+// --------------------END iana constants --------------------
+
+const isJWEAlg = (arg) => isJWEKEAlg(arg) || isJWEKWAlg(arg) || isJWEDKAAlg(arg) || isJWEKAKWAlg(arg) || isJWEDEAlg(arg);
+const isJWEEnc = (arg) => isJWEEncAlg(arg);
+const isJWEKEAlg = (arg) => isJWAKEAlg(arg);
+function newKeyEncryptor(alg) {
+    if (isJWAKEAlg(alg))
+        return newJWAKeyEncryptor(alg);
+    throw new TypeError(`KeyEncryptor<${alg}> は実装されていない`);
+}
+const isJWEKWAlg = (arg) => isJWAKWAlg(arg);
+function newKeyWrappaer(alg) {
+    if (isJWAKWAlg(alg))
+        return newJWAKeyWrapper(alg);
+    throw new TypeError(`KeyWrapper<${alg}> は実装されていない`);
+}
+const isJWEDKAAlg = (arg) => isJWADKAAlg(arg);
+function newDirectKeyAgreementer(alg) {
+    if (isJWADKAAlg(alg))
+        return newJWADirectAgreementer(alg);
+    throw new TypeError(`DirectKeyAgreementer<${alg}> は実装されていない`);
+}
+const isJWEKAKWAlg = (arg) => isJWAKAKWAlg(arg);
+function newKeyAgreementerWithKeyWrapping(alg) {
+    if (isJWAKAKWAlg(alg))
+        return newJWAKeyAgreementerWithKeyWrapping(alg);
+    throw new TypeError(`KeyAgreementerWithKeyWrapping<${alg}> は実装されていない`);
+}
+const isJWEDEAlg = (arg) => isJWADEAlg(arg);
+function newDirectEncrytor(alg) {
+    if (isJWADEAlg(alg))
+        return newJWADirectEncryptor(alg);
+    throw new TypeError(`DirectEncrypto<${alg}> は実装されていない`);
+}
+const isJWEEncAlg = (arg) => isJWAEncAlg(arg);
+function newEncOperator(enc) {
+    if (isJWAEncAlg(enc))
+        return newJWAEncOperator(enc);
+    throw new TypeError(`EncOperator<${enc}> は実装されていない`);
+}
+const isAlgSpecificJOSEHeader = (arg) => {
+    if (!isObject(arg))
+        return false;
+    if (isJWAKEAlg(arg.alg) ||
+        isJWAKWAlg(arg.alg) ||
+        isJWADKAAlg(arg.alg) ||
+        isJWAKAKWAlg(arg.alg) ||
+        isJWADEAlg(arg.alg))
+        return isJWAAlgSpecificJOSEHeader(arg);
+    return true;
+};
+
+class JWEHeader {
+    constructor(p, su, ru) {
+        const h = { ...p, ...su, ...ru };
+        if (!(isJWEJOSEHeader(h) && isAlgSpecificJOSEHeader(h)))
+            throw new TypeError(`JOSE Header for JWE に必要なパラメータが不足している`);
+        this.p = p;
+        this.su = su;
+        this.ru = ru;
+        this.h = h;
+    }
+    get Alg() {
+        return this.h.alg;
+    }
+    get Enc() {
+        return this.h.enc;
+    }
+    get JOSEHeader() {
+        return this.h;
+    }
+    get Protected() {
+        return this.p;
+    }
+    get SharedUnprotected() {
+        return this.su;
+    }
+    get PerRecipientUnprotected() {
+        return this.ru;
+    }
+    cast(mode) {
+        switch (mode) {
+            case 'KE':
+                return isJWEKEAlg(this.Alg);
+            case 'KW':
+                return isJWEKWAlg(this.Alg);
+            case 'DKA':
+                return isJWEDKAAlg(this.Alg);
+            case 'KAKW':
+                return isJWEKAKWAlg(this.Alg);
+            case 'DE':
+                return isJWEDEAlg(this.Alg);
+            default:
+                throw new EvalError(`Key Management mode に ${mode} はない`);
+        }
+    }
+}
+const isJWESharedUnprotectedHeader = (arg) => isPartialJWEJOSEHeader(arg);
+const isJWEPerRecipientUnprotectedHeader = (arg) => isPartialJWEJOSEHeader(arg);
+const isJWEProtectedHeader = (arg) => isPartialJWEJOSEHeader(arg);
+const isJWEJOSEHeader = (arg) => isPartialJWEJOSEHeader(arg) && arg.alg != null && arg.enc != null;
+const jweJOSEHeaderNameList = [
+    'alg',
+    'enc',
+    'zip',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
+const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
+    jweJOSEHeaderNameList.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isJWEAlg(arg[n])
+            : n === 'enc'
+                ? isJWEEnc(arg[n])
+                : n === 'jwk'
+                    ? isJWK(arg[n])
+                    : n === 'x5c' || n === 'crit'
+                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                        : typeof arg[n] === 'string'));
+
+function serializationType$1(data) {
+    if (typeof data == 'string') {
+        return 'compact';
+    }
+    if (typeof data == 'object' && data != null) {
+        if ('recipients' in data)
+            return 'json';
+        return 'json-flat';
+    }
+    throw new TypeError(`${data} は JWSSerialization ではない`);
+}
+function serializeCompact$1(h, ek, iv, c, tag) {
+    // let ans = BASE64URL(UTF8(JSON.stringify(h))) + '.';
+    // if (ek) {
+    //   ans += BASE64URL(ek);
+    // }
+    // ans += '.';
+    // if (iv) {
+    //   ans += BASE64URL(iv);
+    // }
+    // ans += '.' + BASE64URL(c) + '.';
+    // if (tag) {
+    //   ans += BASE64URL(tag);
+    // }
+    // return ans;
+    const h_b64u = BASE64URL(UTF8(JSON.stringify(h)));
+    return `${h_b64u}.${BASE64URL(ek)}.${BASE64URL(iv)}.${BASE64URL(c)}.${BASE64URL(tag)}`;
+}
+function deserializeCompact$1(compact) {
+    const l = compact.split('.');
+    if (l.length !== 5) {
+        throw new EvalError('JWS Compact Serialization の形式ではない');
+    }
+    const [h, ek, iv, c, tag] = l;
+    return {
+        h: JSON.parse(UTF8_DECODE(BASE64URL_DECODE(h))),
+        ek: BASE64URL_DECODE(ek),
+        iv: BASE64URL_DECODE(iv),
+        c: BASE64URL_DECODE(c),
+        tag: BASE64URL_DECODE(tag),
+    };
+}
+const isJWEJSONSerialization = (arg) => isObject(arg) &&
+    (arg.protected == null || typeof arg.protected === 'string') &&
+    (arg.unprotected == null || isJWESharedUnprotectedHeader(arg.unprotected)) &&
+    (arg.iv == null || typeof arg.iv === 'string') &&
+    (arg.aad == null || typeof arg.aad === 'string') &&
+    typeof arg.ciphertext === 'string' &&
+    (arg.tag == null || typeof arg.tag === 'string') &&
+    Array.isArray(arg.recipients) &&
+    arg.recipients.every((u) => isObject(u) &&
+        (u.header == null || isJWEPerRecipientUnprotectedHeader(u.header)) &&
+        (u.encrypted_key == null || typeof u.encrypted_key === 'string'));
+function serializeJSON$1(c, rcpt, hp, hsu, iv, aad, tag) {
+    return {
+        protected: hp ? BASE64URL(UTF8(JSON.stringify(hp))) : undefined,
+        unprotected: hsu,
+        iv: iv ? BASE64URL(iv) : undefined,
+        aad: aad ? BASE64URL(aad) : undefined,
+        ciphertext: BASE64URL(c),
+        tag: tag ? BASE64URL(tag) : undefined,
+        recipients: Array.isArray(rcpt)
+            ? rcpt.map((r) => ({
+                header: r.h,
+                encrypted_key: r.ek ? BASE64URL(r.ek) : undefined,
+            }))
+            : [{ header: rcpt.h, encrypted_key: rcpt.ek ? BASE64URL(rcpt.ek) : undefined }],
+    };
+}
+function deserializeJSON$1(json) {
+    return {
+        c: BASE64URL_DECODE(json.ciphertext),
+        rcpt: json.recipients.length === 1
+            ? {
+                h: json.recipients[0].header,
+                ek: json.recipients[0].encrypted_key
+                    ? BASE64URL_DECODE(json.recipients[0].encrypted_key)
+                    : undefined,
+            }
+            : json.recipients.map((r) => ({
+                h: r.header,
+                ek: r.encrypted_key ? BASE64URL_DECODE(r.encrypted_key) : undefined,
+            })),
+        hp: json.protected ? JSON.parse(UTF8_DECODE(BASE64URL_DECODE(json.protected))) : undefined,
+        hsu: json.unprotected,
+        iv: json.iv ? BASE64URL_DECODE(json.iv) : new Uint8Array(),
+        aad: json.aad ? BASE64URL_DECODE(json.aad) : undefined,
+        tag: json.tag ? BASE64URL_DECODE(json.tag) : new Uint8Array(),
+    };
+}
+const isJWEFlattenedJSONSerialization = (arg) => isObject(arg) &&
+    (arg.protected == null || typeof arg.protected === 'string') &&
+    (arg.unprotected == null || isJWESharedUnprotectedHeader(arg.unprotected)) &&
+    (arg.iv == null || typeof arg.iv === 'string') &&
+    (arg.aad == null || typeof arg.aad === 'string') &&
+    typeof arg.ciphertext === 'string' &&
+    (arg.tag == null || typeof arg.tag === 'string') &&
+    (arg.header == null || isJWEPerRecipientUnprotectedHeader(arg.header)) &&
+    (arg.encrypted_key == null || typeof arg.encrypted_key === 'string');
+function serializeFlattenedJSON(c, h, ek, hp, hsu, iv, aad, tag) {
+    const json = serializeJSON$1(c, { h, ek }, hp, hsu, iv, aad, tag);
+    return {
+        ...json,
+        header: json.recipients[0].header,
+        encrypted_key: json.recipients[0].encrypted_key,
+    };
+}
+function deserializeFlattenedJSON(flat) {
+    const jwe = deserializeJSON$1({
+        ...flat,
+        recipients: [{ header: flat.header, encrypted_key: flat.encrypted_key }],
+    });
+    return {
+        ...jwe,
+        h: Array.isArray(jwe.rcpt) ? jwe.rcpt[0].h : jwe.rcpt.h,
+        ek: Array.isArray(jwe.rcpt) ? jwe.rcpt[0].ek : jwe.rcpt.ek,
+    };
+}
+
+class JWE {
+    constructor(rcpt, iv, c, tag, p, su, aad) {
+        this.rcpt = rcpt;
+        this.iv = iv;
+        this.c = c;
+        this.tag = tag;
+        this.p = p;
+        this.su = su;
+        this.aad = aad;
+    }
+    /**
+     * RFC7516#5.1 Message Encryption を行う。
+     * @param keys
+     * @param plaintext
+     * @param h
+     * @param iv
+     * @param aad
+     * @param options
+     * @returns
+     */
+    static async enc(keys, plaintext, h, iv, aad, options) {
+        // recipient ごとに JOSEHeader を用意する
+        const hlist = !h.ru
+            ? [new JWEHeader(h.p, h.su)]
+            : !Array.isArray(h.ru)
+                ? [new JWEHeader(h.p, h.su, h.ru)]
+                : h.ru.length === 0
+                    ? [new JWEHeader(h.p, h.su)]
+                    : h.ru.map((rh) => new JWEHeader(h.p, h.su, rh));
+        // recipient ごとに Key Management を行う(Encrypted Key の生成と CEK の用意)
+        const list = await Promise.all(hlist.map(async (header) => {
+            const { ek, cek } = await sendCEK(keys, header, options);
+            return { ek, cek, rh: header.PerRecipientUnprotected };
+        }));
+        // Key Management で得られた CEK を使って
+        if (new Set(list.map((e) => e.cek)).size != 1)
+            throw new EvalError(`複数人に対する暗号化で異なる CEK を使おうとしている`);
+        const cek = list[0].cek;
+        // 平文を暗号化する。
+        const { c, tag } = await enc(cek, hlist[0], plaintext, iv, aad);
+        const rcpt = list.map((e) => ({ ek: e.ek, h: e.rh }));
+        if (rcpt.length === 1) {
+            return new JWE(rcpt[0], iv, c, tag, h.p, h.su, aad);
+        }
+        return new JWE(rcpt, iv, c, tag, h.p, h.su, aad);
+    }
+    async dec(keys) {
+        const hlist = !this.rcpt
+            ? [{ h: new JWEHeader(this.p, this.su), ek: undefined }]
+            : !Array.isArray(this.rcpt)
+                ? [{ h: new JWEHeader(this.p, this.su, this.rcpt.h), ek: this.rcpt.ek }]
+                : this.rcpt.length === 0
+                    ? [{ h: new JWEHeader(this.p, this.su), ek: undefined }]
+                    : this.rcpt.map((r) => ({ h: new JWEHeader(this.p, this.su, r.h), ek: r.ek }));
+        let key;
+        const filtered = hlist.filter((h) => {
+            try {
+                key = identifyJWK(h.h.JOSEHeader, keys);
+                return true;
+            }
+            catch {
+                return false;
+            }
+        });
+        if (filtered.length !== 1)
+            throw new EvalError(`暗号化に使われた鍵を同定できなかった`);
+        if (!(isJWK(key, 'RSA', 'Priv') || isJWK(key, 'EC', 'Priv') || isJWK(key, 'oct')))
+            throw new EvalError(`暗号化に使われた鍵に対応する秘密鍵を所持していない`);
+        const cek = await recvCEK(key, filtered[0].h, filtered[0].ek);
+        const p = await dec(cek, filtered[0].h, this.c, this.tag, this.iv, this.aad);
+        return p;
+    }
+    serialize(s) {
+        switch (s) {
+            case 'compact':
+                if (Array.isArray(this.rcpt)) {
+                    throw new TypeError('JWE Compact Serialization は複数暗号化を表現できない');
+                }
+                if (this.rcpt.h) {
+                    throw new TypeError('JWE Compact Serialization は JWE PerRecipient Unprotected Header を表現できない');
+                }
+                if (this.su) {
+                    throw new TypeError('JWE Compact Serialization は JWE Shared Unprotected Header を表現できない');
+                }
+                if (this.aad) {
+                    throw new TypeError('JWE Compact Serialization は JWE AAD を表現できない');
+                }
+                if (!this.p) {
+                    throw new TypeError('JWE Compact Serialization では JWE Protected Header が必須');
+                }
+                return serializeCompact$1(this.p, this.rcpt.ek ?? new Uint8Array(), this.c, this.tag, this.iv);
+            case 'json':
+                return serializeJSON$1(this.c, this.rcpt, this.p, this.su, this.iv, this.aad, this.tag);
+            case 'json-flat':
+                if (Array.isArray(this.rcpt)) {
+                    throw new TypeError('JWE Flattened JSON Serialization は複数暗号化を表現できない');
+                }
+                return serializeFlattenedJSON(this.c, this.rcpt.h, this.rcpt.ek, this.p, this.su, this.iv, this.aad, this.tag);
+            default:
+                throw new TypeError(`${s} は JWESerialization format ではない`);
+        }
+    }
+    static deserialize(data) {
+        switch (serializationType$1(data)) {
+            case 'compact': {
+                const { h, c, tag, iv, ek } = deserializeCompact$1(data);
+                return new JWE({ ek }, iv, c, tag, h);
+            }
+            case 'json': {
+                const { c, rcpt, hp, hsu, iv, aad, tag } = deserializeJSON$1(data);
+                return new JWE(rcpt, iv, c, tag, hp, hsu, aad);
+            }
+            case 'json-flat': {
+                const { c, h, ek, hp, hsu, iv, aad, tag } = deserializeFlattenedJSON(data);
+                return new JWE({ h, ek }, iv, c, tag, hp, hsu, aad);
+            }
+        }
+    }
+}
+async function enc(cek, h, m, iv, aad) {
+    let aad_str = '';
+    if (h.Protected) {
+        aad_str += BASE64URL(UTF8(JSON.stringify(h.Protected)));
+    }
+    if (aad) {
+        aad_str += '.' + BASE64URL(aad);
+    }
+    return await newEncOperator(h.Enc).enc(h.Enc, cek, iv, ASCII(aad_str), m);
+}
+async function dec(cek, h, c, tag, iv, aad) {
+    let aad_str = '';
+    if (h.Protected) {
+        aad_str += BASE64URL(UTF8(JSON.stringify(h.Protected)));
+    }
+    if (aad) {
+        aad_str += '.' + BASE64URL(aad);
+    }
+    return await newEncOperator(h.Enc).dec(h.Enc, cek, iv, ASCII(aad_str), c, tag);
+}
+async function sendCEK(keys, h, options) {
+    if (h.cast('KE')) {
+        if (!options?.cek)
+            throw new EvalError(`Key Encryption では CEK を与えてください`);
+        const key = identifyJWK(h.JOSEHeader, keys);
+        const ek = await newKeyEncryptor(h.Alg).enc(h.Alg, key, options.cek);
+        return { ek, cek: options.cek };
+    }
+    else if (h.cast('KW')) {
+        if (!options?.cek)
+            throw new EvalError(`Key Wrapping では CEK を与えてください`);
+        const key = identifyJWK(h.JOSEHeader, keys);
+        const ek = await newKeyWrappaer(h.Alg).wrap(key, options.cek, h.JOSEHeader);
+        return { ek, cek: options.cek };
+    }
+    else if (h.cast('DKA')) {
+        if (options?.cek)
+            throw new EvalError(`Direct Key Agreement では CEK を与えないでください`);
+        if (!options?.eprivk)
+            throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
+        const eprivk = Array.isArray(options.eprivk)
+            ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.JOSEHeader.epk))
+            : options.eprivk;
+        if (!eprivk)
+            throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
+        const key = identifyJWK(h.JOSEHeader, keys);
+        const cek = await newDirectKeyAgreementer(h.Alg).partyU(key, h.JOSEHeader, eprivk);
+        return { cek, ek: new Uint8Array() };
+    }
+    else if (h.cast('KAKW')) {
+        if (!options?.eprivk)
+            throw new EvalError(`Key Agreement with Key Wrapping では Ephemeral Private Key を与えてください`);
+        const eprivk = Array.isArray(options.eprivk)
+            ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.JOSEHeader.epk))
+            : options.eprivk;
+        if (!eprivk)
+            throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
+        if (!options?.cek)
+            throw new EvalError(`Key Agreement with Key Wrapping では CEK を与えてください`);
+        const key = identifyJWK(h.JOSEHeader, keys);
+        const ek = await newKeyAgreementerWithKeyWrapping(h.Alg).wrap(key, options.cek, h.JOSEHeader, eprivk);
+        return { ek, cek: options.cek };
+    }
+    else if (h.cast('DE')) {
+        if (options?.cek)
+            throw new EvalError(`Direct Encryption では CEK を与えないでください`);
+        const key = identifyJWK(h.JOSEHeader, keys);
+        const cek = await newDirectEncrytor(h.Alg).extract(h.Alg, key);
+        return { cek, ek: new Uint8Array() };
+    }
+    throw new EvalError(`CEK を決定できませんでした`);
+}
+async function recvCEK(key, h, ek) {
+    if (h.cast('KE')) {
+        if (key.kty !== ktyFromAlg(h.Alg))
+            throw new EvalError(`適切な秘密鍵ではない`);
+        if (!ek)
+            throw new EvalError(`Encrypted Key を与えてください`);
+        const cek = await newKeyEncryptor(h.Alg).dec(h.Alg, key, ek);
+        return cek;
+    }
+    else if (h.cast('KW')) {
+        if (key.kty !== ktyFromAlg(h.Alg))
+            throw new EvalError(`適切な秘密鍵ではない`);
+        if (!ek)
+            throw new EvalError(`Encrypted Key を与えてください`);
+        const cek = await newKeyWrappaer(h.Alg).unwrap(key, ek, h.JOSEHeader);
+        return cek;
+    }
+    else if (h.cast('DKA')) {
+        if (key.kty !== ktyFromAlg(h.Alg))
+            throw new EvalError(`適切な秘密鍵ではない`);
+        const cek = await newDirectKeyAgreementer(h.Alg).partyV(key, h.JOSEHeader);
+        return cek;
+    }
+    else if (h.cast('KAKW')) {
+        if (key.kty !== ktyFromAlg(h.Alg))
+            throw new EvalError(`適切な秘密鍵ではない`);
+        if (!ek)
+            throw new EvalError(`Encrypted Key を与えてください`);
+        const cek = await newKeyAgreementerWithKeyWrapping(h.Alg).unwrap(key, ek, h.JOSEHeader);
+        return cek;
+    }
+    else if (h.cast('DE')) {
+        if (key.kty !== ktyFromAlg(h.Alg))
+            throw new EvalError(`適切な秘密鍵ではない`);
+        const cek = await newDirectEncrytor(h.Alg).extract(h.Alg, key);
+        return cek;
+    }
+    throw new EvalError(`CEK を決定できませんでした`);
+}
+
+const paths$1 = [
+    '5_1.key_encryption_using_rsa_v15_and_aes-hmac-sha2.json',
+    '5_2.key_encryption_using_rsa-oaep_with_aes-gcm.json',
+    '5_3.key_wrap_using_pbes2-aes-keywrap_with-aes-cbc-hmac-sha2.json',
+    '5_4.key_agreement_with_key_wrapping_using_ecdh-es_and_aes-keywrap_with_aes-gcm.json',
+    '5_5.key_agreement_using_ecdh-es_with_aes-cbc-hmac-sha2.json',
+    '5_6.direct_encryption_using_aes-gcm.json',
+    '5_7.key_wrap_using_aes-gcm_keywrap_with_aes-cbc-hmac-sha2.json',
+    '5_8.key_wrap_using_aes-keywrap_with_aes-gcm.json',
+    // '5_9.compressed_content.json',
+    '5_10.including_additional_authentication_data.json',
+    '5_11.protecting_specific_header_fields.json',
+    '5_12.protecting_content_only.json',
+    '5_13.encrypting_to_multiple_recipients.json',
+];
+const baseURL$1 = 'https://raw.githubusercontent.com/ietf-jose/cookbook/master/jwe/';
+async function fetchData$1(path) {
+    const resp = await fetch(baseURL$1 + path);
+    const data = await resp.json();
+    // examples のミスを治す
+    if (path === '5_5.key_agreement_using_ecdh-es_with_aes-cbc-hmac-sha2.json') {
+        // rfc7516#7.2.1 によると recipients は 空オブジェクトでも recipient ごとにいるはずだが...
+        data.output.json.recipients = [{}];
+    }
+    if (path === '5_6.direct_encryption_using_aes-gcm.json') {
+        // rfc7516#7.2.1 によると recipients は 空オブジェクトでも recipient ごとにいるはずだが...
+        data.output.json.recipients = [{}];
+    }
+    if (path === '5_13.encrypting_to_multiple_recipients.json') {
+        // タイポ
+        data.input.enc = 'A128CBC-HS256';
+    }
+    if (!isData$1(data)) {
+        throw new EvalError('テストデータの取得に失敗');
+    }
+    return data;
+}
+const isData$1 = (arg) => isObject(arg) &&
+    typeof arg.title === 'string' &&
+    (arg.reproducible == null || typeof arg.reproducible === 'boolean') &&
+    isObject(arg.input) &&
+    typeof arg.input.plaintext === 'string' &&
+    (arg.input.key == null || isArrayable(arg.input.key, (k) => isJWK(k))) &&
+    (arg.input.pwd == null || typeof arg.input.pwd === 'string') &&
+    isArrayable(arg.input.alg, isAlg) &&
+    isEncAlg(arg.input.enc) &&
+    (arg.input.aad == null || typeof arg.input.aad === 'string') &&
+    isObject(arg.generated) &&
+    (arg.generated.cek == null || typeof arg.generated.cek === 'string') &&
+    typeof arg.generated.iv === 'string' &&
+    (arg.encrypting_key == null ||
+        isArrayable(arg.encrypting_key, (u) => isObject(u) &&
+            (u.header == null || isJWEPerRecipientUnprotectedHeader(u.header)) &&
+            (u.epk == null || isJWK(u.epk, 'EC', 'Priv')))) &&
+    isObject(arg.encrypting_content) &&
+    (arg.encrypting_content.protected == null ||
+        isJWEProtectedHeader(arg.encrypting_content.protected)) &&
+    (arg.encrypting_content.unprotected == null ||
+        isJWESharedUnprotectedHeader(arg.encrypting_content.unprotected)) &&
+    isObject(arg.output) &&
+    (arg.output.compact == null || typeof arg.output.compact === 'string') &&
+    isJWEJSONSerialization(arg.output.json) &&
+    (arg.output.json_flat == null || isJWEFlattenedJSONSerialization(arg.output.json_flat));
+const isArrayable = (arg, f) => {
+    return Array.isArray(arg) ? arg.every(f) : f(arg);
+};
+
+async function test$6(path) {
+    const data = await fetchData$1(path);
+    let allGreen = true;
+    const title = 'RFC7520#5 TEST NAME: ' + data.title;
+    let log = '';
+    // 準備
+    const plaintext = UTF8(data.input.plaintext);
+    const header = {
+        p: data.encrypting_content.protected,
+        su: data.encrypting_content.unprotected,
+        ru: Array.isArray(data.encrypting_key)
+            ? data.encrypting_key
+                .filter((k) => k.header != null)
+                .map((k) => k.header)
+            : data.encrypting_key?.header,
+    };
+    const iv = BASE64URL_DECODE(data.generated.iv);
+    const aad = data.input.aad ? UTF8(data.input.aad) : undefined;
+    const options = {
+        cek: data.generated.cek ? BASE64URL_DECODE(data.generated.cek) : undefined,
+        eprivk: Array.isArray(data.encrypting_key)
+            ? data.encrypting_key.filter((k) => k.epk != null).map((k) => k.epk)
+            : data.encrypting_key?.epk,
+    };
+    const keys = {
+        keys: data.input.key
+            ? Array.isArray(data.input.key)
+                ? data.input.key
+                : [data.input.key]
+            : data.input.pwd
+                ? [{ kty: 'oct', k: BASE64URL(UTF8(data.input.pwd)) }]
+                : [],
+    };
+    // 暗号文送信者用の鍵準備
+    const encKeys = {
+        keys: keys.keys.map((k) => {
+            if (isJWK(k, 'oct'))
+                return k;
+            if (isJWK(k, k.kty))
+                return exportPublicKey(k);
+            throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
+        }),
+    };
+    // JWE 生成
+    const jwe = await JWE.enc(encKeys, plaintext, header, iv, aad, options);
+    log += 'JWE の復号を行う\n';
+    for (const key of keys.keys) {
+        const keysOfOne = { keys: [key] };
+        log += `Key(${key.kty}, ${key.kid}) で復号`;
+        try {
+            const decryptedtext = await jwe.dec(keysOfOne);
+            const valid = UTF8_DECODE(decryptedtext) === UTF8_DECODE(plaintext);
+            allGreen &&= valid;
+            log += 'Encrypt and Decrypt JWE ' + (valid ? '(OK)' : '(X)') + '\n';
+        }
+        catch (err) {
+            allGreen = false;
+            console.log(err);
+            log += 'Encrypt and Decrypt JWE (X)\n';
+        }
+        if (data.output.compact) {
+            const jwe = JWE.deserialize(data.output.compact);
+            try {
+                const decryptedtext = await jwe.dec(keysOfOne);
+                const valid = UTF8_DECODE(decryptedtext) === UTF8_DECODE(plaintext);
+                allGreen &&= valid;
+                log += 'Deserialize Compact and Decrypt JWE ' + (valid ? '(OK)' : '(X)') + '\n';
+            }
+            catch (err) {
+                allGreen = false;
+                console.log(err);
+                log += 'Deserialize Compact and Decrypt JWE (X)\n';
+            }
+        }
+        if (data.output.json) {
+            const jwe = JWE.deserialize(data.output.json);
+            try {
+                const decryptedtext = await jwe.dec(keysOfOne);
+                const valid = UTF8_DECODE(decryptedtext) === UTF8_DECODE(plaintext);
+                allGreen &&= valid;
+                log += 'Deserialize JSON and Decrypt JWE ' + (valid ? '(OK)' : '(X)') + '\n';
+            }
+            catch (err) {
+                allGreen = false;
+                console.log(err);
+                log += 'Deserialize JSON and Decrypt JWE (X)\n';
+            }
+        }
+        if (data.output.json_flat) {
+            const jwe = JWE.deserialize(data.output.json_flat);
+            try {
+                const decryptedtext = await jwe.dec(keysOfOne);
+                const valid = UTF8_DECODE(decryptedtext) === UTF8_DECODE(plaintext);
+                allGreen &&= valid;
+                log += 'Deserialize Flattened JSON and Decrypt JWE ' + (valid ? '(OK)' : '(X)') + '\n';
+            }
+            catch (err) {
+                allGreen = false;
+                console.log(err);
+                log += 'Deserialize Flattened JSON and Decrypt JWE (X)\n';
+            }
+        }
+    }
+    return { title, allGreen, log };
+}
 
 // --------------------BEGIN RFC7517 appendix.A test --------------------
 async function test$5() {
@@ -2176,6 +3529,7 @@ async function test(path) {
 // --------------------BEGIN entry point --------------------
 window.document.getElementById('jwk')?.addEventListener('click', test_jwk);
 window.document.getElementById('jws')?.addEventListener('click', test_jws);
+window.document.getElementById('jwe')?.addEventListener('click', test_jwe);
 async function test_jwk() {
     console.group('JWK のテストを始めます');
     const logs = await Promise.all([test$5, test$4, test$3, test$2, test$1].map(async (test) => await test()));
@@ -2200,6 +3554,19 @@ async function test_jws() {
         console.groupEnd();
     });
     console.log('JWS のテスト終了', allAllGreen);
+    console.groupEnd();
+}
+async function test_jwe() {
+    console.group('JWE のテストを始める');
+    const logs = await Promise.all(paths$1.map(async (path) => await test$6(path)));
+    let allAllGreen = true;
+    logs.forEach(({ title, log, allGreen }) => {
+        allAllGreen = allGreen;
+        console.group(title, allGreen);
+        console.log(log);
+        console.groupEnd();
+    });
+    console.log('JWE のテスト終了', allAllGreen);
     console.groupEnd();
 }
 // --------------------END entry point --------------------
