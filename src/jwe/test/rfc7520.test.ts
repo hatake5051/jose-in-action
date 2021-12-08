@@ -1,4 +1,9 @@
-import { JWE, JWEPerRecipientUnprotectedHeader } from 'jwe';
+import {
+  equalsJWEFlattenedJSONSerialization,
+  equalsJWEJSONSerialization,
+  JWE,
+  JWEPerRecipientUnprotectedHeader,
+} from 'jwe';
 import { exportPublicKey, isJWK, JWK, JWKSet } from 'jwk';
 import { BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
 import { fetchData } from './rfc7520.5.test';
@@ -54,6 +59,30 @@ async function test(path: string): Promise<{
   // JWE 生成
   const jwe = await JWE.enc(encKeys, plaintext, header, iv, aad, options);
 
+  if (data.reproducible) {
+    log += 'テストには再現性があるため、シリアライズした結果を比較する\n';
+    if (data.output.compact) {
+      const compact = jwe.serialize('compact');
+      const same = data.output.compact === compact;
+      allGreen &&= same;
+      log += 'Compact: ' + (same ? '(OK) ' : 'X ');
+    }
+    if (data.output.json) {
+      const json = jwe.serialize('json');
+      const same = equalsJWEJSONSerialization(data.output.json, json);
+      allGreen &&= same;
+      log += 'JSON: ' + (same ? '(OK) ' : 'X ');
+    }
+    if (data.output.json_flat) {
+      const flat = jwe.serialize('json-flat');
+      const same = equalsJWEFlattenedJSONSerialization(data.output.json_flat, flat);
+      allGreen &&= same;
+      log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');
+    }
+    log += '\n';
+  } else {
+    log += 'テストには再現性がない (e.g. 署名アルゴリズムに乱数がからむ)\n';
+  }
   log += 'JWE の復号を行う\n';
   for (const key of keys.keys) {
     const keysOfOne: JWKSet = { keys: [key] };

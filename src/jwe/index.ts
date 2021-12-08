@@ -1,4 +1,7 @@
 import {
+  equalsJWEPerRecipientUnprotectedHeader,
+  equalsJWEProtectedHeader,
+  equalsJWESharedUnprotectedHeader,
   isJWEPerRecipientUnprotectedHeader,
   isJWEProtectedHeader,
   isJWESharedUnprotectedHeader,
@@ -9,6 +12,8 @@ import {
 } from './internal/header';
 import { JWE } from './internal/jwe';
 import {
+  equalsJWEFlattenedJSONSerialization,
+  equalsJWEJSONSerialization,
   isJWEFlattenedJSONSerialization,
   isJWEJSONSerialization,
   JWECompactSerialization,
@@ -20,14 +25,19 @@ export {
   JWEJOSEHeader,
   JWEPerRecipientUnprotectedHeader,
   isJWEPerRecipientUnprotectedHeader,
+  equalsJWEPerRecipientUnprotectedHeader,
   JWEProtectedHeader,
   isJWEProtectedHeader,
+  equalsJWEProtectedHeader,
   JWESharedUnprotectedHeader,
   isJWESharedUnprotectedHeader,
+  equalsJWESharedUnprotectedHeader,
   JWECompactSerialization,
   JWEJSONSerialization,
   JWEFlattenedJSONSerialization,
   isJWEJSONSerialization,
+  equalsJWEJSONSerialization,
   isJWEFlattenedJSONSerialization,
+  equalsJWEFlattenedJSONSerialization,
   JWE,
 };

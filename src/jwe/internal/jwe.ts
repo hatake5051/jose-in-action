@@ -145,9 +145,9 @@ export class JWE {
         return serializeCompact(
           this.p,
           this.rcpt.ek ?? new Uint8Array(),
+          this.iv,
           this.c,
-          this.tag,
-          this.iv
+          this.tag
         ) as SerializationType<S>;
       case 'json':
         return serializeJSON(
@@ -239,7 +239,7 @@ async function sendCEK(
   keys: JWKSet,
   h: JWEHeader,
   options?: { cek?: JWECEK; eprivk?: JWK<'EC', 'Priv'> | JWK<'EC', 'Priv'>[] }
-): Promise<{ cek: JWECEK; ek: JWEEncryptedKey }> {
+): Promise<{ cek: JWECEK; ek?: JWEEncryptedKey }> {
   if (h.cast('KE')) {
     if (!options?.cek) throw new EvalError(`Key Encryption では CEK を与えてください`);
     const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
@@ -261,7 +261,7 @@ async function sendCEK(
       throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
     const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
     const cek = await newDirectKeyAgreementer(h.Alg).partyU(key, h.JOSEHeader, eprivk);
-    return { cek, ek: new Uint8Array() };
+    return { cek };
   } else if (h.cast('KAKW')) {
     if (!options?.eprivk)
       throw new EvalError(
@@ -286,7 +286,7 @@ async function sendCEK(
     if (options?.cek) throw new EvalError(`Direct Encryption では CEK を与えないでください`);
     const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
     const cek = await newDirectEncrytor(h.Alg).extract(h.Alg, key);
-    return { cek, ek: new Uint8Array() };
+    return { cek };
   }
   throw new EvalError(`CEK を決定できませんでした`);
 }

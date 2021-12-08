@@ -2025,7 +2025,9 @@ class JWEHeader {
     }
 }
 const isJWESharedUnprotectedHeader = (arg) => isPartialJWEJOSEHeader(arg);
+const equalsJWESharedUnprotectedHeader = (l, r) => equalsPartialJWEJOSEHeader(l, r);
 const isJWEPerRecipientUnprotectedHeader = (arg) => isPartialJWEJOSEHeader(arg);
+const equalsJWEPerRecipientUnprotectedHeader = (l, r) => equalsPartialJWEJOSEHeader(l, r);
 const isJWEProtectedHeader = (arg) => isPartialJWEJOSEHeader(arg);
 const isJWEJOSEHeader = (arg) => isPartialJWEJOSEHeader(arg) && arg.alg != null && arg.enc != null;
 const jweJOSEHeaderNameList = [
@@ -2054,6 +2056,45 @@ const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
                     : n === 'x5c' || n === 'crit'
                         ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
                         : typeof arg[n] === 'string'));
+function equalsPartialJWEJOSEHeader(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of jweJOSEHeaderNameList) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        switch (n) {
+            case 'jwk': {
+                const ll = ln;
+                const rr = rn;
+                if (equalsJWK(ll, rr))
+                    continue;
+                return false;
+            }
+            case 'x5t':
+            case 'crit': {
+                const ll = ln;
+                const rr = rn;
+                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
+                    continue;
+                return false;
+            }
+            default: {
+                const ll = ln;
+                const rr = rn;
+                if (ll === rr)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 function serializationType$1(data) {
     if (typeof data == 'string') {
@@ -2108,6 +2149,35 @@ const isJWEJSONSerialization = (arg) => isObject(arg) &&
     arg.recipients.every((u) => isObject(u) &&
         (u.header == null || isJWEPerRecipientUnprotectedHeader(u.header)) &&
         (u.encrypted_key == null || typeof u.encrypted_key === 'string'));
+function equalsJWEJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of ['protected', 'iv', 'aad', 'ciphertext', 'tag']) {
+        if (l[n] == null && r[n] == null)
+            continue;
+        if (l[n] == null || r[n] == null)
+            return false;
+        if (l[n] === r[n])
+            continue;
+    }
+    if (!equalsJWESharedUnprotectedHeader(l.unprotected, r.unprotected))
+        return false;
+    return (l.recipients.every((ll) => r.recipients.some((rr) => equalsRecipientInJWEJSONSerialization(rr, ll))) &&
+        r.recipients.every((rr) => l.recipients.some((ll) => equalsRecipientInJWEJSONSerialization(ll, rr))));
+}
+function equalsRecipientInJWEJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    if (l.encrypted_key !== r.encrypted_key)
+        return false;
+    if (!equalsJWEPerRecipientUnprotectedHeader(l.header, r.header))
+        return false;
+    return true;
+}
 function serializeJSON$1(c, rcpt, hp, hsu, iv, aad, tag) {
     return {
         protected: hp ? BASE64URL(UTF8(JSON.stringify(hp))) : undefined,
@@ -2154,6 +2224,23 @@ const isJWEFlattenedJSONSerialization = (arg) => isObject(arg) &&
     (arg.tag == null || typeof arg.tag === 'string') &&
     (arg.header == null || isJWEPerRecipientUnprotectedHeader(arg.header)) &&
     (arg.encrypted_key == null || typeof arg.encrypted_key === 'string');
+function equalsJWEFlattenedJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of ['protected', 'iv', 'aad', 'ciphertext', 'tag']) {
+        if (l[n] == null && r[n] == null)
+            continue;
+        if (l[n] == null || r[n] == null)
+            return false;
+        if (l[n] === r[n])
+            continue;
+    }
+    if (!equalsJWESharedUnprotectedHeader(l.unprotected, r.unprotected))
+        return false;
+    return equalsRecipientInJWEJSONSerialization(l, r);
+}
 function serializeFlattenedJSON(c, h, ek, hp, hsu, iv, aad, tag) {
     const json = serializeJSON$1(c, { h, ek }, hp, hsu, iv, aad, tag);
     return {
@@ -2264,7 +2351,7 @@ class JWE {
                 if (!this.p) {
                     throw new TypeError('JWE Compact Serialization では JWE Protected Header が必須');
                 }
-                return serializeCompact$1(this.p, this.rcpt.ek ?? new Uint8Array(), this.c, this.tag, this.iv);
+                return serializeCompact$1(this.p, this.rcpt.ek ?? new Uint8Array(), this.iv, this.c, this.tag);
             case 'json':
                 return serializeJSON$1(this.c, this.rcpt, this.p, this.su, this.iv, this.aad, this.tag);
             case 'json-flat':
@@ -2340,7 +2427,7 @@ async function sendCEK(keys, h, options) {
             throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
         const key = identifyJWK(h.JOSEHeader, keys);
         const cek = await newDirectKeyAgreementer(h.Alg).partyU(key, h.JOSEHeader, eprivk);
-        return { cek, ek: new Uint8Array() };
+        return { cek };
     }
     else if (h.cast('KAKW')) {
         if (!options?.eprivk)
@@ -2361,7 +2448,7 @@ async function sendCEK(keys, h, options) {
             throw new EvalError(`Direct Encryption では CEK を与えないでください`);
         const key = identifyJWK(h.JOSEHeader, keys);
         const cek = await newDirectEncrytor(h.Alg).extract(h.Alg, key);
-        return { cek, ek: new Uint8Array() };
+        return { cek };
     }
     throw new EvalError(`CEK を決定できませんでした`);
 }
@@ -2517,6 +2604,31 @@ async function test$6(path) {
     };
     // JWE 生成
     const jwe = await JWE.enc(encKeys, plaintext, header, iv, aad, options);
+    if (data.reproducible) {
+        log += 'テストには再現性があるため、シリアライズした結果を比較する\n';
+        if (data.output.compact) {
+            const compact = jwe.serialize('compact');
+            const same = data.output.compact === compact;
+            allGreen &&= same;
+            log += 'Compact: ' + (same ? '(OK) ' : 'X ');
+        }
+        if (data.output.json) {
+            const json = jwe.serialize('json');
+            const same = equalsJWEJSONSerialization(data.output.json, json);
+            allGreen &&= same;
+            log += 'JSON: ' + (same ? '(OK) ' : 'X ');
+        }
+        if (data.output.json_flat) {
+            const flat = jwe.serialize('json-flat');
+            const same = equalsJWEFlattenedJSONSerialization(data.output.json_flat, flat);
+            allGreen &&= same;
+            log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');
+        }
+        log += '\n';
+    }
+    else {
+        log += 'テストには再現性がない (e.g. 署名アルゴリズムに乱数がからむ)\n';
+    }
     log += 'JWE の復号を行う\n';
     for (const key of keys.keys) {
         const keysOfOne = { keys: [key] };

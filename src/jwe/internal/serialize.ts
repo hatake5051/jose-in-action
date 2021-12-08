@@ -1,4 +1,9 @@
-import { isJWEPerRecipientUnprotectedHeader, isJWESharedUnprotectedHeader } from 'jwe';
+import {
+  equalsJWEPerRecipientUnprotectedHeader,
+  equalsJWESharedUnprotectedHeader,
+  isJWEPerRecipientUnprotectedHeader,
+  isJWESharedUnprotectedHeader,
+} from 'jwe';
 import { JWEAAD, JWECiphertext, JWEEncryptedKey, JWEIV, JWETag } from 'jwe/type';
 import { BASE64URL, BASE64URL_DECODE, isObject, UTF8, UTF8_DECODE } from 'utility';
 import {
@@ -16,10 +21,12 @@ export {
   deserializeCompact,
   JWEJSONSerialization,
   isJWEJSONSerialization,
+  equalsJWEJSONSerialization,
   serializeJSON,
   deserializeJSON,
   JWEFlattenedJSONSerialization,
   isJWEFlattenedJSONSerialization,
+  equalsJWEFlattenedJSONSerialization,
   serializeFlattenedJSON,
   deserializeFlattenedJSON,
 };
@@ -124,6 +131,42 @@ const isJWEJSONSerialization = (arg: unknown): arg is JWEJSONSerialization =>
       (u.encrypted_key == null || typeof u.encrypted_key === 'string')
   );
 
+function equalsJWEJSONSerialization(l?: JWEJSONSerialization, r?: JWEJSONSerialization): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  for (const n of ['protected', 'iv', 'aad', 'ciphertext', 'tag'] as const) {
+    if (l[n] == null && r[n] == null) continue;
+    if (l[n] == null || r[n] == null) return false;
+    if (l[n] === r[n]) continue;
+  }
+  if (!equalsJWESharedUnprotectedHeader(l.unprotected, r.unprotected)) return false;
+  return (
+    l.recipients.every((ll) =>
+      r.recipients.some((rr) => equalsRecipientInJWEJSONSerialization(rr, ll))
+    ) &&
+    r.recipients.every((rr) =>
+      l.recipients.some((ll) => equalsRecipientInJWEJSONSerialization(ll, rr))
+    )
+  );
+}
+
+function equalsRecipientInJWEJSONSerialization(
+  l?: {
+    header?: JWEPerRecipientUnprotectedHeader;
+    encrypted_key?: string;
+  },
+  r?: {
+    header?: JWEPerRecipientUnprotectedHeader;
+    encrypted_key?: string;
+  }
+): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  if (l.encrypted_key !== r.encrypted_key) return false;
+  if (!equalsJWEPerRecipientUnprotectedHeader(l.header, r.header)) return false;
+  return true;
+}
+
 function serializeJSON(
   c: JWECiphertext,
   rcpt:
@@ -205,6 +248,21 @@ const isJWEFlattenedJSONSerialization = (arg: unknown): arg is JWEFlattenedJSONS
   (arg.tag == null || typeof arg.tag === 'string') &&
   (arg.header == null || isJWEPerRecipientUnprotectedHeader(arg.header)) &&
   (arg.encrypted_key == null || typeof arg.encrypted_key === 'string');
+
+function equalsJWEFlattenedJSONSerialization(
+  l?: JWEFlattenedJSONSerialization,
+  r?: JWEFlattenedJSONSerialization
+): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  for (const n of ['protected', 'iv', 'aad', 'ciphertext', 'tag'] as const) {
+    if (l[n] == null && r[n] == null) continue;
+    if (l[n] == null || r[n] == null) return false;
+    if (l[n] === r[n]) continue;
+  }
+  if (!equalsJWESharedUnprotectedHeader(l.unprotected, r.unprotected)) return false;
+  return equalsRecipientInJWEJSONSerialization(l, r);
+}
 
 function serializeFlattenedJSON(
   c: JWECiphertext,

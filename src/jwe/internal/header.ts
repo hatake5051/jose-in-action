@@ -1,5 +1,5 @@
 import { KeyMgmtMode } from 'jwe/ineterface';
-import { isJWK, JWK } from 'jwk';
+import { equalsJWK, isJWK, JWK } from 'jwk';
 import { isObject } from 'utility';
 import {
   AlgSpecificJOSEHeader,
@@ -21,10 +21,13 @@ export {
   JWEJOSEHeader,
   JWEProtectedHeader,
   isJWEProtectedHeader,
+  equalsJWEProtectedHeader,
   JWESharedUnprotectedHeader,
   isJWESharedUnprotectedHeader,
+  equalsJWESharedUnprotectedHeader,
   JWEPerRecipientUnprotectedHeader,
   isJWEPerRecipientUnprotectedHeader,
+  equalsJWEPerRecipientUnprotectedHeader,
 };
 
 class JWEHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> {
@@ -96,6 +99,11 @@ type JWESharedUnprotectedHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JW
 const isJWESharedUnprotectedHeader = (arg: unknown): arg is JWESharedUnprotectedHeader =>
   isPartialJWEJOSEHeader(arg);
 
+const equalsJWESharedUnprotectedHeader = (
+  l?: JWESharedUnprotectedHeader,
+  r?: JWESharedUnprotectedHeader
+) => equalsPartialJWEJOSEHeader(l, r);
+
 type JWEPerRecipientUnprotectedHeader<
   A extends JWEAlg = JWEAlg,
   E extends JWEEnc = JWEEnc
@@ -105,12 +113,20 @@ const isJWEPerRecipientUnprotectedHeader = (
   arg: unknown
 ): arg is JWEPerRecipientUnprotectedHeader => isPartialJWEJOSEHeader(arg);
 
+const equalsJWEPerRecipientUnprotectedHeader = (
+  l?: JWEPerRecipientUnprotectedHeader,
+  r?: JWEPerRecipientUnprotectedHeader
+) => equalsPartialJWEJOSEHeader(l, r);
+
 type JWEProtectedHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> = Partial<
   JWEJOSEHeader<A, E> & AlgSpecificJOSEHeader<A>
 >;
 
 const isJWEProtectedHeader = (arg: unknown): arg is JWEProtectedHeader =>
   isPartialJWEJOSEHeader(arg);
+
+const equalsJWEProtectedHeader = (l?: JWEProtectedHeader, r?: JWEProtectedHeader) =>
+  equalsPartialJWEJOSEHeader(l, r);
 
 type JWEJOSEHeader<A extends JWEAlg = JWEAlg, E extends JWEEnc = JWEEnc> = {
   /**
@@ -226,3 +242,39 @@ const isPartialJWEJOSEHeader = (arg: unknown): arg is Partial<JWEJOSEHeader> =>
         ? Array.isArray(arg[n]) && (arg[n] as unknown[]).every((m) => typeof m === 'string')
         : typeof arg[n] === 'string')
   );
+
+function equalsPartialJWEJOSEHeader(
+  l?: Partial<JWEJOSEHeader>,
+  r?: Partial<JWEJOSEHeader>
+): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  for (const n of jweJOSEHeaderNameList) {
+    const ln = l[n];
+    const rn = r[n];
+    if (ln == null && rn == null) continue;
+    if (ln == null || rn == null) return false;
+    switch (n) {
+      case 'jwk': {
+        const ll = ln as JWK;
+        const rr = rn as JWK;
+        if (equalsJWK(ll, rr)) continue;
+        return false;
+      }
+      case 'x5t':
+      case 'crit': {
+        const ll = ln as string[];
+        const rr = rn as string[];
+        if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l))) continue;
+        return false;
+      }
+      default: {
+        const ll = ln as string;
+        const rr = rn as string;
+        if (ll === rr) continue;
+        return false;
+      }
+    }
+  }
+  return true;
+}
