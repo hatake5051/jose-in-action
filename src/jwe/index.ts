@@ -1,13 +1,7 @@
 import { JWE } from './internal/jwe';
-import {
-  JWECompactSerialization,
-  JWEFlattenedJSONSerialization,
-  JWEFlattenedJSONSerializer,
-  JWEJSONSerialization,
-  JWEJSONSerializer,
-} from './internal/serialize';
+import { JWEFlattenedJSONSerializer, JWEJSONSerializer } from './internal/serialize';
 
-export { JWECompactSerialization, JWEJSONSerialization, JWEFlattenedJSONSerialization, JWE };
+export { JWE };
 
 export const isJWEJSONSerialization = JWEJSONSerializer.is;
 export const equalsJWEJSONSerialization = JWEJSONSerializer.equals;

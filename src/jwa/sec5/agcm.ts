@@ -2,7 +2,7 @@ import { EncOperator } from 'jwe/ineterface';
 import { JWEAAD, JWECEK, JWECiphertext, JWEIV, JWETag } from 'jwe/type';
 import { CONCAT } from 'utility';
 
-export { AGCMEnc, isAGCMEnc, AGCMEncOperator };
+export { AGCMEnc, isAGCMEnc, AGCMEncOperator, generateCEKForAGCMEnc };
 
 const AGCMEncOperator: EncOperator<AGCMEnc> = { enc, dec };
 /**
@@ -50,4 +50,18 @@ async function dec(
     CONCAT(c, tag)
   );
   return new Uint8Array(e);
+}
+
+function generateCEKForAGCMEnc(enc: AGCMEnc): JWECEK {
+  const len = (() => {
+    switch (enc) {
+      case 'A128GCM':
+        return 128 / 8;
+      case 'A192GCM':
+        return 192 / 8;
+      case 'A256GCM':
+        return 256 / 8;
+    }
+  })();
+  return window.crypto.getRandomValues(new Uint8Array(len)) as JWECEK;
 }

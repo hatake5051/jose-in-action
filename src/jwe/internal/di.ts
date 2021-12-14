@@ -12,7 +12,7 @@ import {
   newJWAKeyEncryptor,
   newJWAKeyWrapper,
 } from 'jwa/sec4/alg';
-import { newJWAEncOperator } from 'jwa/sec5/encalg';
+import { generateCEKforJWACEK, isJWAEncAlg, newJWAEncOperator } from 'jwa/sec5/encalg';
 import {
   DirectEncryptor,
   DirectKeyAgreementer,
@@ -22,9 +22,11 @@ import {
   KeyMgmtMode,
   KeyWrapper,
 } from 'jwe/ineterface';
+import { JWECEK } from 'jwe/type';
 
 export {
   keyMgmtModeFromAlg,
+  generateCEK,
   newKeyEncryptor,
   newKeyWrappaer,
   newDirectKeyAgreementer,
@@ -44,6 +46,11 @@ function keyMgmtModeFromAlg(alg: Alg<'JWE'>): KeyMgmtMode {
     return keyMgmtModeFromJWAAlg(alg);
   const a: never = alg;
   throw new TypeError(`${a} の Key Management Mode がわからない`);
+}
+
+function generateCEK(enc: EncAlg): JWECEK {
+  if (isJWAEncAlg(enc)) return generateCEKforJWACEK(enc);
+  throw new TypeError(`${enc} の CEK を生成できない`);
 }
 
 function newKeyEncryptor<A extends Alg<'JWE'>>(alg: A): KeyEncryptor<A> {

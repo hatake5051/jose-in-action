@@ -36,7 +36,7 @@ const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
       };
     }
     const eprivk_api = await window.crypto.subtle.generateKey(
-      { name: 'ECDSA', namedCurve: key.crv },
+      { name: 'ECDH', namedCurve: key.crv },
       true,
       ['deriveBits', 'deriveKey']
     );
@@ -44,7 +44,7 @@ const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
       throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
     }
     const epk = await window.crypto.subtle.exportKey('jwk', eprivk_api.privateKey);
-    if (!isJWK<'EC', 'Priv'>(epk)) {
+    if (!isJWK(epk, 'EC', 'Priv')) {
       throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
     }
     return {
@@ -90,15 +90,15 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
       };
     }
     const eprivk_api = await window.crypto.subtle.generateKey(
-      { name: 'ECDSA', namedCurve: key.crv },
+      { name: 'ECDH', namedCurve: key.crv },
       true,
       ['deriveBits', 'deriveKey']
     );
     if (!eprivk_api.privateKey) {
       throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
     }
-    const epk = await window.crypto.subtle.exportKey('jwk', eprivk_api.privateKey);
-    if (!isJWK<'EC', 'Priv'>(epk)) {
+    const epk: unknown = await window.crypto.subtle.exportKey('jwk', eprivk_api.privateKey);
+    if (!isJWK(epk, 'EC', 'Priv')) {
       throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
     }
     return {

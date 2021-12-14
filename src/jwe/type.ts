@@ -195,3 +195,29 @@ export function equalsJWEJOSEHeader(
   }
   return true;
 }
+
+export type JWECompactSerialization = string;
+
+export type JWEJSONSerialization = {
+  protected?: string;
+  unprotected?: JWESharedUnprotectedHeader;
+  iv?: string;
+  aad?: string;
+  ciphertext: string;
+  tag?: string;
+  recipients: {
+    header?: JWEPerRecipientUnprotectedHeader;
+    encrypted_key?: string;
+  }[];
+};
+
+export type JWEFlattenedJSONSerialization = {
+  protected?: string;
+  unprotected?: JWESharedUnprotectedHeader;
+  header?: JWEPerRecipientUnprotectedHeader;
+  encrypted_key?: string;
+  iv?: string;
+  aad?: string;
+  ciphertext: string;
+  tag?: string;
+};

@@ -91,7 +91,7 @@ const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams =>
       case 'use':
         return isKeyUse(arg[n]);
       case 'key_ops':
-        return isKeyOps(arg[n]);
+        return Array.isArray(arg.key_ops) && arg.key_ops.every((x) => isKeyOps(x));
       case 'alg':
         return isAlg(arg[n]) || isEncAlg(arg[n]);
       case 'x5c':

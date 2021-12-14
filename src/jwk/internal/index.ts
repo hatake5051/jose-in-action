@@ -1,6 +1,6 @@
 // --------------------BEGIN JWK definition --------------------
 
-import { Alg, isAlg, JOSEHeader, KeyUse, Kty, KtyFromAlg, ktyFromAlg } from 'iana';
+import { Alg, JOSEHeader, KeyUse, Kty, KtyFromAlg, ktyFromAlg } from 'iana';
 import { equalsJWAJWK, exportJWAPublicKey, isJWAJWK, JWAJWK } from 'jwa/sec6/jwk';
 import { isJWAKty, JWAKty } from 'jwa/sec6/kty';
 import { BASE64URL, isObject } from 'utility';
@@ -81,11 +81,15 @@ type AsymKty = 'Pub' | 'Priv';
 function identifyJWK<A extends Alg>(h: JOSEHeader, set?: JWKSet): JWK<KtyFromAlg<A>> {
   // JWKSet が JOSE Header 外の情報で取得できていれば、そこから必要な鍵を選ぶ
   if (set) {
-    for (const key of set.keys) {
+    const filteredByAlg = set.keys.filter((key) => !h.alg || key.kty === ktyFromAlg(h.alg));
+    if (filteredByAlg.length === 1) {
+      return filteredByAlg[0] as JWK<KtyFromAlg<A>>;
+    }
+    for (const key of filteredByAlg) {
       // RFC7515#4.5 kid Parameter
       // JWK Set のなかで kid が使われつとき、異なる鍵に別々の "kid" 値が使われるべき (SHOULD)
       // (異なる鍵で同じ "kid" 値が使われる例: 異なる "kty" で、それらを使うアプリで同等の代替鍵としてみなされる場合)
-      if (isAlg(h.alg) && key.kty === ktyFromAlg(h.alg) && key.kid === h.kid) {
+      if (key.kid === h.kid) {
         return key as JWK<KtyFromAlg<A>>;
       }
     }

@@ -392,7 +392,7 @@ const isCommonJWKParams = (arg) => isObject(arg) &&
             case 'use':
                 return isKeyUse(arg[n]);
             case 'key_ops':
-                return isKeyOps(arg[n]);
+                return Array.isArray(arg.key_ops) && arg.key_ops.every((x) => isKeyOps(x));
             case 'alg':
                 return isAlg(arg[n]) || isEncAlg(arg[n]);
             case 'x5c':
@@ -1154,11 +1154,15 @@ const isJWKSet = (arg) => isObject(arg) && Array.isArray(arg.keys) && arg.keys.e
 function identifyJWK(h, set) {
     // JWKSet が JOSE Header 外の情報で取得できていれば、そこから必要な鍵を選ぶ
     if (set) {
-        for (const key of set.keys) {
+        const filteredByAlg = set.keys.filter((key) => !h.alg || key.kty === ktyFromAlg(h.alg));
+        if (filteredByAlg.length === 1) {
+            return filteredByAlg[0];
+        }
+        for (const key of filteredByAlg) {
             // RFC7515#4.5 kid Parameter
             // JWK Set のなかで kid が使われつとき、異なる鍵に別々の "kid" 値が使われるべき (SHOULD)
             // (異なる鍵で同じ "kid" 値が使われる例: 異なる "kty" で、それらを使うアプリで同等の代替鍵としてみなされる場合)
-            if (isAlg(h.alg) && key.kty === ktyFromAlg(h.alg) && key.kid === h.kid) {
+            if (key.kid === h.kid) {
                 return key;
             }
         }
@@ -1243,12 +1247,12 @@ const ECDHDirectKeyAgreementer = {
                 h: h.epk ? undefined : { epk: exportPublicKey(eprivk) },
             };
         }
-        const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
+        const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDH', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
         if (!eprivk_api.privateKey) {
             throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
         }
         const epk = await window.crypto.subtle.exportKey('jwk', eprivk_api.privateKey);
-        if (!isJWK(epk)) {
+        if (!isJWK(epk, 'EC', 'Priv')) {
             throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
         }
         return {
@@ -1287,12 +1291,12 @@ const ECDHKeyAgreementerWithKeyWrapping = {
                 h: h.epk ? undefined : { epk: exportPublicKey(eprivk) },
             };
         }
-        const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
+        const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDH', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
         if (!eprivk_api.privateKey) {
             throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
         }
         const epk = await window.crypto.subtle.exportKey('jwk', eprivk_api.privateKey);
-        if (!isJWK(epk)) {
+        if (!isJWK(epk, 'EC', 'Priv')) {
             throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
         }
         return {
@@ -1914,6 +1918,12 @@ async function enc$2(enc, cek, m, aad, iv) {
 async function dec$2(enc, cek, iv, aad, c, tag) {
     return await decryptAES_CBC_HMAC_SHA2(enc, cek, aad, iv, c, tag);
 }
+function generateCEKForACBCEnc(enc) {
+    const { MAC_KEY_LEN, ENC_KEY_LEN } = algParams(enc);
+    const len = MAC_KEY_LEN + ENC_KEY_LEN;
+    const cek = window.crypto.getRandomValues(new Uint8Array(len));
+    return cek;
+}
 /**
  * RFC7518#5.2.2.1 AES_CBC_HMAC_SHA2 Encryption を実装する。
  */
@@ -2037,8 +2047,28 @@ async function dec$1(enc, cek, iv, aad, c, tag) {
     const e = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv, additionalData: aad }, k, CONCAT(c, tag));
     return new Uint8Array(e);
 }
+function generateCEKForAGCMEnc(enc) {
+    const len = (() => {
+        switch (enc) {
+            case 'A128GCM':
+                return 128 / 8;
+            case 'A192GCM':
+                return 192 / 8;
+            case 'A256GCM':
+                return 256 / 8;
+        }
+    })();
+    return window.crypto.getRandomValues(new Uint8Array(len));
+}
 
 const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
+function generateCEKforJWACEK(enc) {
+    if (isACBCEnc(enc))
+        return generateCEKForACBCEnc(enc);
+    if (isAGCMEnc(enc))
+        return generateCEKForAGCMEnc(enc);
+    throw new TypeError(`${enc} は JWAEncAlg ではない`);
+}
 function newJWAEncOperator(enc) {
     if (isACBCEnc(enc))
         return ACBCEncOperator;
@@ -2591,6 +2621,11 @@ function keyMgmtModeFromAlg(alg) {
         return keyMgmtModeFromJWAAlg(alg);
     const a = alg;
     throw new TypeError(`${a} の Key Management Mode がわからない`);
+}
+function generateCEK(enc) {
+    if (isJWAEncAlg(enc))
+        return generateCEKforJWACEK(enc);
+    throw new TypeError(`${enc} の CEK を生成できない`);
 }
 function newKeyEncryptor(alg) {
     if (isJWAKEAlg(alg))
@@ -3390,8 +3425,13 @@ class JWE {
         const header = JWEHeaderBuilder(algPerRcpt, encalg, options?.header);
         // Key Management を行う(Encrypted Key の生成と CEK の用意)
         let keyMgmt;
+        let keyMgmtOpt = options?.keyMgmt;
+        if (!keyMgmtOpt?.cek) {
+            const cek = generateCEK(encalg);
+            keyMgmtOpt = { ...keyMgmtOpt, cek };
+        }
         if (Array.isArray(algPerRcpt)) {
-            const list = await Promise.all(algPerRcpt.map(async (_a, i) => await sendCEK(keys, header.JOSE(i), options?.keyMgmt)));
+            const list = await Promise.all(algPerRcpt.map(async (_a, i) => await sendCEK(keys, header.JOSE(i), keyMgmtOpt)));
             // recipient ごとに行った Key Management の整合性チェック
             if (new Set(list.map((e) => e.cek)).size != 1) {
                 throw new EvalError(`複数人に対する暗号化で異なる CEK を使おうとしている`);
@@ -3404,7 +3444,7 @@ class JWE {
             keyMgmt = { cek, ek: list.map((e) => e.ek) };
         }
         else {
-            const { cek, ek, h } = await sendCEK(keys, header.JOSE(), options?.keyMgmt);
+            const { cek, ek, h } = await sendCEK(keys, header.JOSE(), keyMgmtOpt);
             if (h)
                 header.update(h);
             keyMgmt = { cek, ek };
@@ -3535,8 +3575,6 @@ async function sendCEK(keys, h, options) {
             return { ek, cek: options.cek, h: updatedH };
         }
         case 'DKA': {
-            if (options?.cek)
-                throw new EvalError(`Direct Key Agreement では CEK を与えないでください`);
             const eprivk = !options?.eprivk
                 ? undefined
                 : Array.isArray(options.eprivk)
@@ -3559,8 +3597,6 @@ async function sendCEK(keys, h, options) {
             return { ek, cek: options.cek, h: updatedH };
         }
         case 'DE': {
-            if (options?.cek)
-                throw new EvalError(`Direct Encryption では CEK を与えないでください`);
             const key = identifyJWK(h, keys);
             const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
             return { cek };

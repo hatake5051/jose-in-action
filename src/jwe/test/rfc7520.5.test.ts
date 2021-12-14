@@ -1,12 +1,9 @@
 import { Alg, EncAlg, isAlg, isEncAlg, isJOSEHeader } from 'iana';
+import { isJWEFlattenedJSONSerialization, isJWEJSONSerialization } from 'jwe';
 import {
-  isJWEFlattenedJSONSerialization,
-  isJWEJSONSerialization,
   JWECompactSerialization,
   JWEFlattenedJSONSerialization,
   JWEJSONSerialization,
-} from 'jwe';
-import {
   JWEPerRecipientUnprotectedHeader,
   JWEProtectedHeader,
   JWESharedUnprotectedHeader,

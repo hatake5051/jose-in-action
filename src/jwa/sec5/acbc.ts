@@ -2,7 +2,7 @@ import { EncOperator } from 'jwe/ineterface';
 import { JWEAAD, JWECEK, JWECiphertext, JWEIV, JWETag } from 'jwe/type';
 import { BASE64URL, CONCAT } from 'utility';
 
-export { ACBCEnc, isACBCEnc, ACBCEncOperator };
+export { ACBCEnc, isACBCEnc, ACBCEncOperator, generateCEKForACBCEnc };
 
 /**
  * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムの実装.
@@ -39,6 +39,13 @@ async function dec(
   tag: JWETag
 ): Promise<Uint8Array> {
   return await decryptAES_CBC_HMAC_SHA2(enc, cek, aad, iv, c, tag);
+}
+
+function generateCEKForACBCEnc(enc: ACBCEnc): JWECEK {
+  const { MAC_KEY_LEN, ENC_KEY_LEN } = algParams(enc);
+  const len = MAC_KEY_LEN + ENC_KEY_LEN;
+  const cek = window.crypto.getRandomValues(new Uint8Array(len));
+  return cek as JWECEK;
 }
 
 /**

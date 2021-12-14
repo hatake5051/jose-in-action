@@ -13,6 +13,7 @@ import {
 import { equalsJWK, exportPublicKey, identifyJWK, isJWK, JWK, JWKSet } from 'jwk';
 import { ASCII, BASE64URL } from 'utility';
 import {
+  generateCEK,
   keyMgmtModeFromAlg,
   newDirectEncrytor,
   newDirectKeyAgreementer,
@@ -97,9 +98,14 @@ export class JWE {
 
     // Key Management を行う(Encrypted Key の生成と CEK の用意)
     let keyMgmt: { cek: JWECEK; ek?: JWEEncryptedKey | Array<JWEEncryptedKey | undefined> };
+    let keyMgmtOpt = options?.keyMgmt;
+    if (!keyMgmtOpt?.cek) {
+      const cek = generateCEK(encalg);
+      keyMgmtOpt = { ...keyMgmtOpt, cek };
+    }
     if (Array.isArray(algPerRcpt)) {
       const list = await Promise.all(
-        algPerRcpt.map(async (_a, i) => await sendCEK(keys, header.JOSE(i), options?.keyMgmt))
+        algPerRcpt.map(async (_a, i) => await sendCEK(keys, header.JOSE(i), keyMgmtOpt))
       );
       // recipient ごとに行った Key Management の整合性チェック
       if (new Set(list.map((e) => e.cek)).size != 1) {
@@ -111,11 +117,10 @@ export class JWE {
       });
       keyMgmt = { cek, ek: list.map((e) => e.ek) };
     } else {
-      const { cek, ek, h } = await sendCEK(keys, header.JOSE(), options?.keyMgmt);
+      const { cek, ek, h } = await sendCEK(keys, header.JOSE(), keyMgmtOpt);
       if (h) header.update(h);
       keyMgmt = { cek, ek };
     }
-
     // Key Management で得られた CEK を使って
     // 平文を暗号化する。
     const { c, tag, iv } = await enc(
@@ -323,7 +328,6 @@ async function sendCEK(
       return { ek, cek: options.cek, h: updatedH };
     }
     case 'DKA': {
-      if (options?.cek) throw new EvalError(`Direct Key Agreement では CEK を与えないでください`);
       const eprivk = !options?.eprivk
         ? undefined
         : Array.isArray(options.eprivk)
@@ -351,7 +355,6 @@ async function sendCEK(
       return { ek, cek: options.cek, h: updatedH };
     }
     case 'DE': {
-      if (options?.cek) throw new EvalError(`Direct Encryption では CEK を与えないでください`);
       const key = identifyJWK(h, keys);
       const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
       return { cek };

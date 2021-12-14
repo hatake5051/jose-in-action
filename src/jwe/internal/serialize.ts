@@ -2,8 +2,11 @@ import { equalsJOSEHeader, isJOSEHeader } from 'iana';
 import {
   JWEAAD,
   JWECiphertext,
+  JWECompactSerialization,
   JWEEncryptedKey,
+  JWEFlattenedJSONSerialization,
   JWEIV,
+  JWEJSONSerialization,
   JWEPerRecipientUnprotectedHeader,
   JWESharedUnprotectedHeader,
   JWETag,
@@ -34,24 +37,9 @@ export function jweSerializationFormat(data: unknown): JWESerializationFormat {
   throw new TypeError(`${data} は Serialized JWE ではない`);
 }
 
-export type JWECompactSerialization = string;
-
 export const JWECompactSerializer = {
   serialize: serializeCompact,
   deserialize: deserializeCompact,
-};
-
-export type JWEJSONSerialization = {
-  protected?: string;
-  unprotected?: JWESharedUnprotectedHeader;
-  iv?: string;
-  aad?: string;
-  ciphertext: string;
-  tag?: string;
-  recipients: {
-    header?: JWEPerRecipientUnprotectedHeader;
-    encrypted_key?: string;
-  }[];
 };
 
 export const JWEJSONSerializer = {
@@ -59,17 +47,6 @@ export const JWEJSONSerializer = {
   deserialize: deserializeJSON,
   is: isJWEJSONSerialization,
   equals: equalsJWEJSONSerialization,
-};
-
-export type JWEFlattenedJSONSerialization = {
-  protected?: string;
-  unprotected?: JWESharedUnprotectedHeader;
-  header?: JWEPerRecipientUnprotectedHeader;
-  encrypted_key?: string;
-  iv?: string;
-  aad?: string;
-  ciphertext: string;
-  tag?: string;
 };
 
 export const JWEFlattenedJSONSerializer = {
