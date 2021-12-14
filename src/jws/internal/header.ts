@@ -11,6 +11,7 @@ export {
   JWSUnprotectedHeader,
   isJWSUnprotectedHeader,
   JWSJOSEHeader,
+  isJWSJOSEHeader,
   equalsJWSJOSEHeader,
 };
 

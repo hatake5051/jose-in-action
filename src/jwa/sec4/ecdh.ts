@@ -1,7 +1,7 @@
-import { EncAlg, isEncAlg } from 'iana';
+import { EncAlg } from 'iana';
 import { DirectKeyAgreementer, KeyAgreementerWithKeyWrapping } from 'jwe/ineterface';
-import { JWECEK, JWEEncryptedKey } from 'jwe/type';
-import { isJWK, JWK } from 'jwk';
+import { isJWEJOSEHeader, JWECEK, JWEEncryptedKey, JWEJOSEHeader } from 'jwe/type';
+import { equalsJWK, exportPublicKey, isJWK, JWK } from 'jwk';
 import { ASCII, BASE64URL, BASE64URL_DECODE, CONCAT, isObject } from 'utility';
 import { AKWKeyWrapper } from './aeskw';
 
@@ -11,7 +11,10 @@ export {
   ECDH_ESKWAlg,
   isECDH_ESKWAlg,
   ECDH_ESHeaderParams,
+  ECDH_ESHeaderParamNames,
   isECDH_ESHeaderParams,
+  isPartialECDH_ESHeaderParams,
+  equalsECDH_ESHeaderParams,
   ECDHDirectKeyAgreementer,
   ECDHKeyAgreementerWithKeyWrapping,
 };
@@ -19,17 +22,52 @@ export {
 const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
   partyU: async (
     key: JWK<'EC', 'Pub'>,
-    h: Partial<ECDH_ESHeaderParams>,
-    eprivk: JWK<'EC', 'Priv'>
-  ): Promise<JWECEK> => {
-    if (!is_omie_epk_ECDH_ESHeaderParams(h))
-      throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc)');
-    return agree(key, eprivk, h);
+    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>,
+    eprivk?: JWK<'EC', 'Priv'>
+  ) => {
+    if (!isJWEJOSEHeader(h)) {
+      throw new TypeError('JWE に必須のヘッダパラメータがない');
+    }
+    if (!isECDH_ESAlg(h.alg)) {
+      throw new TypeError('ECDH Direct Key Agreement Algorithm Identifier ではない');
+    }
+    if (eprivk) {
+      if (isECDH_ESHeaderParams(h)) {
+        return { cek: await agree(key, eprivk, { ...h, alg: h.alg }) };
+      }
+      return {
+        cek: await agree(key, eprivk, { ...h, alg: h.alg }),
+        h: { epk: exportPublicKey<'EC'>(eprivk) },
+      };
+    }
+    const eprivk_api = await window.crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: key.crv },
+      true,
+      ['deriveBits', 'deriveKey']
+    );
+    if (!eprivk_api.privateKey) {
+      throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
+    }
+    const epk = await window.crypto.subtle.exportKey('jwk', eprivk_api.privateKey);
+    if (!isJWK<'EC', 'Priv'>(epk)) {
+      throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
+    }
+    return {
+      cek: await agree(key, epk, { ...h, alg: h.alg }),
+      h: { epk: exportPublicKey<'EC'>(epk) },
+    };
   },
-  partyV: async (key: JWK<'EC', 'Priv'>, h: Partial<ECDH_ESHeaderParams>): Promise<JWECEK> => {
-    if (!isECDH_ESHeaderParams(h))
-      throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc, epk)');
-    return agree(h.epk, key, h);
+  partyV: async (
+    key: JWK<'EC', 'Priv'>,
+    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>
+  ): Promise<JWECEK> => {
+    if (!isJWEJOSEHeader(h) || !isECDH_ESHeaderParams(h)) {
+      throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+    }
+    if (!isECDH_ESAlg(h.alg)) {
+      throw new TypeError('ECDH Direct Key Agreement Algorithm Identifier ではない');
+    }
+    return agree(h.epk, key, { ...h, alg: h.alg });
   },
 };
 
@@ -37,26 +75,57 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
   wrap: async (
     key: JWK<'EC', 'Pub'>,
     cek: JWECEK,
-    h: Partial<ECDH_ESHeaderParams>,
-    eprivk: JWK<'EC', 'Priv'>
-  ) => {
-    if (!is_omie_epk_ECDH_ESHeaderParams(h))
-      throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc)');
-    return wrap(key, cek, h, eprivk);
+    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>,
+    eprivk?: JWK<'EC', 'Priv'>
+  ): Promise<{ ek: JWEEncryptedKey; h?: ECDH_ESHeaderParams }> => {
+    if (!isJWEJOSEHeader(h)) {
+      throw new TypeError('JWE に必須のヘッダパラメータがない');
+    }
+    if (!isECDH_ESKWAlg(h.alg)) {
+      throw new TypeError('ECDH with Key Wrapping algorithm identifier ではない');
+    }
+    if (eprivk) {
+      return {
+        ek: await wrap(key, cek, { ...h, alg: h.alg }, eprivk),
+        h: isECDH_ESHeaderParams(h) ? undefined : { epk: exportPublicKey<'EC'>(eprivk) },
+      };
+    }
+    const eprivk_api = await window.crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: key.crv },
+      true,
+      ['deriveBits', 'deriveKey']
+    );
+    if (!eprivk_api.privateKey) {
+      throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
+    }
+    const epk = await window.crypto.subtle.exportKey('jwk', eprivk_api.privateKey);
+    if (!isJWK<'EC', 'Priv'>(epk)) {
+      throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
+    }
+    return {
+      ek: await wrap(key, cek, { ...h, alg: h.alg }, epk),
+      h: { epk: exportPublicKey<'EC'>(epk) },
+    };
   },
-  unwrap: async (key: JWK<'EC', 'Priv'>, ek: JWEEncryptedKey, h: Partial<ECDH_ESHeaderParams>) => {
-    if (!isECDH_ESHeaderParams(h))
-      throw new TypeError('JOSEHeader に必須パラメータがない (alg, enc, epk)');
-    return unwrap(key, ek, h);
+  unwrap: async (
+    key: JWK<'EC', 'Priv'>,
+    ek: JWEEncryptedKey,
+    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>
+  ) => {
+    if (!isJWEJOSEHeader(h) || !isECDH_ESHeaderParams(h)) {
+      throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+    }
+    if (!isECDH_ESKWAlg(h.alg)) {
+      throw new TypeError('ECDH with Key Wrapping algorithm identifier ではない');
+    }
+    return unwrap(key, ek, { ...h, alg: h.alg });
   },
 };
 
-// /**
-//  * RFC7518#4.6 Key Agreement with Elliptic Curve Diffie-Hellman Ephemeral Static (ECDH-ES)
-//  * ECDH 鍵合意アルゴリズムを列挙する。
-//  */
-// type ECDHAlg = ECDH_ESAlg | ECDH_ESKWAlg;
-// const isECDHAlg = (arg: unknown): arg is ECDHAlg => isECDH_ESAlg(arg) || isECDH_ESKWAlg(arg);
+/**
+ * RFC7518#4.6 Key Agreement with Elliptic Curve Diffie-Hellman Ephemeral Static (ECDH-ES)
+ * ECDH 鍵合意アルゴリズムを列挙する。
+ */
 
 /**
  * "enc" アルゴリズムのための Content Encryption Key として直接、鍵合意結果を使うアルゴリズムを列挙。
@@ -78,11 +147,9 @@ const ecdhEsKwAlgList = ['ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'] a
 
 /**
  * RFC7518#4.6.1 Header Parameters Used for ECDH Key Agreement
- * ECDH 鍵合意アルゴリズムのためのヘッダパラメータに、必須の alg と enc を加えたもの
+ * ECDH 鍵合意アルゴリズムのためのヘッダパラメータ
  */
 type ECDH_ESHeaderParams = {
-  alg: ECDH_ESAlg | ECDH_ESKWAlg;
-  enc: EncAlg;
   /**
    * RFC8518#4.6.1.1 Ephemeral Public Key Header Parameter
    * 鍵合意アルゴリズム使用される、 originator が作成した公開鍵であり、 JWK で表現。
@@ -104,20 +171,25 @@ type ECDH_ESHeaderParams = {
   apv?: string;
 };
 
-const isECDH_ESHeaderParams = (arg: unknown): arg is ECDH_ESHeaderParams =>
-  isObject<ECDH_ESHeaderParams>(arg) &&
-  (isECDH_ESAlg(arg.alg) || isECDH_ESKWAlg(arg.alg)) &&
-  isEncAlg(arg.enc) &&
-  isJWK<'EC', 'Pub'>(arg.epk) &&
-  (arg.apu == null || typeof arg.apu === 'string') &&
-  (arg.apv == null || typeof arg.apv === 'string');
+const ECDH_ESHeaderParamNames = ['epk', 'apu', 'apv'] as const;
 
-const is_omie_epk_ECDH_ESHeaderParams = (arg: unknown): arg is Omit<ECDH_ESHeaderParams, 'epk'> =>
-  isObject<ECDH_ESHeaderParams>(arg) &&
-  (isECDH_ESAlg(arg.alg) || isECDH_ESKWAlg(arg.alg)) &&
-  isEncAlg(arg.enc) &&
-  (arg.apu == null || typeof arg.apu === 'string') &&
-  (arg.apv == null || typeof arg.apv === 'string');
+const isECDH_ESHeaderParams = (arg: unknown): arg is ECDH_ESHeaderParams =>
+  isPartialECDH_ESHeaderParams(arg) && arg.epk != null;
+
+const isPartialECDH_ESHeaderParams = (arg: unknown): arg is Partial<ECDH_ESHeaderParams> =>
+  isObject<Partial<ECDH_ESHeaderParams>>(arg) &&
+  ECDH_ESHeaderParamNames.every(
+    (n) => !arg[n] || (n === 'epk' ? isJWK<'EC', 'Pub'>(arg.epk) : typeof arg[n] === 'string')
+  );
+
+const equalsECDH_ESHeaderParams = (
+  l?: Partial<ECDH_ESHeaderParams>,
+  r?: Partial<ECDH_ESHeaderParams>
+): boolean => {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  return equalsJWK(l.epk, r.epk) && l.apu === r.apu && l.apv === r.apv;
+};
 
 /**
  * RFC7518#4.6.2 に基づいて鍵合意を行う。
@@ -127,8 +199,8 @@ const is_omie_epk_ECDH_ESHeaderParams = (arg: unknown): arg is Omit<ECDH_ESHeade
 async function agree(
   pub: JWK<'EC', 'Pub'>,
   priv: JWK<'EC', 'Priv'>,
-  h: Pick<ECDH_ESHeaderParams, 'enc' | 'alg' | 'apu' | 'apv'>
-) {
+  h: Pick<ECDH_ESHeaderParams, 'apu' | 'apv'> & { alg: ECDH_ESAlg | ECDH_ESKWAlg; enc: EncAlg }
+): Promise<JWECEK> {
   // ECDH は CryptoAPI 関数で行うので CryptoAPI 用の鍵に変換する
   const privKey = await window.crypto.subtle.importKey(
     'jwk',
@@ -155,10 +227,10 @@ async function agree(
     )
   );
   // Concat KDF を行い、鍵を導出する
-  const keydatalen = genkeydatalen(h.alg, h.enc);
+  const keydatalen = genkeydatalen(h);
   const OtherInfo = genOtherInfo(h, keydatalen);
-  const keyAgreementResult = ConcatKDF(Z, { keydatalen, OtherInfo });
-  return keyAgreementResult;
+  const keyAgreementResult = await ConcatKDF(Z, { keydatalen, OtherInfo });
+  return keyAgreementResult as JWECEK;
 }
 
 /**
@@ -167,11 +239,12 @@ async function agree(
 async function wrap(
   key: JWK<'EC', 'Pub'>,
   cek: JWECEK,
-  h: Pick<ECDH_ESHeaderParams, 'enc' | 'alg' | 'apu' | 'apv'>,
+  h: Omit<ECDH_ESHeaderParams, 'epk'> & { alg: ECDH_ESAlg | ECDH_ESKWAlg; enc: EncAlg },
   eprivk: JWK<'EC', 'Priv'>
 ): Promise<JWEEncryptedKey> {
   const keyAgreementResult = await agree(key, eprivk, h);
-  return AKWKeyWrapper.wrap({ kty: 'oct', k: BASE64URL(keyAgreementResult) }, cek);
+  const { ek } = await AKWKeyWrapper.wrap({ kty: 'oct', k: BASE64URL(keyAgreementResult) }, cek);
+  return ek;
 }
 
 /**
@@ -180,7 +253,7 @@ async function wrap(
 async function unwrap(
   key: JWK<'EC', 'Priv'>,
   ek: JWEEncryptedKey,
-  h: ECDH_ESHeaderParams
+  h: ECDH_ESHeaderParams & { alg: ECDH_ESAlg | ECDH_ESKWAlg; enc: EncAlg }
 ): Promise<JWECEK> {
   const keyAgreementResult = await agree(h.epk, key, h);
   return AKWKeyWrapper.unwrap({ kty: 'oct', k: BASE64URL(keyAgreementResult) }, ek);
@@ -223,10 +296,10 @@ async function ConcatKDF(
  * ECDHAlg に応じて、 Concat KDF で使用する keydatalen parameter を決める。
  * ECDH-ES の場合は enc algorithm identifier の鍵長に依存するので、引数でそれも渡している。
  */
-function genkeydatalen(alg: ECDH_ESAlg | ECDH_ESKWAlg, enc: EncAlg): number {
-  switch (alg) {
+function genkeydatalen(h: { alg: ECDH_ESAlg | ECDH_ESKWAlg; enc: EncAlg }): number {
+  switch (h.alg) {
     case 'ECDH-ES':
-      switch (enc) {
+      switch (h.enc) {
         case 'A128CBC-HS256':
           return 32 * 8;
         case 'A192CBC-HS384':
@@ -257,7 +330,7 @@ function genkeydatalen(alg: ECDH_ESAlg | ECDH_ESKWAlg, enc: EncAlg): number {
  * Data は可変長の文字列で、DataLen は固定長のビックエンディアンのデータオクテット長表現。
  */
 function genOtherInfo(
-  h: Pick<ECDH_ESHeaderParams, 'enc' | 'alg' | 'apu' | 'apv'>,
+  h: Pick<ECDH_ESHeaderParams, 'apu' | 'apv'> & { alg: ECDH_ESAlg | ECDH_ESKWAlg; enc: EncAlg },
   keydatalen: number
 ): Uint8Array {
   /**

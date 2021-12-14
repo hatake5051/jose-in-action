@@ -1,6 +1,6 @@
 // --------------------BEGIN JWK common parameters --------------------
 
-import { Alg, isAlg, isKeyOps, isKeyUse, isKty, KeyOps, KeyUse, Kty } from 'iana';
+import { Alg, isAlg, isEncAlg, isKeyOps, isKeyUse, isKty, KeyOps, KeyUse, Kty } from 'iana';
 import { isObject } from 'utility';
 
 export { CommomJWKParams, isCommonJWKParams, equalsCommonJWKParams, validCommonJWKParams };
@@ -93,7 +93,7 @@ const isCommonJWKParams = (arg: unknown): arg is CommomJWKParams =>
       case 'key_ops':
         return isKeyOps(arg[n]);
       case 'alg':
-        return isAlg(arg[n]);
+        return isAlg(arg[n]) || isEncAlg(arg[n]);
       case 'x5c':
         return Array.isArray(arg['x5c']) && arg['x5c'].every((s: unknown) => typeof s === 'string');
       default:

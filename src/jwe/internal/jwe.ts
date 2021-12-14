@@ -1,9 +1,19 @@
-import { Kty, ktyFromAlg } from 'iana';
-import { JWEAAD, JWECEK, JWECiphertext, JWEEncryptedKey, JWEIV, JWETag } from 'jwe/type';
-import { equalsJWK, exportPublicKey, identifyJWK, isJWK, JWK, JWKSet } from 'jwk';
-import { ASCII, BASE64URL, UTF8 } from 'utility';
+import { Alg, EncAlg, JOSEHeader, JOSEHeaderParamName } from 'iana';
 import {
-  JWEEnc,
+  JWEAAD,
+  JWECEK,
+  JWECiphertext,
+  JWEEncryptedKey,
+  JWEIV,
+  JWEPerRecipientUnprotectedHeader,
+  JWEProtectedHeader,
+  JWESharedUnprotectedHeader,
+  JWETag,
+} from 'jwe/type';
+import { equalsJWK, exportPublicKey, identifyJWK, isJWK, JWK, JWKSet } from 'jwk';
+import { ASCII, BASE64URL } from 'utility';
+import {
+  keyMgmtModeFromAlg,
   newDirectEncrytor,
   newDirectKeyAgreementer,
   newEncOperator,
@@ -11,127 +21,164 @@ import {
   newKeyEncryptor,
   newKeyWrappaer,
 } from './di';
+import { JWEHeader, JWEHeaderBuilder, JWEHeaderBuilderFromSerializedJWE } from './header';
 import {
-  JWEHeader,
-  JWEPerRecipientUnprotectedHeader,
-  JWEProtectedHeader,
-  JWESharedUnprotectedHeader,
-} from './header';
-import {
-  deserializeCompact,
-  deserializeFlattenedJSON,
-  deserializeJSON,
+  JWECompactSerializer,
+  JWEFlattenedJSONSerializer,
+  JWEJSONSerializer,
   JWESerialization,
-  serializationType,
-  SerializationType,
-  serializeCompact,
-  serializeFlattenedJSON,
-  serializeJSON,
+  jweSerializationFormat,
+  JWESerializationFormat,
 } from './serialize';
 
 export class JWE {
   private constructor(
-    private rcpt:
-      | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }
-      | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }[],
+    private header: JWEHeader,
     private iv: JWEIV,
     private c: JWECiphertext,
     private tag: JWETag,
-    private p?: JWEProtectedHeader,
-    private su?: JWESharedUnprotectedHeader,
+    private encryptedKey?: JWEEncryptedKey | Array<JWEEncryptedKey | undefined>,
     private aad?: JWEAAD
   ) {}
 
   /**
    * RFC7516#5.1 Message Encryption を行う。
-   * @param keys
-   * @param plaintext
-   * @param h
-   * @param iv
-   * @param aad
-   * @param options
+   * @param alg 選択した受信者の JOSEHeader.alg. 複数人いる場合は配列で与える
+   * @param keys CEK の値を決めるために Key Management Mode で使用する鍵セット
+   * @param plaintext 平文
+   * @param enc JOSEHeader.enc の値
+   * @param options JWE を再現したり、 JOSEHeader を定めたり詳細な設定を行う場合のオプション
    * @returns
    */
   static async enc(
+    alg: Alg<'JWE'> | Alg<'JWE'>[],
     keys: JWKSet,
+    encalg: EncAlg,
     plaintext: Uint8Array,
-    h: {
-      p?: JWEProtectedHeader;
-      su?: JWESharedUnprotectedHeader;
-      ru?: JWEPerRecipientUnprotectedHeader | JWEPerRecipientUnprotectedHeader[];
-    },
-    iv: JWEIV,
-    aad?: JWEAAD,
     options?: {
-      cek?: JWECEK;
-      eprivk?: JWK<'EC', 'Priv'> | JWK<'EC', 'Priv'>[];
+      header?: {
+        p?: {
+          initialValue?: JWEProtectedHeader;
+          paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
+          b64u?: string;
+        };
+        su?: {
+          initialValue?: JWESharedUnprotectedHeader;
+          paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
+        };
+        ru?:
+          | {
+              initialValue?: JWEPerRecipientUnprotectedHeader;
+              paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
+            }
+          | {
+              initialValue?: JWEPerRecipientUnprotectedHeader;
+              paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
+            }[];
+      };
+      keyMgmt?: {
+        cek?: JWECEK;
+        eprivk?: JWK<'EC', 'Priv'> | JWK<'EC', 'Priv'>[];
+      };
+      iv?: JWEIV;
+      aad?: JWEAAD;
     }
   ): Promise<JWE> {
-    // recipient ごとに JOSEHeader を用意する
-    const hlist = !h.ru
-      ? [new JWEHeader(h.p, h.su)]
-      : !Array.isArray(h.ru)
-      ? [new JWEHeader(h.p, h.su, h.ru)]
-      : h.ru.length === 0
-      ? [new JWEHeader(h.p, h.su)]
-      : h.ru.map((rh) => new JWEHeader(h.p, h.su, rh));
-    // recipient ごとに Key Management を行う(Encrypted Key の生成と CEK の用意)
-    const list = await Promise.all(
-      hlist.map(async (header) => {
-        const { ek, cek } = await sendCEK(keys, header, options);
-        return { ek, cek, rh: header.PerRecipientUnprotected };
-      })
-    );
-    // Key Management で得られた CEK を使って
-    if (new Set(list.map((e) => e.cek)).size != 1)
-      throw new EvalError(`複数人に対する暗号化で異なる CEK を使おうとしている`);
-    const cek: JWECEK = list[0].cek;
-    // 平文を暗号化する。
-    const { c, tag } = await enc(cek, hlist[0], plaintext, iv, aad);
-    const rcpt = list.map((e) => ({ ek: e.ek, h: e.rh }));
-    if (rcpt.length === 1) {
-      return new JWE(rcpt[0], iv, c, tag, h.p, h.su, aad);
+    let algPerRcpt: Alg<'JWE'> | [Alg<'JWE'>, Alg<'JWE'>, ...Alg<'JWE'>[]];
+    if (Array.isArray(alg)) {
+      if (alg.length < 2) {
+        throw new TypeError('alg を配列として渡す場合は長さが2以上にしてください');
+      }
+      algPerRcpt = [alg[0], alg[1], ...alg.slice(2)];
+    } else {
+      algPerRcpt = alg;
     }
-    return new JWE(rcpt, iv, c, tag, h.p, h.su, aad);
+    const header = JWEHeaderBuilder(algPerRcpt, encalg, options?.header);
+
+    // Key Management を行う(Encrypted Key の生成と CEK の用意)
+    let keyMgmt: { cek: JWECEK; ek?: JWEEncryptedKey | Array<JWEEncryptedKey | undefined> };
+    if (Array.isArray(algPerRcpt)) {
+      const list = await Promise.all(
+        algPerRcpt.map(async (_a, i) => await sendCEK(keys, header.JOSE(i), options?.keyMgmt))
+      );
+      // recipient ごとに行った Key Management の整合性チェック
+      if (new Set(list.map((e) => e.cek)).size != 1) {
+        throw new EvalError(`複数人に対する暗号化で異なる CEK を使おうとしている`);
+      }
+      const cek = list[0].cek;
+      list.forEach((e, i) => {
+        if (e.h) header.update(e.h, i);
+      });
+      keyMgmt = { cek, ek: list.map((e) => e.ek) };
+    } else {
+      const { cek, ek, h } = await sendCEK(keys, header.JOSE(), options?.keyMgmt);
+      if (h) header.update(h);
+      keyMgmt = { cek, ek };
+    }
+
+    // Key Management で得られた CEK を使って
+    // 平文を暗号化する。
+    const { c, tag, iv } = await enc(
+      encalg,
+      keyMgmt.cek,
+      plaintext,
+      options?.iv,
+      header.Protected_b64u(),
+      options?.aad
+    );
+    return new JWE(header, iv, c, tag, keyMgmt.ek, options?.aad);
   }
 
   async dec(keys: JWKSet): Promise<Uint8Array> {
-    const hlist = !this.rcpt
-      ? [{ h: new JWEHeader(this.p, this.su), ek: undefined }]
-      : !Array.isArray(this.rcpt)
-      ? [{ h: new JWEHeader(this.p, this.su, this.rcpt.h), ek: this.rcpt.ek }]
-      : this.rcpt.length === 0
-      ? [{ h: new JWEHeader(this.p, this.su), ek: undefined }]
-      : this.rcpt.map((r) => ({ h: new JWEHeader(this.p, this.su, r.h), ek: r.ek }));
-    let key: unknown;
-    const filtered = hlist.filter((h) => {
-      try {
-        key = identifyJWK(h.h.JOSEHeader, keys);
-        return true;
-      } catch {
-        return false;
+    let cek: JWECEK | undefined;
+    if (Array.isArray(this.encryptedKey)) {
+      for (let i = 0; i < this.encryptedKey.length; i++) {
+        try {
+          cek = await recvCEK(keys, this.header.JOSE(i), this.encryptedKey[i]);
+          break;
+        } catch {
+          continue;
+        }
       }
-    });
-    if (filtered.length !== 1) throw new EvalError(`暗号化に使われた鍵を同定できなかった`);
-    if (!(isJWK(key, 'RSA', 'Priv') || isJWK(key, 'EC', 'Priv') || isJWK(key, 'oct')))
-      throw new EvalError(`暗号化に使われた鍵に対応する秘密鍵を所持していない`);
-    const cek = await recvCEK(key, filtered[0].h, filtered[0].ek);
-    const p = await dec(cek, filtered[0].h, this.c, this.tag, this.iv, this.aad);
+      if (!cek) {
+        throw new EvalError(`暗号化に使われた鍵(CEK)を決定できなかった`);
+      }
+    } else {
+      try {
+        cek = await recvCEK(keys, this.header.JOSE(), this.encryptedKey);
+      } catch {
+        throw new EvalError(`暗号化に使われた鍵(CEK)を決定できなかった`);
+      }
+    }
+    const encalg = this.header.JOSE().enc;
+    if (!encalg) {
+      throw new EvalError('コンテンツ暗号アルゴリズムの識別子がない');
+    }
+    const p = await dec(
+      encalg,
+      cek,
+      this.c,
+      this.tag,
+      this.iv,
+      this.header.Protected_b64u(),
+      this.aad
+    );
     return p;
   }
 
-  serialize<S extends JWESerialization>(s: S): SerializationType<S> {
+  serialize<S extends JWESerializationFormat>(s: S): JWESerialization<S> {
     switch (s) {
-      case 'compact':
-        if (Array.isArray(this.rcpt)) {
+      case 'compact': {
+        if (this.encryptedKey && Array.isArray(this.encryptedKey)) {
           throw new TypeError('JWE Compact Serialization は複数暗号化を表現できない');
         }
-        if (this.rcpt.h) {
+
+        if (this.header.PerRecipient()) {
           throw new TypeError(
             'JWE Compact Serialization は JWE PerRecipient Unprotected Header を表現できない'
           );
         }
-        if (this.su) {
+        if (this.header.SharedUnprotected()) {
           throw new TypeError(
             'JWE Compact Serialization は JWE Shared Unprotected Header を表現できない'
           );
@@ -139,182 +186,226 @@ export class JWE {
         if (this.aad) {
           throw new TypeError('JWE Compact Serialization は JWE AAD を表現できない');
         }
-        if (!this.p) {
+        const p_b64u = this.header.Protected_b64u();
+        if (!p_b64u) {
           throw new TypeError('JWE Compact Serialization では JWE Protected Header が必須');
         }
-        return serializeCompact(
-          this.p,
-          this.rcpt.ek ?? new Uint8Array(),
+        return JWECompactSerializer.serialize(
+          p_b64u,
+          this.encryptedKey ?? (new Uint8Array() as JWEEncryptedKey),
           this.iv,
           this.c,
           this.tag
-        ) as SerializationType<S>;
-      case 'json':
-        return serializeJSON(
+        ) as JWESerialization<S>;
+      }
+      case 'json': {
+        return JWEJSONSerializer.serialize(
           this.c,
-          this.rcpt,
-          this.p,
-          this.su,
+          Array.isArray(this.encryptedKey)
+            ? this.encryptedKey.map((ek, i) => ({ h: this.header.PerRecipient(i), ek }))
+            : { h: this.header.PerRecipient(), ek: this.encryptedKey },
+          this.header.Protected_b64u(),
+          this.header.SharedUnprotected(),
           this.iv,
           this.aad,
           this.tag
-        ) as SerializationType<S>;
-      case 'json-flat':
-        if (Array.isArray(this.rcpt)) {
+        ) as JWESerialization<S>;
+      }
+      case 'json_flat': {
+        if (Array.isArray(this.encryptedKey)) {
           throw new TypeError('JWE Flattened JSON Serialization は複数暗号化を表現できない');
         }
-        return serializeFlattenedJSON(
+        return JWEFlattenedJSONSerializer.serialize(
           this.c,
-          this.rcpt.h,
-          this.rcpt.ek,
-          this.p,
-          this.su,
+          this.header.PerRecipient(),
+          this.encryptedKey,
+          this.header.Protected_b64u(),
+          this.header.SharedUnprotected(),
           this.iv,
           this.aad,
           this.tag
-        ) as SerializationType<S>;
+        ) as JWESerialization<S>;
+      }
       default:
         throw new TypeError(`${s} は JWESerialization format ではない`);
     }
   }
 
-  static deserialize(data: SerializationType): JWE {
-    switch (serializationType(data)) {
+  static deserialize(data: JWESerialization): JWE {
+    switch (jweSerializationFormat(data)) {
       case 'compact': {
-        const { h, c, tag, iv, ek } = deserializeCompact(data as SerializationType<'compact'>);
-        return new JWE({ ek }, iv, c, tag, h);
+        const { p_b64u, c, tag, iv, ek } = JWECompactSerializer.deserialize(
+          data as JWESerialization<'compact'>
+        );
+
+        const header = JWEHeaderBuilderFromSerializedJWE(p_b64u);
+        return new JWE(header, iv, c, tag, ek);
       }
       case 'json': {
-        const { c, rcpt, hp, hsu, iv, aad, tag } = deserializeJSON(
-          data as SerializationType<'json'>
+        const { c, rcpt, p_b64u, hsu, iv, aad, tag } = JWEJSONSerializer.deserialize(
+          data as JWESerialization<'json'>
         );
-        return new JWE(rcpt, iv, c, tag, hp, hsu, aad);
+        const header = JWEHeaderBuilderFromSerializedJWE(
+          p_b64u,
+          hsu,
+          Array.isArray(rcpt) ? rcpt.map((r) => r.h) : rcpt.h
+        );
+        return new JWE(
+          header,
+          iv,
+          c,
+          tag,
+          Array.isArray(rcpt) ? rcpt.map((r) => r.ek) : rcpt.ek,
+          aad
+        );
       }
-      case 'json-flat': {
-        const { c, h, ek, hp, hsu, iv, aad, tag } = deserializeFlattenedJSON(
-          data as SerializationType<'json-flat'>
+      case 'json_flat': {
+        const { c, h, ek, p_b64u, hsu, iv, aad, tag } = JWEFlattenedJSONSerializer.deserialize(
+          data as JWESerialization<'json_flat'>
         );
-        return new JWE({ h, ek }, iv, c, tag, hp, hsu, aad);
+        const header = JWEHeaderBuilderFromSerializedJWE(p_b64u, hsu, h);
+        return new JWE(header, iv, c, tag, ek, aad);
       }
     }
   }
 }
 
 async function enc(
+  encalg: EncAlg,
   cek: JWECEK,
-  h: { Protected?: JWEProtectedHeader; Enc: JWEEnc },
   m: Uint8Array,
-  iv: JWEIV,
+  iv?: JWEIV,
+  p_b64u?: string,
   aad?: JWEAAD
-): Promise<{ c: JWECiphertext; tag: JWETag }> {
-  let aad_str = '';
-  if (h.Protected) {
-    aad_str += BASE64URL(UTF8(JSON.stringify(h.Protected)));
-  }
+): Promise<{ c: JWECiphertext; tag: JWETag; iv: JWEIV }> {
+  let aad_str = p_b64u ?? '';
   if (aad) {
     aad_str += '.' + BASE64URL(aad);
   }
-  return await newEncOperator(h.Enc).enc(h.Enc, cek, iv, ASCII(aad_str), m);
+  return await newEncOperator(encalg).enc(encalg, cek, m, ASCII(aad_str) as JWEAAD, iv);
 }
 
 async function dec(
+  encalg: EncAlg,
   cek: JWECEK,
-  h: JWEHeader,
   c: JWECiphertext,
   tag: JWETag,
   iv: JWEIV,
+  p_b64u?: string,
   aad?: JWEAAD
 ): Promise<Uint8Array> {
-  let aad_str = '';
-  if (h.Protected) {
-    aad_str += BASE64URL(UTF8(JSON.stringify(h.Protected)));
-  }
+  let aad_str = p_b64u ?? '';
   if (aad) {
     aad_str += '.' + BASE64URL(aad);
   }
-  return await newEncOperator(h.Enc).dec(h.Enc, cek, iv, ASCII(aad_str), c, tag);
+  return await newEncOperator(encalg).dec(encalg, cek, iv, ASCII(aad_str) as JWEAAD, c, tag);
 }
 
 async function sendCEK(
   keys: JWKSet,
-  h: JWEHeader,
+  h: JOSEHeader<'JWE'>,
   options?: { cek?: JWECEK; eprivk?: JWK<'EC', 'Priv'> | JWK<'EC', 'Priv'>[] }
-): Promise<{ cek: JWECEK; ek?: JWEEncryptedKey }> {
-  if (h.cast('KE')) {
-    if (!options?.cek) throw new EvalError(`Key Encryption では CEK を与えてください`);
-    const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
-    const ek = await newKeyEncryptor(h.Alg).enc(h.Alg, key, options.cek);
-    return { ek, cek: options.cek };
-  } else if (h.cast('KW')) {
-    if (!options?.cek) throw new EvalError(`Key Wrapping では CEK を与えてください`);
-    const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
-    const ek = await newKeyWrappaer(h.Alg).wrap(key, options.cek, h.JOSEHeader);
-    return { ek, cek: options.cek };
-  } else if (h.cast('DKA')) {
-    if (options?.cek) throw new EvalError(`Direct Key Agreement では CEK を与えないでください`);
-    if (!options?.eprivk)
-      throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
-    const eprivk = Array.isArray(options.eprivk)
-      ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.JOSEHeader.epk))
-      : options.eprivk;
-    if (!eprivk)
-      throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
-    const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
-    const cek = await newDirectKeyAgreementer(h.Alg).partyU(key, h.JOSEHeader, eprivk);
-    return { cek };
-  } else if (h.cast('KAKW')) {
-    if (!options?.eprivk)
-      throw new EvalError(
-        `Key Agreement with Key Wrapping では Ephemeral Private Key を与えてください`
-      );
-    const eprivk = Array.isArray(options.eprivk)
-      ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.JOSEHeader.epk))
-      : options.eprivk;
-    if (!eprivk)
-      throw new EvalError(`Direct Key Agreement では Ephemeral Private Key を与えてください`);
-    if (!options?.cek)
-      throw new EvalError(`Key Agreement with Key Wrapping では CEK を与えてください`);
-    const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
-    const ek = await newKeyAgreementerWithKeyWrapping(h.Alg).wrap(
-      key,
-      options.cek,
-      h.JOSEHeader,
-      eprivk
-    );
-    return { ek, cek: options.cek };
-  } else if (h.cast('DE')) {
-    if (options?.cek) throw new EvalError(`Direct Encryption では CEK を与えないでください`);
-    const key = identifyJWK<typeof h.Alg>(h.JOSEHeader, keys);
-    const cek = await newDirectEncrytor(h.Alg).extract(h.Alg, key);
-    return { cek };
+): Promise<{ cek: JWECEK; ek?: JWEEncryptedKey; h?: JOSEHeader<'JWE'> }> {
+  if (!h.alg) {
+    throw new TypeError('alg が選択されていない');
   }
-  throw new EvalError(`CEK を決定できませんでした`);
+  switch (keyMgmtModeFromAlg(h.alg)) {
+    case 'KE': {
+      if (!options?.cek) throw new EvalError(`Key Encryption では CEK を与えてください`);
+      const key = identifyJWK(h, keys);
+      const ek = await newKeyEncryptor(h.alg).enc(h.alg, key, options.cek);
+      return { ek, cek: options.cek };
+    }
+    case 'KW': {
+      if (!options?.cek) throw new EvalError(`Key Wrapping では CEK を与えてください`);
+      const key = identifyJWK(h, keys);
+      const { ek, h: updatedH } = await newKeyWrappaer(h.alg).wrap(key, options.cek, h);
+      return { ek, cek: options.cek, h: updatedH };
+    }
+    case 'DKA': {
+      if (options?.cek) throw new EvalError(`Direct Key Agreement では CEK を与えないでください`);
+      const eprivk = !options?.eprivk
+        ? undefined
+        : Array.isArray(options.eprivk)
+        ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.epk))
+        : options.eprivk;
+      const key = identifyJWK(h, keys);
+      const { cek, h: updatedH } = await newDirectKeyAgreementer(h.alg).partyU(key, h, eprivk);
+      return { cek, h: updatedH };
+    }
+    case 'KAKW': {
+      const eprivk = !options?.eprivk
+        ? undefined
+        : Array.isArray(options.eprivk)
+        ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.epk))
+        : options.eprivk;
+      if (!options?.cek)
+        throw new EvalError(`Key Agreement with Key Wrapping では CEK を与えてください`);
+      const key = identifyJWK(h, keys);
+      const { ek, h: updatedH } = await newKeyAgreementerWithKeyWrapping(h.alg).wrap(
+        key,
+        options.cek,
+        h,
+        eprivk
+      );
+      return { ek, cek: options.cek, h: updatedH };
+    }
+    case 'DE': {
+      if (options?.cek) throw new EvalError(`Direct Encryption では CEK を与えないでください`);
+      const key = identifyJWK(h, keys);
+      const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
+      return { cek };
+    }
+  }
 }
 
-async function recvCEK(key: JWK<Kty, 'Priv'>, h: JWEHeader, ek?: JWEEncryptedKey): Promise<JWECEK> {
-  if (h.cast('KE')) {
-    if (key.kty !== ktyFromAlg(h.Alg)) throw new EvalError(`適切な秘密鍵ではない`);
-    if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
-    const cek = await newKeyEncryptor(h.Alg).dec(h.Alg, key, ek);
-    return cek;
-  } else if (h.cast('KW')) {
-    if (key.kty !== ktyFromAlg(h.Alg)) throw new EvalError(`適切な秘密鍵ではない`);
-    if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
-    const cek = await newKeyWrappaer(h.Alg).unwrap(key, ek, h.JOSEHeader);
-    return cek;
-  } else if (h.cast('DKA')) {
-    if (key.kty !== ktyFromAlg(h.Alg)) throw new EvalError(`適切な秘密鍵ではない`);
-    const cek = await newDirectKeyAgreementer(h.Alg).partyV(key, h.JOSEHeader);
-    return cek;
-  } else if (h.cast('KAKW')) {
-    if (key.kty !== ktyFromAlg(h.Alg)) throw new EvalError(`適切な秘密鍵ではない`);
-    if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
-    const cek = await newKeyAgreementerWithKeyWrapping(h.Alg).unwrap(key, ek, h.JOSEHeader);
-    return cek;
-  } else if (h.cast('DE')) {
-    if (key.kty !== ktyFromAlg(h.Alg)) throw new EvalError(`適切な秘密鍵ではない`);
-    const cek = await newDirectEncrytor(h.Alg).extract(h.Alg, key);
-    return cek;
+async function recvCEK(keys: JWKSet, h: JOSEHeader<'JWE'>, ek?: JWEEncryptedKey): Promise<JWECEK> {
+  if (!h.alg) {
+    throw new TypeError('alg が選択されていない');
   }
-  throw new EvalError(`CEK を決定できませんでした`);
+  switch (keyMgmtModeFromAlg(h.alg)) {
+    case 'KE': {
+      if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
+      const key = identifyJWK(h, keys);
+      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
+        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
+      }
+      const cek = await newKeyEncryptor(h.alg).dec(h.alg, key, ek);
+      return cek;
+    }
+    case 'KW': {
+      if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
+      const key = identifyJWK(h, keys);
+      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
+        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
+      }
+      const cek = await newKeyWrappaer(h.alg).unwrap(key, ek, h);
+      return cek;
+    }
+    case 'DKA': {
+      const key = identifyJWK(h, keys);
+      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
+        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
+      }
+      const cek = await newDirectKeyAgreementer(h.alg).partyV(key, h);
+      return cek;
+    }
+    case 'KAKW': {
+      if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
+      const key = identifyJWK(h, keys);
+      if (!isJWK(key, 'EC', 'Priv')) {
+        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
+      }
+      const cek = await newKeyAgreementerWithKeyWrapping(h.alg).unwrap(key, ek, h);
+      return cek;
+    }
+    case 'DE': {
+      const key = identifyJWK(h, keys);
+      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
+        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
+      }
+      const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
+      return cek;
+    }
+  }
 }

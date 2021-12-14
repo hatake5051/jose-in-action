@@ -4,7 +4,12 @@ import { JWK } from 'jwk';
 
 export { AKWAlg, isAKWAlg, AKWKeyWrapper };
 
-const AKWKeyWrapper: KeyWrapper<AKWAlg> = { wrap, unwrap };
+const AKWKeyWrapper: KeyWrapper<AKWAlg> = {
+  wrap: async (key: JWK<'oct'>, cek: JWECEK) => {
+    return { ek: await wrap(key, cek) };
+  },
+  unwrap,
+};
 
 /**
  * RFC7518#4.4.  Key Wrapping with AES Key Wrap のアルゴリズムを列挙する。
@@ -27,7 +32,7 @@ async function wrap(key: JWK<'oct'>, cek: JWECEK): Promise<JWEEncryptedKey> {
     'wrapKey',
   ]);
   const e = await window.crypto.subtle.wrapKey('raw', apiCEK, k, { name: 'AES-KW' });
-  return new Uint8Array(e);
+  return new Uint8Array(e) as JWEEncryptedKey;
 }
 
 /**
@@ -46,5 +51,5 @@ async function unwrap(key: JWK<'oct'>, ek: JWEEncryptedKey): Promise<JWECEK> {
     true,
     ['decrypt']
   );
-  return new Uint8Array(await window.crypto.subtle.exportKey('raw', e));
+  return new Uint8Array(await window.crypto.subtle.exportKey('raw', e)) as JWECEK;
 }

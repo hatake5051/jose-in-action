@@ -36,14 +36,14 @@ async function enc(
   }
 
   if (isRSA1_5Alg(alg)) {
-    return await encryptRSA1_5(key, cek);
+    return (await encryptRSA1_5(key, cek as Uint8Array)) as JWEEncryptedKey;
   } else if (isRSAOAEPAlg(alg)) {
     const hash = alg === 'RSA-OAEP' ? 'SHA-1' : 'SHA-256';
     const keyAlg: RsaHashedImportParams = { name: 'RSA-OAEP', hash };
     const encAlg: RsaOaepParams = { name: 'RSA-OAEP' };
     const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['encrypt']);
     const e = await window.crypto.subtle.encrypt(encAlg, k, cek);
-    return new Uint8Array(e);
+    return new Uint8Array(e) as JWEEncryptedKey;
   }
   throw new EvalError(`unrecognized alg(${alg})`);
 }
@@ -59,7 +59,7 @@ async function dec(
   }
 
   if (isRSA1_5Alg(alg)) {
-    return await decryptRSA1_5(key, ek);
+    return (await decryptRSA1_5(key, ek)) as JWECEK;
   }
   if (isRSAOAEPAlg(alg)) {
     const hash = alg === 'RSA-OAEP' ? 'SHA-1' : 'SHA-256';
@@ -67,7 +67,7 @@ async function dec(
     const encAlg: RsaOaepParams = { name: 'RSA-OAEP' };
     const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['decrypt']);
     const e = await window.crypto.subtle.decrypt(encAlg, k, ek);
-    return new Uint8Array(e);
+    return new Uint8Array(e) as JWECEK;
   }
   throw EvalError('alg は列挙できているはず');
 }

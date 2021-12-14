@@ -1,18 +1,27 @@
 import { KeyWrapper } from 'jwe/ineterface';
-import { JWECEK, JWEEncryptedKey } from 'jwe/type';
+import { JWECEK, JWEEncryptedKey, JWETag } from 'jwe/type';
 import { JWK } from 'jwk';
 import { BASE64URL, BASE64URL_DECODE, CONCAT, isObject } from 'utility';
 
-export { AGCMKWAlg, isAGCMKWAlg, AGCMKWHeaderParams, isAGCMKWHeaderParams, AGCMKeyWrapper };
+export {
+  AGCMKWAlg,
+  isAGCMKWAlg,
+  AGCMKWHeaderParams,
+  AGCMKWHeaderParamNames,
+  isPartialAGCMKWHeaderParams,
+  isAGCMKWHeaderParams,
+  equalsAGCMKWHeaderParams,
+  AGCMKeyWrapper,
+};
 
 const AGCMKeyWrapper: KeyWrapper<AGCMKWAlg> = {
   wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: Partial<AGCMKWHeaderParams>) => {
-    if (!h?.iv) throw new TypeError(`JOSE Header に必須パラメータがない(iv)`);
-    return wrap(key, cek, h as { iv: string });
+    return wrap(key, cek, h);
   },
   unwrap: async (key: JWK<'oct'>, ek: JWEEncryptedKey, h?: Partial<AGCMKWHeaderParams>) => {
-    if (!isAGCMKWHeaderParams(h))
-      throw new TypeError(`JOSE Header に必須パラメータがない(iv, tag)`);
+    if (!isAGCMKWHeaderParams(h)) {
+      throw new TypeError(`JOSE Header for AES-GCM Key Wrapping に必須パラメータがない(iv, tag)`);
+    }
     return unwrap(key, ek, h);
   },
 };
@@ -39,19 +48,33 @@ type AGCMKWHeaderParams = {
   tag: string;
 };
 
+const AGCMKWHeaderParamNames = ['iv', 'tag'] as const;
+
+const isPartialAGCMKWHeaderParams = (arg: unknown): arg is Partial<AGCMKWHeaderParams> =>
+  isObject<Partial<AGCMKWHeaderParams>>(arg) &&
+  AGCMKWHeaderParamNames.every((n) => !arg[n] || typeof arg[n] === 'string');
+
 const isAGCMKWHeaderParams = (arg: unknown): arg is AGCMKWHeaderParams =>
-  isObject<AGCMKWHeaderParams>(arg) && typeof arg.iv === 'string' && typeof arg.tag === 'string';
+  isPartialAGCMKWHeaderParams(arg) && arg.iv != null && arg.tag != null;
+
+function equalsAGCMKWHeaderParams(
+  l?: Partial<AGCMKWHeaderParams>,
+  r?: Partial<AGCMKWHeaderParams>
+): boolean {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
+  return l.iv === r.iv && l.tag === r.tag;
+}
 
 /**
  * AES GCM アルゴリズムを使って CEK を暗号化する。
- * h には認証タグ情報を書き加えるため mutable で渡してください。
  */
 async function wrap(
   key: JWK<'oct'>,
   cek: JWECEK,
-  h: Pick<AGCMKWHeaderParams, 'iv'> & Partial<Pick<AGCMKWHeaderParams, 'tag'>>
-): Promise<JWEEncryptedKey> {
-  const iv = BASE64URL_DECODE(h.iv);
+  h?: Partial<AGCMKWHeaderParams>
+): Promise<{ ek: JWEEncryptedKey; h: AGCMKWHeaderParams }> {
+  const iv = h?.iv ? BASE64URL_DECODE(h.iv) : window.crypto.getRandomValues(new Uint8Array(12));
   // IV は 96bit である必要がある (REQUIRED)
   if (iv.length * 8 !== 96) {
     throw new TypeError('IV は 96bit である必要がある。');
@@ -64,11 +87,10 @@ async function wrap(
     'encrypt',
   ]);
   const e = new Uint8Array(await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, cek));
-  const ek: JWEEncryptedKey = e.slice(0, e.length - 16);
+  const ek = e.slice(0, e.length - 16) as JWEEncryptedKey;
   // tag は Header に格納される。
-  const tag = e.slice(e.length - 16);
-  h.tag = BASE64URL(tag);
-  return ek;
+  const tag = e.slice(e.length - 16) as JWETag;
+  return { ek, h: { iv: h?.iv ?? BASE64URL(iv), tag: BASE64URL(tag) } };
 }
 
 /**
@@ -94,5 +116,5 @@ async function unwrap(
     k,
     CONCAT(ek, BASE64URL_DECODE(h.tag))
   );
-  return new Uint8Array(e);
+  return new Uint8Array(e) as JWECEK;
 }

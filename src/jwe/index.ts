@@ -1,43 +1,15 @@
-import {
-  equalsJWEPerRecipientUnprotectedHeader,
-  equalsJWEProtectedHeader,
-  equalsJWESharedUnprotectedHeader,
-  isJWEPerRecipientUnprotectedHeader,
-  isJWEProtectedHeader,
-  isJWESharedUnprotectedHeader,
-  JWEJOSEHeader,
-  JWEPerRecipientUnprotectedHeader,
-  JWEProtectedHeader,
-  JWESharedUnprotectedHeader,
-} from './internal/header';
 import { JWE } from './internal/jwe';
 import {
-  equalsJWEFlattenedJSONSerialization,
-  equalsJWEJSONSerialization,
-  isJWEFlattenedJSONSerialization,
-  isJWEJSONSerialization,
   JWECompactSerialization,
   JWEFlattenedJSONSerialization,
+  JWEFlattenedJSONSerializer,
   JWEJSONSerialization,
+  JWEJSONSerializer,
 } from './internal/serialize';
 
-export {
-  JWEJOSEHeader,
-  JWEPerRecipientUnprotectedHeader,
-  isJWEPerRecipientUnprotectedHeader,
-  equalsJWEPerRecipientUnprotectedHeader,
-  JWEProtectedHeader,
-  isJWEProtectedHeader,
-  equalsJWEProtectedHeader,
-  JWESharedUnprotectedHeader,
-  isJWESharedUnprotectedHeader,
-  equalsJWESharedUnprotectedHeader,
-  JWECompactSerialization,
-  JWEJSONSerialization,
-  JWEFlattenedJSONSerialization,
-  isJWEJSONSerialization,
-  equalsJWEJSONSerialization,
-  isJWEFlattenedJSONSerialization,
-  equalsJWEFlattenedJSONSerialization,
-  JWE,
-};
+export { JWECompactSerialization, JWEJSONSerialization, JWEFlattenedJSONSerialization, JWE };
+
+export const isJWEJSONSerialization = JWEJSONSerializer.is;
+export const equalsJWEJSONSerialization = JWEJSONSerializer.equals;
+export const isJWEFlattenedJSONSerialization = JWEFlattenedJSONSerializer.is;
+export const equalsJWEFlattenedJSONSerialization = JWEFlattenedJSONSerializer.equals;

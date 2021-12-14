@@ -1,9 +1,6 @@
-import {
-  equalsJWEFlattenedJSONSerialization,
-  equalsJWEJSONSerialization,
-  JWE,
-  JWEPerRecipientUnprotectedHeader,
-} from 'jwe';
+import { isJOSEHeaderParamName, JOSEHeaderParamName } from 'iana';
+import { equalsJWEFlattenedJSONSerialization, equalsJWEJSONSerialization, JWE } from 'jwe';
+import { JWEAAD, JWECEK, JWEIV } from 'jwe/type';
 import { exportPublicKey, isJWK, JWK, JWKSet } from 'jwk';
 import { BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
 import { fetchData } from './rfc7520.5.test';
@@ -21,23 +18,60 @@ async function test(path: string): Promise<{
   let log = '';
   // 準備
   const plaintext = UTF8(data.input.plaintext);
-  const header = {
-    p: data.encrypting_content.protected,
-    su: data.encrypting_content.unprotected,
-    ru: Array.isArray(data.encrypting_key)
-      ? data.encrypting_key
-          .filter((k): k is { header: JWEPerRecipientUnprotectedHeader } => k.header != null)
-          .map((k) => k.header)
-      : data.encrypting_key?.header,
-  };
-  const iv = BASE64URL_DECODE(data.generated.iv);
-  const aad = data.input.aad ? UTF8(data.input.aad) : undefined;
   type epkObj = { epk: JWK<'EC', 'Priv'> };
-  const options = {
-    cek: data.generated.cek ? BASE64URL_DECODE(data.generated.cek) : undefined,
-    eprivk: Array.isArray(data.encrypting_key)
-      ? data.encrypting_key.filter((k): k is epkObj => k.epk != null).map((k) => k.epk)
-      : data.encrypting_key?.epk,
+  const options: Parameters<typeof JWE.enc>[4] = {
+    header: {
+      p: data.encrypting_content.protected
+        ? {
+            initialValue: data.encrypting_content.protected,
+            paramNames: new Set(
+              Object.keys(data.encrypting_content.protected).filter(
+                (n): n is JOSEHeaderParamName<'JWE'> => isJOSEHeaderParamName(n)
+              )
+            ),
+            b64u: data.encrypting_content.protected_b64u,
+          }
+        : undefined,
+      su: data.encrypting_content.unprotected
+        ? {
+            initialValue: data.encrypting_content.unprotected,
+            paramNames: new Set(
+              Object.keys(data.encrypting_content.unprotected).filter(
+                (n): n is JOSEHeaderParamName<'JWE'> => isJOSEHeaderParamName(n)
+              )
+            ),
+          }
+        : undefined,
+      ru: Array.isArray(data.encrypting_key)
+        ? data.encrypting_key.map((k) => ({
+            initialValue: k.header,
+            paramNames: k.header
+              ? new Set(
+                  Object.keys(k.header).filter((n): n is JOSEHeaderParamName<'JWE'> =>
+                    isJOSEHeaderParamName(n)
+                  )
+                )
+              : undefined,
+          }))
+        : data.encrypting_key?.header
+        ? {
+            initialValue: data.encrypting_key.header,
+            paramNames: new Set(
+              Object.keys(data.encrypting_key.header).filter((n): n is JOSEHeaderParamName<'JWE'> =>
+                isJOSEHeaderParamName(n)
+              )
+            ),
+          }
+        : undefined,
+    },
+    keyMgmt: {
+      cek: data.generated.cek ? (BASE64URL_DECODE(data.generated.cek) as JWECEK) : undefined,
+      eprivk: Array.isArray(data.encrypting_key)
+        ? data.encrypting_key.filter((k): k is epkObj => k.epk != null).map((k) => k.epk)
+        : data.encrypting_key?.epk,
+    },
+    iv: BASE64URL_DECODE(data.generated.iv) as JWEIV,
+    aad: data.input.aad ? (UTF8(data.input.aad) as JWEAAD) : undefined,
   };
   const keys: JWKSet = {
     keys: data.input.key
@@ -57,7 +91,7 @@ async function test(path: string): Promise<{
     }),
   };
   // JWE 生成
-  const jwe = await JWE.enc(encKeys, plaintext, header, iv, aad, options);
+  const jwe = await JWE.enc(data.input.alg, encKeys, data.input.enc, plaintext, options);
 
   if (data.reproducible) {
     log += 'テストには再現性があるため、シリアライズした結果を比較する\n';
@@ -74,7 +108,7 @@ async function test(path: string): Promise<{
       log += 'JSON: ' + (same ? '(OK) ' : 'X ');
     }
     if (data.output.json_flat) {
-      const flat = jwe.serialize('json-flat');
+      const flat = jwe.serialize('json_flat');
       const same = equalsJWEFlattenedJSONSerialization(data.output.json_flat, flat);
       allGreen &&= same;
       log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');

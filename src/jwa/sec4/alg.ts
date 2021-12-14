@@ -6,30 +6,40 @@ import {
   KeyMgmtMode,
   KeyWrapper,
 } from 'jwe/ineterface';
+import { JWECEK } from 'jwe/type';
 import { JWK } from 'jwk';
-import { BASE64URL_DECODE, isObject } from 'utility';
+import { BASE64URL_DECODE } from 'utility';
 import {
   AGCMKeyWrapper,
   AGCMKWAlg,
+  AGCMKWHeaderParamNames,
   AGCMKWHeaderParams,
+  equalsAGCMKWHeaderParams,
   isAGCMKWAlg,
   isAGCMKWHeaderParams,
+  isPartialAGCMKWHeaderParams,
 } from './aesgcm';
 import { AKWAlg, AKWKeyWrapper, isAKWAlg } from './aeskw';
 import {
   ECDHDirectKeyAgreementer,
   ECDHKeyAgreementerWithKeyWrapping,
   ECDH_ESAlg,
+  ECDH_ESHeaderParamNames,
   ECDH_ESHeaderParams,
   ECDH_ESKWAlg,
+  equalsECDH_ESHeaderParams,
   isECDH_ESAlg,
   isECDH_ESHeaderParams,
   isECDH_ESKWAlg,
+  isPartialECDH_ESHeaderParams,
 } from './ecdh';
 import {
+  equalsPBES2HeaderParams,
+  isPartialPBES2HeaderParams,
   isPBES2Alg,
   isPBES2HeaderParams,
   PBES2Alg,
+  PBES2HeaderParamNames,
   PBES2HeaderParams,
   PBES2KeyWrapper,
 } from './pbes2';
@@ -49,7 +59,10 @@ export {
   KtyFromJWAJWEAlg,
   ktyFromJWAJWEAlg,
   JWAAlgSpecificJOSEHeader,
+  JWAAlgSpecificJOSEHeaderParamNames,
+  isPartialJWAAlgSpecificJOSEHeader,
   isJWAAlgSpecificJOSEHeader,
+  equalsJWAAlgSpecificJOSEHeader,
   keyMgmtModeFromJWAAlg,
   newJWAKeyEncryptor,
   newJWAKeyWrapper,
@@ -82,7 +95,7 @@ type JWADKAAlg = ECDH_ESAlg;
 const isJWADKAAlg = (arg: unknown): arg is JWADKAAlg => isECDH_ESAlg(arg);
 
 function newJWADirectAgreementer<A extends JWADKAAlg>(alg: A): DirectKeyAgreementer<A> {
-  if (isECDH_ESAlg(alg)) return ECDHDirectKeyAgreementer as DirectKeyAgreementer<A>;
+  if (isECDH_ESAlg(alg)) return ECDHDirectKeyAgreementer as unknown as DirectKeyAgreementer<A>;
   throw TypeError(`KeyAgreement<$alg> is not implemented`);
 }
 
@@ -93,7 +106,7 @@ function newJWAKeyAgreementerWithKeyWrapping<A extends JWAKAKWAlg>(
   alg: A
 ): KeyAgreementerWithKeyWrapping<A> {
   if (isECDH_ESKWAlg(alg))
-    return ECDHKeyAgreementerWithKeyWrapping as KeyAgreementerWithKeyWrapping<A>;
+    return ECDHKeyAgreementerWithKeyWrapping as unknown as KeyAgreementerWithKeyWrapping<A>;
   throw TypeError(`KeyAgreementerWithKeyWrapping<$alg> is not implemented`);
 }
 
@@ -103,7 +116,7 @@ const isJWADEAlg = (arg: unknown): arg is JWADEAlg => typeof arg === 'string' &&
 function newJWADirectEncryptor<A extends JWADEAlg>(alg: A): DirectEncryptor<A> {
   if (isJWADEAlg(alg))
     return {
-      extract: async (alg: A, key: JWK<'oct'>) => BASE64URL_DECODE(key.k),
+      extract: async (alg: A, key: JWK<'oct'>) => BASE64URL_DECODE(key.k) as JWECEK,
     } as DirectEncryptor<A>;
   throw TypeError(`DirecyEncryptor<$alg> is not implemented`);
 }
@@ -126,26 +139,31 @@ function ktyFromJWAJWEAlg<A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg
   throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
 }
 
-type JWAAlgSpecificJOSEHeader<A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg> =
-  A extends AGCMKWAlg
-    ? AGCMKWHeaderParams
-    : A extends ECDH_ESAlg | ECDH_ESKWAlg
-    ? ECDH_ESHeaderParams
-    : A extends PBES2Alg
-    ? PBES2HeaderParams
-    : Record<string, never>;
+type JWAAlgSpecificJOSEHeader = AGCMKWHeaderParams & ECDH_ESHeaderParams & PBES2HeaderParams;
 
-const isJWAAlgSpecificJOSEHeader = <
-  A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
->(
+const JWAAlgSpecificJOSEHeaderParamNames = [
+  ...AGCMKWHeaderParamNames,
+  ...ECDH_ESHeaderParamNames,
+  ...PBES2HeaderParamNames,
+] as const;
+
+const isPartialJWAAlgSpecificJOSEHeader = (
   arg: unknown
-): arg is JWAAlgSpecificJOSEHeader<A> => {
-  if (!isObject<{ alg: unknown }>(arg)) return false;
-  if (isAGCMKWAlg(arg.alg)) return isAGCMKWHeaderParams(arg);
-  if (isECDH_ESAlg(arg.alg) || isECDH_ESKWAlg(arg.alg)) return isECDH_ESHeaderParams(arg);
-  if (isPBES2Alg(arg.alg)) return isPBES2HeaderParams(arg);
-  return true;
-};
+): arg is Partial<JWAAlgSpecificJOSEHeader> =>
+  isPartialAGCMKWHeaderParams(arg) ||
+  isPartialECDH_ESHeaderParams(arg) ||
+  isPartialPBES2HeaderParams(arg);
+
+const isJWAAlgSpecificJOSEHeader = (arg: unknown): arg is JWAAlgSpecificJOSEHeader =>
+  isAGCMKWHeaderParams(arg) || isECDH_ESHeaderParams(arg) || isPBES2HeaderParams(arg);
+
+const equalsJWAAlgSpecificJOSEHeader = (
+  l?: Partial<JWAAlgSpecificJOSEHeader>,
+  r?: Partial<JWAAlgSpecificJOSEHeader>
+): boolean =>
+  equalsAGCMKWHeaderParams(l, r) ||
+  equalsECDH_ESHeaderParams(l, r) ||
+  equalsPBES2HeaderParams(l, r);
 
 function keyMgmtModeFromJWAAlg(
   alg: JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg

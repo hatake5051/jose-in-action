@@ -22,12 +22,12 @@ const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'] as const
 async function enc(
   enc: ACBCEnc,
   cek: JWECEK,
-  iv: JWEIV,
+  m: Uint8Array,
   aad: JWEAAD,
-  m: Uint8Array
-): Promise<{ c: JWECiphertext; tag: JWETag }> {
-  const { E, T } = await encryptAES_CBC_HMAC_SHA2(enc, cek, m, aad, iv);
-  return { c: E, tag: T };
+  iv?: JWEIV
+): Promise<{ c: JWECiphertext; tag: JWETag; iv: JWEIV }> {
+  const { E, T, IV } = await encryptAES_CBC_HMAC_SHA2(enc, cek, m, aad, iv);
+  return { c: E as JWECiphertext, tag: T as JWETag, iv: IV as JWEIV };
 }
 
 async function dec(
@@ -50,7 +50,7 @@ async function encryptAES_CBC_HMAC_SHA2(
   P: Uint8Array,
   A: Uint8Array,
   IV?: Uint8Array
-): Promise<{ E: Uint8Array; T: Uint8Array }> {
+): Promise<{ E: Uint8Array; T: Uint8Array; IV: Uint8Array }> {
   // Step1 enc に基づいて鍵長のチェックを行い、HMAC 計算用の鍵と 暗号化鍵を用意する。
   const { MAC_KEY_LEN, ENC_KEY_LEN, HASH_ALG, T_LEN } = algParams(enc);
   if (K.length !== MAC_KEY_LEN + ENC_KEY_LEN) {
@@ -82,7 +82,7 @@ async function encryptAES_CBC_HMAC_SHA2(
   );
   const hSig = await window.crypto.subtle.sign('HMAC', hKey, CONCAT(CONCAT(CONCAT(A, IV), E), AL));
   const T = new Uint8Array(hSig).slice(0, T_LEN);
-  return { E, T };
+  return { E, T, IV };
 }
 
 /**

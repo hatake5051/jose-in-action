@@ -1,17 +1,16 @@
-import { Alg, EncAlg, isAlg, isEncAlg } from 'iana';
+import { Alg, EncAlg, isAlg, isEncAlg, isJOSEHeader } from 'iana';
 import {
   isJWEFlattenedJSONSerialization,
   isJWEJSONSerialization,
-  isJWEPerRecipientUnprotectedHeader,
-  isJWEProtectedHeader,
-  isJWESharedUnprotectedHeader,
   JWECompactSerialization,
   JWEFlattenedJSONSerialization,
   JWEJSONSerialization,
+} from 'jwe';
+import {
   JWEPerRecipientUnprotectedHeader,
   JWEProtectedHeader,
   JWESharedUnprotectedHeader,
-} from 'jwe';
+} from 'jwe/type';
 import { isJWK, JWK } from 'jwk';
 import { isObject } from 'utility';
 
@@ -51,6 +50,7 @@ async function fetchData(path: string): Promise<Data> {
     // タイポ
     data.input.enc = 'A128CBC-HS256';
   }
+
   if (!isData(data)) {
     throw new EvalError('テストデータの取得に失敗');
   }
@@ -64,7 +64,7 @@ type Data = {
     plaintext: string;
     key?: Arrayable<JWK>;
     pwd?: string;
-    alg: Arrayable<Alg>;
+    alg: Arrayable<Alg<'JWE'>>;
     enc: EncAlg;
     aad?: string;
   };
@@ -78,6 +78,7 @@ type Data = {
   }>;
   encrypting_content: {
     protected?: JWEProtectedHeader;
+    protected_b64u?: string;
     unprotected?: JWESharedUnprotectedHeader;
   };
   output: {
@@ -95,7 +96,7 @@ const isData = (arg: unknown): arg is Data =>
   typeof arg.input.plaintext === 'string' &&
   (arg.input.key == null || isArrayable<JWK>(arg.input.key, (k): k is JWK => isJWK(k))) &&
   (arg.input.pwd == null || typeof arg.input.pwd === 'string') &&
-  isArrayable<Alg>(arg.input.alg, isAlg) &&
+  isArrayable<Alg<'JWE'>>(arg.input.alg, (u: unknown): u is Alg<'JWE'> => isAlg(u, 'JWE')) &&
   isEncAlg(arg.input.enc) &&
   (arg.input.aad == null || typeof arg.input.aad === 'string') &&
   isObject<Data['generated']>(arg.generated) &&
@@ -106,14 +107,16 @@ const isData = (arg: unknown): arg is Data =>
       arg.encrypting_key,
       (u): u is Flatten<NonNullable<Data['encrypting_key']>> =>
         isObject<Flatten<NonNullable<Data['encrypting_key']>>>(u) &&
-        (u.header == null || isJWEPerRecipientUnprotectedHeader(u.header)) &&
+        (u.header == null || isJOSEHeader(u.header, 'JWE')) &&
         (u.epk == null || isJWK(u.epk, 'EC', 'Priv'))
     )) &&
   isObject<Data['encrypting_content']>(arg.encrypting_content) &&
   (arg.encrypting_content.protected == null ||
-    isJWEProtectedHeader(arg.encrypting_content.protected)) &&
+    isJOSEHeader(arg.encrypting_content.protected, 'JWE')) &&
+  (arg.encrypting_content.protected_b64u == null ||
+    typeof arg.encrypting_content.protected_b64u === 'string') &&
   (arg.encrypting_content.unprotected == null ||
-    isJWESharedUnprotectedHeader(arg.encrypting_content.unprotected)) &&
+    isJOSEHeader(arg.encrypting_content.unprotected, 'JWE')) &&
   isObject<Data['output']>(arg.output) &&
   (arg.output.compact == null || typeof arg.output.compact === 'string') &&
   isJWEJSONSerialization(arg.output.json) &&

@@ -15,19 +15,22 @@ const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'] as const;
 async function enc(
   enc: AGCMEnc,
   cek: JWECEK,
-  iv: JWEIV,
+  m: Uint8Array,
   aad: JWEAAD,
-  m: Uint8Array
-): Promise<{ c: JWECiphertext; tag: JWETag }> {
+  iv?: JWEIV
+): Promise<{ c: JWECiphertext; tag: JWETag; iv: JWEIV }> {
+  if (!iv) {
+    iv = window.crypto.getRandomValues(new Uint8Array(12)) as JWEIV;
+  }
   const k = await window.crypto.subtle.importKey('raw', cek, { name: 'AES-GCM' }, false, [
     'encrypt',
   ]);
   const e = new Uint8Array(
     await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: aad }, k, m)
   );
-  const ciphertext: JWECiphertext = e.slice(0, e.length - 16);
-  const tag: JWETag = e.slice(e.length - 16);
-  return { c: ciphertext, tag };
+  const ciphertext = e.slice(0, e.length - 16) as JWECiphertext;
+  const tag = e.slice(e.length - 16) as JWETag;
+  return { c: ciphertext, tag, iv };
 }
 
 async function dec(

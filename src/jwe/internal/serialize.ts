@@ -1,105 +1,47 @@
+import { equalsJOSEHeader, isJOSEHeader } from 'iana';
 import {
-  equalsJWEPerRecipientUnprotectedHeader,
-  equalsJWESharedUnprotectedHeader,
-  isJWEPerRecipientUnprotectedHeader,
-  isJWESharedUnprotectedHeader,
-} from 'jwe';
-import { JWEAAD, JWECiphertext, JWEEncryptedKey, JWEIV, JWETag } from 'jwe/type';
-import { BASE64URL, BASE64URL_DECODE, isObject, UTF8, UTF8_DECODE } from 'utility';
-import {
+  JWEAAD,
+  JWECiphertext,
+  JWEEncryptedKey,
+  JWEIV,
   JWEPerRecipientUnprotectedHeader,
-  JWEProtectedHeader,
   JWESharedUnprotectedHeader,
-} from './header';
+  JWETag,
+} from 'jwe/type';
+import { BASE64URL, BASE64URL_DECODE, isObject } from 'utility';
 
-export {
-  JWESerialization,
-  SerializationType,
-  serializationType,
-  JWECompactSerialization,
-  serializeCompact,
-  deserializeCompact,
-  JWEJSONSerialization,
-  isJWEJSONSerialization,
-  equalsJWEJSONSerialization,
-  serializeJSON,
-  deserializeJSON,
-  JWEFlattenedJSONSerialization,
-  isJWEFlattenedJSONSerialization,
-  equalsJWEFlattenedJSONSerialization,
-  serializeFlattenedJSON,
-  deserializeFlattenedJSON,
-};
+export type JWESerializationFormat = 'compact' | 'json' | 'json_flat';
 
-type JWESerialization = 'compact' | 'json' | 'json-flat';
+export type JWESerialization<S extends JWESerializationFormat = JWESerializationFormat> =
+  S extends 'compact'
+    ? JWECompactSerialization
+    : S extends 'json'
+    ? JWEJSONSerialization
+    : S extends 'json_flat'
+    ? JWEFlattenedJSONSerialization
+    : never;
 
-type SerializationType<S extends JWESerialization = JWESerialization> = S extends 'compact'
-  ? JWECompactSerialization
-  : S extends 'json'
-  ? JWEJSONSerialization
-  : S extends 'json-flat'
-  ? JWEFlattenedJSONSerialization
-  : never;
-
-function serializationType(data: unknown): JWESerialization {
+export function jweSerializationFormat(data: unknown): JWESerializationFormat {
   if (typeof data == 'string') {
     return 'compact';
   }
-  if (typeof data == 'object' && data != null) {
-    if ('recipients' in data) return 'json';
-    return 'json-flat';
+  if (isJWEJSONSerialization(data)) {
+    return 'json';
   }
-  throw new TypeError(`${data} は JWSSerialization ではない`);
-}
-
-type JWECompactSerialization = string;
-
-function serializeCompact(
-  h: JWEProtectedHeader,
-  ek: JWEEncryptedKey,
-  iv: JWEIV,
-  c: JWECiphertext,
-  tag: JWETag
-): JWECompactSerialization {
-  // let ans = BASE64URL(UTF8(JSON.stringify(h))) + '.';
-  // if (ek) {
-  //   ans += BASE64URL(ek);
-  // }
-  // ans += '.';
-  // if (iv) {
-  //   ans += BASE64URL(iv);
-  // }
-  // ans += '.' + BASE64URL(c) + '.';
-  // if (tag) {
-  //   ans += BASE64URL(tag);
-  // }
-  // return ans;
-  const h_b64u = BASE64URL(UTF8(JSON.stringify(h)));
-  return `${h_b64u}.${BASE64URL(ek)}.${BASE64URL(iv)}.${BASE64URL(c)}.${BASE64URL(tag)}`;
-}
-
-function deserializeCompact(compact: JWECompactSerialization): {
-  h: JWEProtectedHeader;
-  ek: JWEEncryptedKey;
-  iv: JWEIV;
-  c: JWECiphertext;
-  tag: JWETag;
-} {
-  const l = compact.split('.');
-  if (l.length !== 5) {
-    throw new EvalError('JWS Compact Serialization の形式ではない');
+  if (isJWEFlattenedJSONSerialization(data)) {
+    return 'json_flat';
   }
-  const [h, ek, iv, c, tag] = l;
-  return {
-    h: JSON.parse(UTF8_DECODE(BASE64URL_DECODE(h))),
-    ek: BASE64URL_DECODE(ek),
-    iv: BASE64URL_DECODE(iv),
-    c: BASE64URL_DECODE(c),
-    tag: BASE64URL_DECODE(tag),
-  };
+  throw new TypeError(`${data} は Serialized JWE ではない`);
 }
 
-type JWEJSONSerialization = {
+export type JWECompactSerialization = string;
+
+export const JWECompactSerializer = {
+  serialize: serializeCompact,
+  deserialize: deserializeCompact,
+};
+
+export type JWEJSONSerialization = {
   protected?: string;
   unprotected?: JWESharedUnprotectedHeader;
   iv?: string;
@@ -112,24 +54,83 @@ type JWEJSONSerialization = {
   }[];
 };
 
-const isJWEJSONSerialization = (arg: unknown): arg is JWEJSONSerialization =>
-  isObject<JWEJSONSerialization>(arg) &&
-  (arg.protected == null || typeof arg.protected === 'string') &&
-  (arg.unprotected == null || isJWESharedUnprotectedHeader(arg.unprotected)) &&
-  (arg.iv == null || typeof arg.iv === 'string') &&
-  (arg.aad == null || typeof arg.aad === 'string') &&
-  typeof arg.ciphertext === 'string' &&
-  (arg.tag == null || typeof arg.tag === 'string') &&
-  Array.isArray(arg.recipients) &&
-  arg.recipients.every(
-    (u) =>
-      isObject<{
-        header?: JWEPerRecipientUnprotectedHeader;
-        encrypted_key?: string;
-      }>(u) &&
-      (u.header == null || isJWEPerRecipientUnprotectedHeader(u.header)) &&
-      (u.encrypted_key == null || typeof u.encrypted_key === 'string')
+export const JWEJSONSerializer = {
+  serialize: serializeJSON,
+  deserialize: deserializeJSON,
+  is: isJWEJSONSerialization,
+  equals: equalsJWEJSONSerialization,
+};
+
+export type JWEFlattenedJSONSerialization = {
+  protected?: string;
+  unprotected?: JWESharedUnprotectedHeader;
+  header?: JWEPerRecipientUnprotectedHeader;
+  encrypted_key?: string;
+  iv?: string;
+  aad?: string;
+  ciphertext: string;
+  tag?: string;
+};
+
+export const JWEFlattenedJSONSerializer = {
+  serialize: serializeFlattenedJSON,
+  deserialize: deserializeFlattenedJSON,
+  is: isJWEFlattenedJSONSerialization,
+  equals: equalsJWEFlattenedJSONSerialization,
+};
+
+function serializeCompact(
+  p_b64u: string,
+  ek: JWEEncryptedKey,
+  iv: JWEIV,
+  c: JWECiphertext,
+  tag: JWETag
+): JWECompactSerialization {
+  return `${p_b64u}.${BASE64URL(ek)}.${BASE64URL(iv)}.${BASE64URL(c)}.${BASE64URL(tag)}`;
+}
+
+function deserializeCompact(compact: JWECompactSerialization): {
+  p_b64u: string;
+  ek: JWEEncryptedKey;
+  iv: JWEIV;
+  c: JWECiphertext;
+  tag: JWETag;
+} {
+  const l = compact.split('.');
+  if (l.length !== 5) {
+    throw new EvalError('JWS Compact Serialization の形式ではない');
+  }
+  const [h, ek, iv, c, tag] = l;
+  return {
+    p_b64u: h,
+    ek: BASE64URL_DECODE(ek) as JWEEncryptedKey,
+    iv: BASE64URL_DECODE(iv) as JWEIV,
+    c: BASE64URL_DECODE(c) as JWECiphertext,
+    tag: BASE64URL_DECODE(tag) as JWETag,
+  };
+}
+
+function isJWEJSONSerialization(arg: unknown): arg is JWEJSONSerialization {
+  return (
+    isObject<JWEJSONSerialization>(arg) &&
+    (arg.protected == null || typeof arg.protected === 'string') &&
+    (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
+    (arg.iv == null || typeof arg.iv === 'string') &&
+    (arg.aad == null || typeof arg.aad === 'string') &&
+    typeof arg.ciphertext === 'string' &&
+    (arg.tag == null || typeof arg.tag === 'string') &&
+    Array.isArray(arg.recipients) &&
+    arg.recipients.every(
+      (u) =>
+        isObject<{
+          header?: JWEPerRecipientUnprotectedHeader;
+          encrypted_key?: string;
+        }>(u) &&
+        (u.header == null || isJOSEHeader(u.header, 'JWE')) &&
+        (u.encrypted_key == null || typeof u.encrypted_key === 'string')
+    )
   );
+}
 
 function equalsJWEJSONSerialization(l?: JWEJSONSerialization, r?: JWEJSONSerialization): boolean {
   if (l == null && r == null) return true;
@@ -139,7 +140,7 @@ function equalsJWEJSONSerialization(l?: JWEJSONSerialization, r?: JWEJSONSeriali
     if (l[n] == null || r[n] == null) return false;
     if (l[n] === r[n]) continue;
   }
-  if (!equalsJWESharedUnprotectedHeader(l.unprotected, r.unprotected)) return false;
+  if (!equalsJOSEHeader(l.unprotected, r.unprotected)) return false;
   return (
     l.recipients.every((ll) =>
       r.recipients.some((rr) => equalsRecipientInJWEJSONSerialization(rr, ll))
@@ -163,7 +164,7 @@ function equalsRecipientInJWEJSONSerialization(
   if (l == null && r == null) return true;
   if (l == null || r == null) return false;
   if (l.encrypted_key !== r.encrypted_key) return false;
-  if (!equalsJWEPerRecipientUnprotectedHeader(l.header, r.header)) return false;
+  if (!equalsJOSEHeader(l.header, r.header)) return false;
   return true;
 }
 
@@ -172,14 +173,14 @@ function serializeJSON(
   rcpt:
     | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }
     | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }[],
-  hp?: JWEProtectedHeader,
+  p_b64u?: string,
   hsu?: JWESharedUnprotectedHeader,
   iv?: JWEIV,
   aad?: JWEAAD,
   tag?: JWETag
 ): JWEJSONSerialization {
   return {
-    protected: hp ? BASE64URL(UTF8(JSON.stringify(hp))) : undefined,
+    protected: p_b64u,
     unprotected: hsu,
     iv: iv ? BASE64URL(iv) : undefined,
     aad: aad ? BASE64URL(aad) : undefined,
@@ -199,55 +200,49 @@ function deserializeJSON(json: JWEJSONSerialization): {
   rcpt:
     | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }
     | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }[];
-  hp?: JWEProtectedHeader;
+  p_b64u?: string;
   hsu?: JWESharedUnprotectedHeader;
   iv: JWEIV;
   aad?: JWEAAD;
   tag: JWETag;
 } {
   return {
-    c: BASE64URL_DECODE(json.ciphertext),
+    c: BASE64URL_DECODE(json.ciphertext) as JWECiphertext,
     rcpt:
       json.recipients.length === 1
         ? {
             h: json.recipients[0].header,
             ek: json.recipients[0].encrypted_key
-              ? BASE64URL_DECODE(json.recipients[0].encrypted_key)
+              ? (BASE64URL_DECODE(json.recipients[0].encrypted_key) as JWEEncryptedKey)
               : undefined,
           }
         : json.recipients.map((r) => ({
             h: r.header,
-            ek: r.encrypted_key ? BASE64URL_DECODE(r.encrypted_key) : undefined,
+            ek: r.encrypted_key
+              ? (BASE64URL_DECODE(r.encrypted_key) as JWEEncryptedKey)
+              : undefined,
           })),
-    hp: json.protected ? JSON.parse(UTF8_DECODE(BASE64URL_DECODE(json.protected))) : undefined,
+    p_b64u: json.protected,
     hsu: json.unprotected,
-    iv: json.iv ? BASE64URL_DECODE(json.iv) : new Uint8Array(),
-    aad: json.aad ? BASE64URL_DECODE(json.aad) : undefined,
-    tag: json.tag ? BASE64URL_DECODE(json.tag) : new Uint8Array(),
+    iv: json.iv ? (BASE64URL_DECODE(json.iv) as JWEIV) : (new Uint8Array() as JWEIV),
+    aad: json.aad ? (BASE64URL_DECODE(json.aad) as JWEAAD) : undefined,
+    tag: json.tag ? (BASE64URL_DECODE(json.tag) as JWETag) : (new Uint8Array() as JWETag),
   };
 }
 
-type JWEFlattenedJSONSerialization = {
-  protected?: string;
-  unprotected?: JWESharedUnprotectedHeader;
-  header?: JWEPerRecipientUnprotectedHeader;
-  encrypted_key?: string;
-  iv?: string;
-  aad?: string;
-  ciphertext: string;
-  tag?: string;
-};
-
-const isJWEFlattenedJSONSerialization = (arg: unknown): arg is JWEFlattenedJSONSerialization =>
-  isObject<JWEFlattenedJSONSerialization>(arg) &&
-  (arg.protected == null || typeof arg.protected === 'string') &&
-  (arg.unprotected == null || isJWESharedUnprotectedHeader(arg.unprotected)) &&
-  (arg.iv == null || typeof arg.iv === 'string') &&
-  (arg.aad == null || typeof arg.aad === 'string') &&
-  typeof arg.ciphertext === 'string' &&
-  (arg.tag == null || typeof arg.tag === 'string') &&
-  (arg.header == null || isJWEPerRecipientUnprotectedHeader(arg.header)) &&
-  (arg.encrypted_key == null || typeof arg.encrypted_key === 'string');
+function isJWEFlattenedJSONSerialization(arg: unknown): arg is JWEFlattenedJSONSerialization {
+  return (
+    isObject<JWEFlattenedJSONSerialization>(arg) &&
+    (arg.protected == null || typeof arg.protected === 'string') &&
+    (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
+    (arg.iv == null || typeof arg.iv === 'string') &&
+    (arg.aad == null || typeof arg.aad === 'string') &&
+    typeof arg.ciphertext === 'string' &&
+    (arg.tag == null || typeof arg.tag === 'string') &&
+    (arg.header == null || isJOSEHeader(arg.header, 'JWE')) &&
+    (arg.encrypted_key == null || typeof arg.encrypted_key === 'string')
+  );
+}
 
 function equalsJWEFlattenedJSONSerialization(
   l?: JWEFlattenedJSONSerialization,
@@ -260,7 +255,7 @@ function equalsJWEFlattenedJSONSerialization(
     if (l[n] == null || r[n] == null) return false;
     if (l[n] === r[n]) continue;
   }
-  if (!equalsJWESharedUnprotectedHeader(l.unprotected, r.unprotected)) return false;
+  if (!equalsJOSEHeader(l.unprotected, r.unprotected)) return false;
   return equalsRecipientInJWEJSONSerialization(l, r);
 }
 
@@ -268,17 +263,22 @@ function serializeFlattenedJSON(
   c: JWECiphertext,
   h?: JWEPerRecipientUnprotectedHeader,
   ek?: JWEEncryptedKey,
-  hp?: JWEProtectedHeader,
+  p_b64u?: string,
   hsu?: JWESharedUnprotectedHeader,
   iv?: JWEIV,
   aad?: JWEAAD,
   tag?: JWETag
 ): JWEFlattenedJSONSerialization {
-  const json = serializeJSON(c, { h, ek }, hp, hsu, iv, aad, tag);
+  const json = serializeJSON(c, { h, ek }, p_b64u, hsu, iv, aad, tag);
   return {
-    ...json,
+    protected: json.protected,
+    unprotected: json.unprotected,
     header: json.recipients[0].header,
     encrypted_key: json.recipients[0].encrypted_key,
+    iv: json.iv,
+    aad: json.aad,
+    ciphertext: json.ciphertext,
+    tag: json.tag,
   };
 }
 
@@ -286,7 +286,7 @@ function deserializeFlattenedJSON(flat: JWEFlattenedJSONSerialization): {
   c: JWECiphertext;
   h?: JWEPerRecipientUnprotectedHeader;
   ek?: JWEEncryptedKey;
-  hp?: JWEProtectedHeader;
+  p_b64u?: string;
   hsu?: JWESharedUnprotectedHeader;
   iv: JWEIV;
   aad?: JWEAAD;

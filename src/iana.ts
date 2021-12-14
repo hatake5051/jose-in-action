@@ -11,12 +11,15 @@ import {
   KtyFromJWAJWSAlg,
 } from 'jwa/sec3/alg';
 import {
+  equalsJWAAlgSpecificJOSEHeader,
   isJWADEAlg,
   isJWADKAAlg,
   isJWAKAKWAlg,
   isJWAKEAlg,
   isJWAKWAlg,
+  isPartialJWAAlgSpecificJOSEHeader,
   JWAAlgSpecificJOSEHeader,
+  JWAAlgSpecificJOSEHeaderParamNames,
   JWADEAlg,
   JWADKAAlg,
   JWAKAKWAlg,
@@ -27,11 +30,20 @@ import {
 } from 'jwa/sec4/alg';
 import { isJWAEncAlg, JWAEncAlg, KtyFromJWAEncAlg } from 'jwa/sec5/encalg';
 import { isJWACrv, isJWAKty, JWACrv, JWAKty } from 'jwa/sec6/kty';
-import { JWEJOSEHeader } from 'jwe';
-import { JWSJOSEHeader } from 'jws';
+import {
+  equalsJWEJOSEHeader,
+  isPartialJWEJOSEHeader,
+  JWEJOSEHeader,
+  JWEJOSEHeaderParamNames,
+} from 'jwe/type';
+import { equalsJWSJOSEHeader, JWSJOSEHeader } from 'jws';
 
 export {
   JOSEHeader,
+  isJOSEHeader,
+  equalsJOSEHeader,
+  JOSEHeaderParamName,
+  isJOSEHeaderParamName,
   Alg,
   EncAlg,
   Kty,
@@ -48,41 +60,71 @@ export {
   isCrv,
 };
 
+type JWX = 'JWS' | 'JWE';
+
 /**
  * 暗号操作や使用されるパラメータを表現する JSON オブジェクト
  */
-type JOSEHeader<A extends Alg> = A extends JWASigAlg | JWAMACAlg | JWANoneAlg
+type JOSEHeader<T extends JWX = JWX> = T extends 'JWS'
   ? Partial<JWSJOSEHeader>
-  : A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
-  ? Partial<JWEJOSEHeader> & Partial<JWAAlgSpecificJOSEHeader<A>>
-  : A extends EncAlg
-  ? Partial<JWEJOSEHeader>
+  : T extends 'JWE'
+  ? Partial<JWEJOSEHeader & JWAAlgSpecificJOSEHeader>
   : never;
+
+const equalsJOSEHeader = (l?: JOSEHeader, r?: JOSEHeader): boolean => {
+  if (isJOSEHeader(l, 'JWS')) {
+    if (!isJOSEHeader(r, 'JWS')) return false;
+    return equalsJWSJOSEHeader(l, r);
+  } else if (isJOSEHeader(l, 'JWE')) {
+    if (!isJOSEHeader(r, 'JWE')) return false;
+    return equalsJWEJOSEHeader(l, r) && equalsJWAAlgSpecificJOSEHeader(l, r);
+  }
+  return false;
+};
+
+function isJOSEHeader<T extends JWX>(arg: unknown, t?: T): arg is JOSEHeader<T> {
+  if (t === 'JWE') {
+    return isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg);
+  }
+  // TODO;
+  if (t === 'JWS') {
+    return true;
+  }
+  return true;
+}
+
+type JOSEHeaderParamName<T extends JWX = JWX> = keyof JOSEHeader<T>;
+
+// TODO
+function isJOSEHeaderParamName<T extends JWX>(arg: unknown, t?: T): arg is JOSEHeaderParamName<T> {
+  if (t === 'JWE') {
+    return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some(
+      (n) => n === arg
+    );
+  }
+  // todo
+  return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some((n) => n === arg);
+}
 
 /**
  * Alg は暗号アルゴリズムを列挙する。
  * RFC7518 に定義されているもののみ今回は実装の対象としている。
  */
-type Alg =
-  | JWASigAlg
-  | JWAMACAlg
-  | JWANoneAlg
-  | JWAKEAlg
-  | JWAKWAlg
-  | JWADKAAlg
-  | JWAKAKWAlg
-  | JWADEAlg
-  | EncAlg;
-const isAlg = (arg: unknown): arg is Alg =>
-  isJWASigAlg(arg) ||
-  isJWAMACAlg(arg) ||
-  isJWANoneAlg(arg) ||
-  isJWAKEAlg(arg) ||
-  isJWAKWAlg(arg) ||
-  isJWADKAAlg(arg) ||
-  isJWAKAKWAlg(arg) ||
-  isJWADEAlg(arg) ||
-  isEncAlg(arg);
+type Alg<T extends JWX = JWX> = T extends 'JWS'
+  ? JWASigAlg | JWAMACAlg | JWANoneAlg
+  : T extends 'JWE'
+  ? JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
+  : never;
+
+function isAlg<T extends JWX>(arg: unknown, t?: T): arg is Alg<T> {
+  const isJWSAlg = (arg: unknown): arg is Alg<'JWS'> =>
+    isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
+  const isJWEAlg = (arg: unknown): arg is Alg<'JWE'> =>
+    isJWAKEAlg(arg) || isJWAKWAlg(arg) || isJWADKAAlg(arg) || isJWAKAKWAlg(arg) || isJWADEAlg(arg);
+  if (t === 'JWS') return isJWSAlg(arg);
+  if (t === 'JWE') return isJWEAlg(arg);
+  return isJWSAlg(arg) || isJWEAlg(arg);
+}
 
 type EncAlg = JWAEncAlg;
 const isEncAlg = (arg: unknown): arg is EncAlg => isJWAEncAlg(arg);
