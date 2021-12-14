@@ -1,4 +1,3 @@
-import { isJOSEHeaderParamName, JOSEHeaderParamName } from 'iana';
 import { equalsJWEFlattenedJSONSerialization, equalsJWEJSONSerialization, JWE } from 'jwe';
 import { JWEAAD, JWECEK, JWEIV } from 'jwe/type';
 import { exportPublicKey, isJWK, JWK, JWKSet } from 'jwk';
@@ -24,43 +23,21 @@ async function test(path: string): Promise<{
       p: data.encrypting_content.protected
         ? {
             initialValue: data.encrypting_content.protected,
-            paramNames: new Set(
-              Object.keys(data.encrypting_content.protected).filter(
-                (n): n is JOSEHeaderParamName<'JWE'> => isJOSEHeaderParamName(n)
-              )
-            ),
             b64u: data.encrypting_content.protected_b64u,
           }
         : undefined,
       su: data.encrypting_content.unprotected
         ? {
             initialValue: data.encrypting_content.unprotected,
-            paramNames: new Set(
-              Object.keys(data.encrypting_content.unprotected).filter(
-                (n): n is JOSEHeaderParamName<'JWE'> => isJOSEHeaderParamName(n)
-              )
-            ),
           }
         : undefined,
       ru: Array.isArray(data.encrypting_key)
         ? data.encrypting_key.map((k) => ({
             initialValue: k.header,
-            paramNames: k.header
-              ? new Set(
-                  Object.keys(k.header).filter((n): n is JOSEHeaderParamName<'JWE'> =>
-                    isJOSEHeaderParamName(n)
-                  )
-                )
-              : undefined,
           }))
         : data.encrypting_key?.header
         ? {
             initialValue: data.encrypting_key.header,
-            paramNames: new Set(
-              Object.keys(data.encrypting_key.header).filter((n): n is JOSEHeaderParamName<'JWE'> =>
-                isJOSEHeaderParamName(n)
-              )
-            ),
           }
         : undefined,
     },

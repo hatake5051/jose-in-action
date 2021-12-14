@@ -1,6 +1,6 @@
-import { EncAlg } from 'iana';
+import { EncAlg, isEncAlg, JOSEHeader } from 'iana';
 import { DirectKeyAgreementer, KeyAgreementerWithKeyWrapping } from 'jwe/ineterface';
-import { isJWEJOSEHeader, JWECEK, JWEEncryptedKey, JWEJOSEHeader } from 'jwe/type';
+import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { equalsJWK, exportPublicKey, isJWK, JWK } from 'jwk';
 import { ASCII, BASE64URL, BASE64URL_DECODE, CONCAT, isObject } from 'utility';
 import { AKWKeyWrapper } from './aeskw';
@@ -20,24 +20,19 @@ export {
 };
 
 const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
-  partyU: async (
-    key: JWK<'EC', 'Pub'>,
-    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>,
-    eprivk?: JWK<'EC', 'Priv'>
-  ) => {
-    if (!isJWEJOSEHeader(h)) {
+  partyU: async (key: JWK<'EC', 'Pub'>, h: JOSEHeader<'JWE'>, eprivk?: JWK<'EC', 'Priv'>) => {
+    if (!isEncAlg(h.enc)) {
       throw new TypeError('JWE に必須のヘッダパラメータがない');
     }
+    const enc = h.enc;
     if (!isECDH_ESAlg(h.alg)) {
       throw new TypeError('ECDH Direct Key Agreement Algorithm Identifier ではない');
     }
+    const alg = h.alg;
     if (eprivk) {
-      if (isECDH_ESHeaderParams(h)) {
-        return { cek: await agree(key, eprivk, { ...h, alg: h.alg }) };
-      }
       return {
-        cek: await agree(key, eprivk, { ...h, alg: h.alg }),
-        h: { epk: exportPublicKey<'EC'>(eprivk) },
+        cek: await agree(key, eprivk, { ...h, alg, enc }),
+        h: h.epk ? undefined : { epk: exportPublicKey<'EC'>(eprivk) },
       };
     }
     const eprivk_api = await window.crypto.subtle.generateKey(
@@ -53,21 +48,23 @@ const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
       throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
     }
     return {
-      cek: await agree(key, epk, { ...h, alg: h.alg }),
+      cek: await agree(key, epk, { ...h, alg, enc }),
       h: { epk: exportPublicKey<'EC'>(epk) },
     };
   },
-  partyV: async (
-    key: JWK<'EC', 'Priv'>,
-    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>
-  ): Promise<JWECEK> => {
-    if (!isJWEJOSEHeader(h) || !isECDH_ESHeaderParams(h)) {
-      throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
-    }
+  partyV: async (key: JWK<'EC', 'Priv'>, h: JOSEHeader<'JWE'>): Promise<JWECEK> => {
     if (!isECDH_ESAlg(h.alg)) {
       throw new TypeError('ECDH Direct Key Agreement Algorithm Identifier ではない');
     }
-    return agree(h.epk, key, { ...h, alg: h.alg });
+    const alg = h.alg;
+    if (!isEncAlg(h.enc)) {
+      throw new TypeError('JWE に必須のヘッダパラメータがない');
+    }
+    const enc = h.enc;
+    if (!isECDH_ESHeaderParams(h)) {
+      throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+    }
+    return agree(h.epk, key, { ...h, alg, enc });
   },
 };
 
@@ -75,19 +72,21 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
   wrap: async (
     key: JWK<'EC', 'Pub'>,
     cek: JWECEK,
-    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>,
+    h: JOSEHeader<'JWE'>,
     eprivk?: JWK<'EC', 'Priv'>
   ): Promise<{ ek: JWEEncryptedKey; h?: ECDH_ESHeaderParams }> => {
-    if (!isJWEJOSEHeader(h)) {
+    if (!isEncAlg(h.enc)) {
       throw new TypeError('JWE に必須のヘッダパラメータがない');
     }
+    const enc = h.enc;
     if (!isECDH_ESKWAlg(h.alg)) {
       throw new TypeError('ECDH with Key Wrapping algorithm identifier ではない');
     }
+    const alg = h.alg;
     if (eprivk) {
       return {
-        ek: await wrap(key, cek, { ...h, alg: h.alg }, eprivk),
-        h: isECDH_ESHeaderParams(h) ? undefined : { epk: exportPublicKey<'EC'>(eprivk) },
+        ek: await wrap(key, cek, { ...h, alg, enc }, eprivk),
+        h: h.epk ? undefined : { epk: exportPublicKey<'EC'>(eprivk) },
       };
     }
     const eprivk_api = await window.crypto.subtle.generateKey(
@@ -103,22 +102,24 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
       throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
     }
     return {
-      ek: await wrap(key, cek, { ...h, alg: h.alg }, epk),
+      ek: await wrap(key, cek, { ...h, alg, enc }, epk),
       h: { epk: exportPublicKey<'EC'>(epk) },
     };
   },
-  unwrap: async (
-    key: JWK<'EC', 'Priv'>,
-    ek: JWEEncryptedKey,
-    h: Partial<ECDH_ESHeaderParams & JWEJOSEHeader>
-  ) => {
-    if (!isJWEJOSEHeader(h) || !isECDH_ESHeaderParams(h)) {
-      throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+  unwrap: async (key: JWK<'EC', 'Priv'>, ek: JWEEncryptedKey, h: JOSEHeader<'JWE'>) => {
+    if (!isEncAlg(h.enc)) {
+      throw new TypeError('JWE に必須のヘッダパラメータがない');
     }
+    const enc = h.enc;
     if (!isECDH_ESKWAlg(h.alg)) {
       throw new TypeError('ECDH with Key Wrapping algorithm identifier ではない');
     }
-    return unwrap(key, ek, { ...h, alg: h.alg });
+    const alg = h.alg;
+    if (!isECDH_ESHeaderParams(h)) {
+      throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+    }
+
+    return unwrap(key, ek, { ...h, alg, enc });
   },
 };
 

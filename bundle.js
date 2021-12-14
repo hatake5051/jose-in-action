@@ -1227,88 +1227,20 @@ async function validJWKx5c(jwk, selfSigned = false) {
 }
 // --------------------END JWK definition --------------------
 
-const isJWEJOSEHeader = (arg) => isPartialJWEJOSEHeader(arg) && arg.alg != null && arg.enc != null;
-const JWEJOSEHeaderParamNames = [
-    'alg',
-    'enc',
-    'zip',
-    'jku',
-    'jwk',
-    'kid',
-    'x5u',
-    'x5c',
-    'x5t',
-    'x5t#S256',
-    'typ',
-    'cty',
-    'crit',
-];
-const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
-    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
-        (n === 'alg'
-            ? isAlg(arg[n], 'JWE')
-            : n === 'enc'
-                ? isEncAlg(arg[n])
-                : n === 'jwk'
-                    ? isJWK(arg[n])
-                    : n === 'x5c' || n === 'crit'
-                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
-                        : typeof arg[n] === 'string'));
-function equalsJWEJOSEHeader(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    for (const n of JWEJOSEHeaderParamNames) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        switch (n) {
-            case 'jwk': {
-                const ll = ln;
-                const rr = rn;
-                if (equalsJWK(ll, rr))
-                    continue;
-                return false;
-            }
-            case 'x5t':
-            case 'crit': {
-                const ll = ln;
-                const rr = rn;
-                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
-                    continue;
-                return false;
-            }
-            default: {
-                const ll = ln;
-                const rr = rn;
-                if (ll === rr)
-                    continue;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 const ECDHDirectKeyAgreementer = {
     partyU: async (key, h, eprivk) => {
-        if (!isJWEJOSEHeader(h)) {
+        if (!isEncAlg(h.enc)) {
             throw new TypeError('JWE に必須のヘッダパラメータがない');
         }
+        const enc = h.enc;
         if (!isECDH_ESAlg(h.alg)) {
             throw new TypeError('ECDH Direct Key Agreement Algorithm Identifier ではない');
         }
+        const alg = h.alg;
         if (eprivk) {
-            if (isECDH_ESHeaderParams(h)) {
-                return { cek: await agree(key, eprivk, { ...h, alg: h.alg }) };
-            }
             return {
-                cek: await agree(key, eprivk, { ...h, alg: h.alg }),
-                h: { epk: exportPublicKey(eprivk) },
+                cek: await agree(key, eprivk, { ...h, alg, enc }),
+                h: h.epk ? undefined : { epk: exportPublicKey(eprivk) },
             };
         }
         const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
@@ -1320,32 +1252,39 @@ const ECDHDirectKeyAgreementer = {
             throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
         }
         return {
-            cek: await agree(key, epk, { ...h, alg: h.alg }),
+            cek: await agree(key, epk, { ...h, alg, enc }),
             h: { epk: exportPublicKey(epk) },
         };
     },
     partyV: async (key, h) => {
-        if (!isJWEJOSEHeader(h) || !isECDH_ESHeaderParams(h)) {
-            throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
-        }
         if (!isECDH_ESAlg(h.alg)) {
             throw new TypeError('ECDH Direct Key Agreement Algorithm Identifier ではない');
         }
-        return agree(h.epk, key, { ...h, alg: h.alg });
+        const alg = h.alg;
+        if (!isEncAlg(h.enc)) {
+            throw new TypeError('JWE に必須のヘッダパラメータがない');
+        }
+        const enc = h.enc;
+        if (!isECDH_ESHeaderParams(h)) {
+            throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+        }
+        return agree(h.epk, key, { ...h, alg, enc });
     },
 };
 const ECDHKeyAgreementerWithKeyWrapping = {
     wrap: async (key, cek, h, eprivk) => {
-        if (!isJWEJOSEHeader(h)) {
+        if (!isEncAlg(h.enc)) {
             throw new TypeError('JWE に必須のヘッダパラメータがない');
         }
+        const enc = h.enc;
         if (!isECDH_ESKWAlg(h.alg)) {
             throw new TypeError('ECDH with Key Wrapping algorithm identifier ではない');
         }
+        const alg = h.alg;
         if (eprivk) {
             return {
-                ek: await wrap$1(key, cek, { ...h, alg: h.alg }, eprivk),
-                h: isECDH_ESHeaderParams(h) ? undefined : { epk: exportPublicKey(eprivk) },
+                ek: await wrap$1(key, cek, { ...h, alg, enc }, eprivk),
+                h: h.epk ? undefined : { epk: exportPublicKey(eprivk) },
             };
         }
         const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
@@ -1357,18 +1296,23 @@ const ECDHKeyAgreementerWithKeyWrapping = {
             throw new EvalError(`Ephemeral EC Private Key の生成に失敗`);
         }
         return {
-            ek: await wrap$1(key, cek, { ...h, alg: h.alg }, epk),
+            ek: await wrap$1(key, cek, { ...h, alg, enc }, epk),
             h: { epk: exportPublicKey(epk) },
         };
     },
     unwrap: async (key, ek, h) => {
-        if (!isJWEJOSEHeader(h) || !isECDH_ESHeaderParams(h)) {
-            throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+        if (!isEncAlg(h.enc)) {
+            throw new TypeError('JWE に必須のヘッダパラメータがない');
         }
+        const enc = h.enc;
         if (!isECDH_ESKWAlg(h.alg)) {
             throw new TypeError('ECDH with Key Wrapping algorithm identifier ではない');
         }
-        return unwrap$1(key, ek, { ...h, alg: h.alg });
+        const alg = h.alg;
+        if (!isECDH_ESHeaderParams(h)) {
+            throw new TypeError('JWE JOSE Header for ECDH Key Agreement のパラメータが不十分');
+        }
+        return unwrap$1(key, ek, { ...h, alg, enc });
     },
 };
 const isECDH_ESAlg = (arg) => typeof arg === 'string' && arg === 'ECDH-ES';
@@ -1546,6 +1490,73 @@ function intToOctets$1(x, xLen) {
         ans[i] = parseInt(xStr.substr(i * 2, 2), 16);
     }
     return ans;
+}
+
+const isJWEJOSEHeader = (arg) => isPartialJWEJOSEHeader(arg) && arg.alg != null && arg.enc != null;
+const JWEJOSEHeaderParamNames = [
+    'alg',
+    'enc',
+    'zip',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
+const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
+    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isAlg(arg[n], 'JWE')
+            : n === 'enc'
+                ? isEncAlg(arg[n])
+                : n === 'jwk'
+                    ? isJWK(arg[n])
+                    : n === 'x5c' || n === 'crit'
+                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                        : typeof arg[n] === 'string'));
+function equalsJWEJOSEHeader(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of JWEJOSEHeaderParamNames) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        switch (n) {
+            case 'jwk': {
+                const ll = ln;
+                const rr = rn;
+                if (equalsJWK(ll, rr))
+                    continue;
+                return false;
+            }
+            case 'x5t':
+            case 'crit': {
+                const ll = ln;
+                const rr = rn;
+                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
+                    continue;
+                return false;
+            }
+            default: {
+                const ll = ln;
+                const rr = rn;
+                if (ll === rr)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 const PBES2KeyWrapper = {
@@ -2623,11 +2634,6 @@ function JWEHeaderBuilderFromSerializedJWE(p_b64u, su, ru) {
         if (!isJOSEHeader(initialValue, 'JWE')) {
             throw new TypeError('JWE Protected Header の b64u 表現ではなかった');
         }
-        const paramNames = new Set();
-        Object.keys(initialValue).forEach((k) => {
-            if (isJOSEHeaderParamName(k))
-                paramNames.add(k);
-        });
         if (initialValue.alg) {
             algOne = initialValue.alg;
         }
@@ -2635,21 +2641,16 @@ function JWEHeaderBuilderFromSerializedJWE(p_b64u, su, ru) {
             encalg = initialValue.enc;
         }
         if (options) {
-            options.p = { initialValue: initialValue, paramNames, b64u: p_b64u };
+            options.p = { initialValue: initialValue, b64u: p_b64u };
         }
         else {
             options = {
-                p: { initialValue: initialValue, paramNames, b64u: p_b64u },
+                p: { initialValue: initialValue, b64u: p_b64u },
             };
         }
     }
     if (su) {
         const initialValue = su;
-        const paramNames = new Set();
-        Object.keys(initialValue).forEach((k) => {
-            if (isJOSEHeaderParamName(k))
-                paramNames.add(k);
-        });
         if (initialValue.alg) {
             algOne = initialValue.alg;
         }
@@ -2657,10 +2658,10 @@ function JWEHeaderBuilderFromSerializedJWE(p_b64u, su, ru) {
             encalg = initialValue.enc;
         }
         if (options) {
-            options.su = { initialValue, paramNames };
+            options.su = { initialValue };
         }
         else {
-            options = { su: { initialValue, paramNames } };
+            options = { su: { initialValue } };
         }
     }
     if (ru) {
@@ -2669,12 +2670,7 @@ function JWEHeaderBuilderFromSerializedJWE(p_b64u, su, ru) {
                 if (!rh)
                     return {};
                 const initialValue = rh;
-                const paramNames = new Set();
-                Object.keys(initialValue).forEach((k) => {
-                    if (isJOSEHeaderParamName(k))
-                        paramNames.add(k);
-                });
-                return { initialValue, paramNames };
+                return { initialValue };
             });
             algArray = ru_option.map(({ initialValue }) => {
                 if (initialValue?.enc) {
@@ -2695,11 +2691,6 @@ function JWEHeaderBuilderFromSerializedJWE(p_b64u, su, ru) {
         }
         else {
             const initialValue = ru;
-            const paramNames = new Set();
-            Object.keys(initialValue).forEach((k) => {
-                if (isJOSEHeaderParamName(k))
-                    paramNames.add(k);
-            });
             if (initialValue.alg) {
                 algOne = initialValue.alg;
             }
@@ -2707,10 +2698,10 @@ function JWEHeaderBuilderFromSerializedJWE(p_b64u, su, ru) {
                 encalg = initialValue.enc;
             }
             if (options) {
-                options.ru = { initialValue, paramNames };
+                options.ru = { initialValue };
             }
             else {
-                options = { ru: { initialValue, paramNames } };
+                options = { ru: { initialValue } };
             }
         }
     }
@@ -2753,283 +2744,43 @@ function JWEHeaderBuilder(alg, enc, options) {
     }
     return new JWEHeaderforOne(alg, enc, { p: options?.p, su: options?.su, ru });
 }
-class JWEHeaderforMultiParties {
-    constructor(alg, enc, options) {
-        this.alg = alg;
-        this.enc = enc;
-        // オプションの指定がない時は、enc は Protected Header として扱う
-        // alg は per recipient unshared header として扱う
+class JWESharedHeader {
+    constructor(options) {
         if (!options) {
-            this.shared = { enc };
-            this.perRecipient = alg.map((a) => ({ alg: a }));
-            this.paramNames = {
-                p: new Set(['enc']),
-                su: new Set(),
-                ru: alg.map(() => new Set(['alg'])),
-            };
+            this.shared = {};
+            this.paramNames = { p: new Set(), su: new Set() };
             return;
         }
         let shared;
-        let perRecipient = alg.map(() => undefined);
         const paramNames = {
             p: new Set(),
             su: new Set(),
-            ru: alg.map(() => new Set()),
         };
-        // alg をどのヘッダに組み込むか決定する。また options との整合性をチェック
-        if (new Set(alg).size == 1) {
-            let isConfigured = false;
-            if (options.p?.paramNames?.has('alg')) {
-                if (options.p?.initialValue?.alg && options.p.initialValue.alg !== alg[0]) {
-                    throw new TypeError('オプションで指定する InitialValue for Protected Header と alg の値が一致していない');
-                }
-                isConfigured = true;
-                paramNames.p.add('alg');
-                shared = { alg: alg[0] };
-            }
-            if (options.su?.paramNames?.has('alg')) {
-                if (isConfigured)
-                    throw new TypeError('alg が重複しています');
-                if (options.su?.initialValue?.alg && options.su.initialValue.alg !== alg[0]) {
-                    throw new TypeError('オプションで指定する InitialValue for Shared Unprotected Header と alg の値が一致していない');
-                }
-                isConfigured = true;
-                paramNames.su.add('alg');
-                shared = { alg: alg[0] };
-            }
-            if (options.ru?.some((o) => o.paramNames?.has('alg'))) {
-                if (!options.ru?.every((o) => !o.initialValue?.alg || o.initialValue.alg === alg[0])) {
-                    throw new TypeError('オプションで指定する InitialValue for PerRecipient Unprotected Header と alg の値が一致していない');
-                }
-                if (isConfigured)
-                    throw new TypeError('alg が重複しています');
-                isConfigured = true;
-                paramNames.ru.forEach((s) => s.add('alg'));
-                perRecipient = perRecipient.map((h, i) => ({ ...h, alg: alg[i] }));
-            }
-            if (!isConfigured) {
-                paramNames.p.add('alg');
-                shared = { alg: alg[0] };
-            }
-        }
-        else {
-            if (options.p?.paramNames?.has('alg') || options.su?.paramNames?.has('alg')) {
-                throw new TypeError('alg が同じ値でない時は Protected Header or Shared Unprotected Header に alg パラメータを含めてはならない');
-            }
-            if (options.ru) {
-                if (options.ru.length !== alg.length) {
-                    throw new TypeError('オプションで PerRecipient Header に関するものを与えるときは alg と同じ長さの配列にしてください。さらに、同じインデックスが同じ受信者を表すようにしてください');
-                }
-                if (!options.ru.every((o, i) => !o.initialValue?.alg || o.initialValue.alg === alg[i])) {
-                    throw new TypeError('オプションで指定する InitialValue と alg の値が一致していない');
-                }
-            }
-            paramNames.ru.forEach((s) => s.add('alg'));
-            perRecipient = perRecipient.map((h, i) => ({ ...h, alg: alg[i] }));
-        }
-        // enc をどのヘッダに組み込むか決定する。
-        {
-            let isConfigured = false;
-            if (options.p?.paramNames?.has('enc')) {
-                if (options.p?.initialValue?.enc && options.p.initialValue.enc !== enc) {
-                    throw new TypeError('オプションで指定する InitialValue と alg の値が一致していない');
-                }
-                isConfigured = true;
-                paramNames.p.add('enc');
-                shared = { ...shared, enc };
-            }
-            if (options.su?.paramNames?.has('enc')) {
-                if (isConfigured)
-                    throw new TypeError('enc が重複しています');
-                if (options.su?.initialValue?.enc && options.su.initialValue.enc !== enc) {
-                    throw new TypeError('オプションで指定する InitialValue と alg の値が一致していない');
-                }
-                isConfigured = true;
-                paramNames.su.add('enc');
-                shared = { ...shared, enc };
-            }
-            if (options.ru?.some((o) => o.paramNames?.has('enc'))) {
-                if (!options.ru?.every((o) => !o.initialValue?.enc || o.initialValue.enc === enc)) {
-                    throw new TypeError('オプションで指定する InitialValue と enc の値が一致していない');
-                }
-                if (isConfigured)
-                    throw new TypeError('enc が重複しています');
-                isConfigured = true;
-                paramNames.ru.forEach((s) => s.add('enc'));
-                perRecipient.map((rh) => ({ ...rh, enc }));
-            }
-            if (!isConfigured) {
-                paramNames.p.add('enc');
-                shared = { ...shared, enc };
-            }
-        }
-        // options で指定されたヘッダごとのパラメータをインスタンスプロパティに与えていく
         for (const i of ['p', 'su']) {
             const h = options[i];
             if (!h)
                 continue;
             // 初期値として与えるヘッダー情報とヘッダー名情報が矛盾していないかチェック
-            if (h.initialValue && h.paramNames) {
-                for (const n of Object.keys(h.initialValue)) {
-                    if (isJOSEHeaderParamName(n) && ![...h.paramNames].includes(n)) {
-                        throw new TypeError('オプションで指定する Header の初期値と Header Parameter Names が一致していない' +
-                            `because: initValue にあるパラメータ名 ${n} は paramNames ${h.paramNames} に含まれていません`);
-                    }
-                }
-            }
-            shared = { ...shared, ...h.initialValue };
-            h.paramNames?.forEach((n) => paramNames[i].add(n));
-        }
-        if (options.ru) {
-            options.ru.forEach((h, i) => {
-                // 初期値として与えるヘッダー情報とヘッダー名情報が矛盾していないかチェック
-                if (h.initialValue && h.paramNames) {
+            if (h.initialValue) {
+                if (h.paramNames) {
                     for (const n of Object.keys(h.initialValue)) {
-                        if (isJOSEHeaderParamName(n) && ![...h.paramNames].includes(n)) {
-                            throw new TypeError('オプションで指定する Header の初期値と Header Parameter Names が一致していない' +
-                                `because: initValue にあるパラメータ名 ${n} は paramNames ${h.paramNames} に含まれていません`);
+                        if (isJOSEHeaderParamName(n) && !h.paramNames.has(n)) {
+                            throw new TypeError(`オプションで指定する ${i}.Header の初期値と Header Parameter Names が一致していない` +
+                                ` because: initValue にあるパラメータ名 ${n} は paramNames ${h.paramNames} に含まれていません`);
                         }
                     }
-                }
-                perRecipient = perRecipient.map((rh, i) => ({ ...rh, ...options?.ru?.[i]?.initialValue }));
-                options.ru?.forEach((o, i) => o.paramNames?.forEach((n) => paramNames.ru[i].add(n)));
-            });
-        }
-        // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
-        if (options.p?.b64u) {
-            const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
-            if (!isJOSEHeader(p, 'JWE')) {
-                throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
-            }
-        }
-        // params の整合性チェック。重複していないかどうか判断する
-        if (!paramNames.ru.every((ru) => {
-            const params = new Set([...ru]);
-            let paramsDesiredSize = params.size;
-            paramNames.p.forEach((n) => params.add(n));
-            paramsDesiredSize += paramNames.p.size;
-            paramNames.su.forEach((n) => params.add(n));
-            paramsDesiredSize += paramNames.su.size;
-            return paramsDesiredSize === params.size;
-        })) {
-            throw new TypeError('オプションで指定する Header Parameter Names が衝突しています。同じパラメータを異なるヘッダーに組み込むことはできません');
-        }
-        this.paramNames = paramNames;
-        this.shared = shared;
-        this.perRecipient = perRecipient;
-        this.protected_b64u = options?.p?.b64u;
-    }
-    Protected() {
-        if (!this.shared)
-            return undefined;
-        const entries = Object.entries(this.shared).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.p.has(n));
-        if (entries.length === 0)
-            return undefined;
-        return Object.fromEntries(entries);
-    }
-    Protected_b64u() {
-        if (this.protected_b64u) {
-            const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(this.protected_b64u)));
-            if (!isJOSEHeader(p, 'JWE')) {
-                throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
-            }
-            if (!equalsJOSEHeader(p, this.Protected())) {
-                throw new TypeError('オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
-                    `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected}`);
-            }
-            return this.protected_b64u;
-        }
-        if (this.Protected()) {
-            return BASE64URL(UTF8(JSON.stringify(this.Protected())));
-        }
-    }
-    SharedUnprotected() {
-        if (!this.shared)
-            return undefined;
-        const entries = Object.entries(this.shared).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.su.has(n));
-        if (entries.length === 0)
-            return undefined;
-        return Object.fromEntries(entries);
-    }
-    PerRecipient(recipientIndex) {
-        const idx = recipientIndex ?? 0;
-        if (idx > this.perRecipient.length)
-            return undefined;
-        const perRcpt = this.perRecipient[idx];
-        if (!perRcpt)
-            return undefined;
-        const entries = Object.entries(perRcpt).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.ru[idx].has(n));
-        if (entries.length === 0)
-            return undefined;
-        return Object.fromEntries(entries);
-    }
-    JOSE(recipientIndex) {
-        return { ...this.shared, ...this.PerRecipient(recipientIndex) };
-    }
-    update(v, recipientIndex) {
-        const idx = recipientIndex ?? 0;
-        if (idx > this.perRecipient.length)
-            return;
-        Object.entries(v).forEach(([n, vv]) => {
-            if (!isJOSEHeaderParamName(n))
-                return;
-            if (this.paramNames.p.has(n) || this.paramNames.su.has(n)) {
-                this.shared = { ...this.shared, [n]: vv };
-            }
-            if (this.paramNames.ru[idx].has(n)) {
-                this.perRecipient[idx] = { ...this.perRecipient[idx], [n]: vv };
-            }
-            // paramNames で配置場所が指定されていない場合は、 alg と同じ場所
-            if (this.paramNames.ru[idx].has('alg')) {
-                this.perRecipient[idx] = { ...this.perRecipient[idx], [n]: vv };
-                this.paramNames.ru[idx].add(n);
-            }
-            else {
-                this.shared = { ...this.shared, [n]: vv };
-                if (this.paramNames.p.has('alg')) {
-                    this.paramNames.p.add(n);
+                    h.paramNames.forEach((n) => paramNames[i].add(n));
                 }
                 else {
-                    this.paramNames.su.add(n);
+                    Object.keys(h.initialValue).forEach((n) => {
+                        if (isJOSEHeaderParamName(n))
+                            paramNames[i].add(n);
+                    });
                 }
+                shared = { ...shared, ...h.initialValue };
             }
-        });
-    }
-}
-class JWEHeaderforOne {
-    constructor(alg, enc, options) {
-        this.alg = alg;
-        this.enc = enc;
-        // オプションの指定がない時は、alg と enc はともに Protected Header として扱う
-        if (!options) {
-            this.shared = { alg, enc };
-            this.paramNames = {
-                p: new Set(['alg', 'enc']),
-                su: new Set(),
-                ru: new Set(),
-            };
-            return;
-        }
-        const optionParamNames = ['p', 'su', 'ru'];
-        for (const i of optionParamNames) {
-            const h = options[i];
-            if (!h)
-                continue;
-            // options.x.initialValue に含まれている情報と alg enc の情報が一致しているかチェック
-            if (h.initialValue?.alg && h.initialValue.alg !== alg) {
-                throw new TypeError('オプションで指定する InitialValue と alg の値が一致していない');
-            }
-            if (h.initialValue?.enc && h.initialValue.enc !== enc) {
-                throw new TypeError('オプションで指定する InitialValue と enc の値が一致していない');
-            }
-            // 初期値として与えるヘッダー情報とヘッダー名情報が矛盾していないかチェック
-            if (h.initialValue && h.paramNames) {
-                for (const n of Object.keys(h.initialValue)) {
-                    if (isJOSEHeaderParamName(n) && ![...h.paramNames].includes(n)) {
-                        throw new TypeError('オプションで指定する ProtectedHeader の初期値と Protected Header Parameter Names が一致していない' +
-                            `because: initValue にあるパラメータ名 ${n} は paramNames ${h.paramNames} に含まれていません`);
-                    }
-                }
+            else {
+                h.paramNames?.forEach((n) => paramNames[i].add(n));
             }
         }
         // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
@@ -3042,53 +2793,18 @@ class JWEHeaderforOne {
         // params の整合性チェック。重複していないかどうか判断する
         const params = new Set();
         let paramsDesiredSize = 0;
-        for (const i of optionParamNames) {
-            const h = options[i];
-            if (!h || !h.paramNames)
-                continue;
-            h.paramNames.forEach((n) => params.add(n));
-            paramsDesiredSize += h.paramNames.size;
-        }
+        paramNames.p.forEach((n) => params.add(n));
+        paramsDesiredSize += paramNames.p.size;
+        paramNames.su.forEach((n) => params.add(n));
+        paramsDesiredSize += paramNames.su.size;
         if (paramsDesiredSize !== params.size) {
             throw new TypeError('オプションで指定する Header Parameter Names が衝突しています。同じパラメータを異なるヘッダーに組み込むことはできません');
         }
-        // options の整合性確認が済んだので、インスタンスを作成
-        this.shared = { ...options.p?.initialValue, ...options.su?.initialValue };
-        this.perRecipient = { ...options.ru?.initialValue };
-        this.protected_b64u = options.p?.b64u;
-        this.paramNames = {
-            p: options.p?.paramNames ?? new Set(),
-            su: options.su?.paramNames ?? new Set(),
-            ru: options.ru?.paramNames ?? new Set(),
-        };
-        // alg を適切なヘッダーパラメータとして保持
-        if (this.paramNames.su.has('alg')) {
-            this.shared.alg = alg;
-        }
-        else if (this.paramNames.ru.has('alg')) {
-            this.perRecipient.alg = alg;
-        }
-        else {
-            // オプションで指定がない時は Protected Header に alg を含める
-            this.paramNames.p.add('alg');
-            this.shared.alg = alg;
-        }
-        // enc を適切なヘッダーパラメータとして保持
-        if (this.paramNames.su.has('enc')) {
-            this.shared.enc = enc;
-        }
-        else if (this.paramNames.ru.has('enc')) {
-            this.perRecipient.enc = enc;
-        }
-        else {
-            // オプションで指定がない時は Protected Header に enc を含める
-            this.paramNames.p.add('enc');
-            this.shared.enc = enc;
-        }
+        this.shared = shared ?? {};
+        this.paramNames = paramNames;
+        return;
     }
     Protected() {
-        if (!this.shared)
-            return undefined;
         const entries = Object.entries(this.shared).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.p.has(n));
         if (entries.length === 0)
             return undefined;
@@ -3102,7 +2818,7 @@ class JWEHeaderforOne {
             }
             if (!equalsJOSEHeader(p, this.Protected())) {
                 throw new TypeError('オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
-                    `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected}`);
+                    `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected()}`);
             }
             return this.protected_b64u;
         }
@@ -3113,23 +2829,10 @@ class JWEHeaderforOne {
         return undefined;
     }
     SharedUnprotected() {
-        if (!this.shared)
-            return undefined;
         const entries = Object.entries(this.shared).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.su.has(n));
         if (entries.length === 0)
             return undefined;
         return Object.fromEntries(entries);
-    }
-    PerRecipient() {
-        if (!this.perRecipient)
-            return undefined;
-        const entries = Object.entries(this.perRecipient).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.ru.has(n));
-        if (entries.length === 0)
-            return undefined;
-        return Object.fromEntries(entries);
-    }
-    JOSE() {
-        return { ...this.shared, ...this.perRecipient };
     }
     update(v) {
         Object.entries(v).forEach(([n, vv]) => {
@@ -3137,16 +2840,10 @@ class JWEHeaderforOne {
                 return;
             if (this.paramNames.p.has(n) || this.paramNames.su.has(n)) {
                 this.shared = { ...this.shared, [n]: vv };
-            }
-            if (this.paramNames.ru.has(n)) {
-                this.perRecipient = { ...this.perRecipient, [n]: vv };
+                return;
             }
             // paramNames で配置場所が指定されていない場合は、 alg と同じ場所
-            if (this.paramNames.ru.has('alg')) {
-                this.perRecipient = { ...this.perRecipient, [n]: vv };
-                this.paramNames.ru.add(n);
-            }
-            else {
+            if (this.paramNames.p.has('alg') || this.paramNames.su.has('alg')) {
                 this.shared = { ...this.shared, [n]: vv };
                 if (this.paramNames.p.has('alg')) {
                     this.paramNames.p.add(n);
@@ -3154,6 +2851,329 @@ class JWEHeaderforOne {
                 else {
                     this.paramNames.su.add(n);
                 }
+            }
+        });
+    }
+}
+class JWEHeaderforMultiParties extends JWESharedHeader {
+    constructor(alg, enc, options) {
+        // オプションの指定がない時は、enc は Protected Header として扱う
+        // alg は 全て同じ値であれば Protected Header として、
+        // alg が 全て同じ値でないなら PerRecipient Unprotected Header として扱う
+        if (!options) {
+            if (new Set(alg).size === 1) {
+                super({ p: { initialValue: { enc, alg: alg[0] } } });
+                this.perRcpt = alg.map(() => ({ params: {}, paramNames: new Set() }));
+                return;
+            }
+            super({ p: { initialValue: { enc } } });
+            this.perRcpt = alg.map((a) => ({
+                params: { alg: a },
+                paramNames: new Set(['alg']),
+            }));
+            return;
+        }
+        // alg をどのヘッダに組み込むか決定する。また options との整合性をチェック
+        if (new Set(alg).size === 1) {
+            let isConfigured = false;
+            for (const i of ['p', 'su']) {
+                const opt = options[i];
+                if (opt?.initialValue?.alg) {
+                    if (opt.initialValue.alg !== alg[0]) {
+                        throw new TypeError(`オプションで指定する ${i}.InitialValue Header と alg の値が一致していない`);
+                    }
+                    isConfigured = true;
+                    continue;
+                }
+                if (opt?.paramNames?.has('alg')) {
+                    opt.initialValue = { ...opt.initialValue, alg: alg[0] };
+                    isConfigured = true;
+                    continue;
+                }
+            }
+            options.ru?.forEach((r) => {
+                if (r.initialValue?.alg) {
+                    if (r.initialValue.alg !== alg[0]) {
+                        throw new TypeError(`オプションで指定する ru.InitialValue Header と alg の値が一致していない`);
+                    }
+                    isConfigured = true;
+                    return;
+                }
+                if (r.paramNames?.has('alg')) {
+                    r.initialValue = { ...r.initialValue, alg: alg[0] };
+                    isConfigured = true;
+                    return;
+                }
+            });
+            if (!isConfigured) {
+                if (options.p) {
+                    if (options.p.initialValue) {
+                        options.p.initialValue = { ...options.p.initialValue, alg: alg[0] };
+                    }
+                    else {
+                        options.p.initialValue = { alg: alg[0] };
+                    }
+                    if (options.p.paramNames) {
+                        options.p.paramNames.add('alg');
+                    }
+                }
+                else {
+                    options.p = { initialValue: { alg: alg[0] } };
+                }
+            }
+        }
+        else {
+            if (options.p?.paramNames?.has('alg') || options.su?.paramNames?.has('alg')) {
+                throw new TypeError('alg が同じ値でない時は Protected Header or Shared Unprotected Header に alg パラメータを含めてはならない');
+            }
+            if (options.ru) {
+                if (options.ru.length !== alg.length) {
+                    throw new TypeError('オプションで PerRecipient Header に関するものを与えるときは alg と同じ長さの配列にしてください。さらに、同じインデックスが同じ受信者を表すようにしてください');
+                }
+                options.ru.forEach((r, i) => {
+                    if (r.initialValue?.alg) {
+                        if (r.initialValue.alg !== alg[i]) {
+                            throw new TypeError(`オプションで指定する ru.InitialValue Header と alg の値が一致していない`);
+                        }
+                        return;
+                    }
+                    if (r.paramNames?.has('alg')) {
+                        r.initialValue = { ...r.initialValue, alg: alg[0] };
+                        return;
+                    }
+                });
+            }
+            else {
+                options.ru = alg.map((a) => ({ initialValue: { alg: a } }));
+            }
+        }
+        // enc をどのヘッダに組み込むか決定する。
+        {
+            let isConfigured = false;
+            for (const i of ['p', 'su']) {
+                const opt = options[i];
+                if (opt?.initialValue?.enc) {
+                    if (opt.initialValue.enc !== enc) {
+                        throw new TypeError(`オプションで指定する ${i}.InitialValue Header と enc の値が一致していない`);
+                    }
+                    isConfigured = true;
+                    continue;
+                }
+                if (opt?.paramNames?.has('enc')) {
+                    opt.initialValue = { ...opt.initialValue, enc: enc };
+                    isConfigured = true;
+                    continue;
+                }
+            }
+            options.ru?.forEach((r) => {
+                if (r.initialValue?.enc) {
+                    if (r.initialValue.enc !== enc) {
+                        throw new TypeError(`オプションで指定する ru.InitialValue Header と enc の値が一致していない`);
+                    }
+                    isConfigured = true;
+                    return;
+                }
+                if (r.paramNames?.has('enc')) {
+                    r.initialValue = { ...r.initialValue, enc };
+                    isConfigured = true;
+                    return;
+                }
+            });
+            if (!isConfigured) {
+                if (options.p) {
+                    if (options.p.initialValue) {
+                        options.p.initialValue = { ...options.p.initialValue, enc };
+                    }
+                    else {
+                        options.p.initialValue = { enc };
+                    }
+                    if (options.p.paramNames) {
+                        options.p.paramNames.add('alg');
+                    }
+                }
+                else {
+                    options.p = { initialValue: { enc } };
+                }
+            }
+        }
+        // Protected Header と Shared Unprotected Header を保持する JWESharedHeader をインスタンス化
+        super(options);
+        const perRcpt = alg.map(() => ({ params: {}, paramNames: new Set() }));
+        options.ru?.forEach((r, i) => {
+            if (r.initialValue) {
+                if (r.paramNames) {
+                    for (const n of Object.keys(r.initialValue)) {
+                        if (isJOSEHeaderParamName(n) && !r.paramNames.has(n)) {
+                            throw new TypeError('オプションで指定する ru.Header の初期値と Header Parameter Names が一致していない' +
+                                `because: initValue にあるパラメータ名 ${n} は paramNames ${r.paramNames} に含まれていません`);
+                        }
+                    }
+                    r.paramNames.forEach((n) => perRcpt[i].paramNames.add(n));
+                }
+                else {
+                    Object.keys(r.initialValue).forEach((n) => {
+                        if (isJOSEHeaderParamName(n))
+                            perRcpt[i].paramNames.add(n);
+                    });
+                }
+                perRcpt[i].params = { ...perRcpt[i].params, ...r.initialValue };
+            }
+            else {
+                r.paramNames?.forEach((n) => perRcpt[i].paramNames.add(n));
+            }
+        });
+        // params の整合性チェック。重複していないかどうか判断する
+        if (!perRcpt.every((pr) => {
+            if (pr.paramNames.size === 0)
+                return true;
+            const params = new Set([...this.paramNames.p, ...this.paramNames.su]);
+            let paramsDesiredSize = this.paramNames.p.size + this.paramNames.su.size;
+            pr.paramNames.forEach((n) => params.add(n));
+            paramsDesiredSize += pr.paramNames.size;
+            return paramsDesiredSize === params.size;
+        })) {
+            throw new TypeError('オプションで指定する Header Parameter Names が衝突しています。同じパラメータを異なるヘッダーに組み込むことはできません');
+        }
+        this.perRcpt = perRcpt;
+    }
+    PerRecipient(recipientIndex) {
+        const idx = recipientIndex ?? 0;
+        if (idx > this.perRcpt.length)
+            return undefined;
+        const entries = Object.entries(this.perRcpt[idx].params).filter(([n]) => isJOSEHeaderParamName(n) && this.perRcpt[idx].paramNames.has(n));
+        if (entries.length === 0)
+            return undefined;
+        return Object.fromEntries(entries);
+    }
+    JOSE(recipientIndex) {
+        return { ...this.shared, ...this.PerRecipient(recipientIndex) };
+    }
+    update(v, recipientIndex) {
+        super.update(v);
+        const idx = recipientIndex ?? 0;
+        if (idx > this.perRcpt.length)
+            return;
+        Object.entries(v).forEach(([n, vv]) => {
+            if (!isJOSEHeaderParamName(n))
+                return;
+            if (this.perRcpt[idx].paramNames.has(n)) {
+                this.perRcpt[idx].params = { ...this.perRcpt[idx].params, [n]: vv };
+            }
+            // paramNames で配置場所が指定されていない場合は、 alg と同じ場所
+            if (this.perRcpt[idx].paramNames.has('alg')) {
+                this.perRcpt[idx].params = { ...this.perRcpt[idx].params, [n]: vv };
+                this.perRcpt[idx].paramNames.add(n);
+            }
+        });
+    }
+}
+class JWEHeaderforOne extends JWESharedHeader {
+    constructor(alg, enc, options) {
+        // オプションの指定がない時は、alg と enc はともに Protected Header として扱う
+        if (!options) {
+            super({ p: { initialValue: { alg, enc } } });
+            return;
+        }
+        // alg と enc をどのヘッダに組み込むか決定する。また options との整合性をチェック
+        for (const n of ['alg', 'enc']) {
+            let isConfigured = false;
+            for (const i of ['p', 'su', 'ru']) {
+                const opt = options[i];
+                if (opt?.initialValue?.[n]) {
+                    if (opt.initialValue?.[n] !== (n === 'alg' ? alg : enc)) {
+                        throw new TypeError(`オプションで指定する ${i}.InitialValue と ${n} の値が一致していない`);
+                    }
+                    isConfigured = true;
+                    continue;
+                }
+                if (opt?.paramNames?.has(n)) {
+                    opt.initialValue = { ...opt.initialValue, [n]: n === 'alg' ? alg : enc };
+                    isConfigured = true;
+                }
+            }
+            if (!isConfigured) {
+                if (options.p) {
+                    if (options.p.initialValue) {
+                        options.p.initialValue = { ...options.p.initialValue, [n]: n === 'alg' ? alg : enc };
+                    }
+                    else {
+                        options.p.initialValue = { [n]: n === 'alg' ? alg : enc };
+                    }
+                    if (options.p.paramNames) {
+                        options.p.paramNames.add(n);
+                    }
+                }
+                else {
+                    options.p = { initialValue: { [n]: n === 'alg' ? alg : enc } };
+                }
+            }
+        }
+        // Protected Header と Shared Unprotected Header を保持する JWESharedHeader をインスタンス化
+        super(options);
+        let perRcptParams;
+        const perRcptParamNames = new Set();
+        if (options.ru) {
+            const opt = options.ru;
+            if (opt.initialValue) {
+                if (opt.paramNames) {
+                    for (const n of Object.keys(opt.initialValue)) {
+                        if (isJOSEHeaderParamName(n) && !opt.paramNames.has(n)) {
+                            throw new TypeError('オプションで指定する ru.Header の初期値と Header Parameter Names が一致していない' +
+                                `because: initValue にあるパラメータ名 ${n} は paramNames ${opt.paramNames} に含まれていません`);
+                        }
+                    }
+                    opt.paramNames.forEach((n) => perRcptParamNames.add(n));
+                }
+                else {
+                    Object.keys(opt.initialValue).forEach((n) => {
+                        if (isJOSEHeaderParamName(n))
+                            perRcptParamNames.add(n);
+                    });
+                }
+                perRcptParams = { ...perRcptParams, ...opt.initialValue };
+            }
+            else {
+                opt.paramNames?.forEach((n) => perRcptParamNames.add(n));
+            }
+        }
+        // params の整合性チェック。重複していないかどうか判断する
+        if (perRcptParamNames.size !== 0) {
+            const params = new Set([...this.paramNames.p, ...this.paramNames.su]);
+            let paramsDesiredSize = 0;
+            perRcptParamNames.forEach((n) => params.add(n));
+            paramsDesiredSize += perRcptParamNames.size;
+            if (paramsDesiredSize !== params.size) {
+                throw new TypeError('オプションで指定する Header Parameter Names が衝突しています。同じパラメータを異なるヘッダーに組み込むことはできません');
+            }
+        }
+        // options の整合性確認が済んだので、インスタンスを作成
+        if (perRcptParamNames.size !== 0) {
+            this.perRcpt = { params: perRcptParams ?? {}, paramNames: perRcptParamNames };
+        }
+    }
+    PerRecipient() {
+        if (!this.perRcpt)
+            return undefined;
+        const entries = Object.entries(this.perRcpt.params).filter(([n]) => isJOSEHeaderParamName(n) && this.perRcpt?.paramNames.has(n));
+        if (entries.length === 0)
+            return undefined;
+        return Object.fromEntries(entries);
+    }
+    JOSE() {
+        return { ...this.shared, ...this.PerRecipient() };
+    }
+    update(v) {
+        super.update(v);
+        Object.entries(v).forEach(([n, vv]) => {
+            if (!isJOSEHeaderParamName(n))
+                return;
+            if (this.perRcpt?.paramNames.has(n)) {
+                this.perRcpt.params = { ...this.perRcpt.params, [n]: vv };
+            }
+            // paramNames で配置場所が指定されていない場合は、 alg と同じ場所
+            if (this.perRcpt?.paramNames.has('alg')) {
+                this.perRcpt.params = { ...this.perRcpt.params, [n]: vv };
+                this.perRcpt.paramNames.add(n);
             }
         });
     }
@@ -3687,27 +3707,21 @@ async function test$6(path) {
             p: data.encrypting_content.protected
                 ? {
                     initialValue: data.encrypting_content.protected,
-                    paramNames: new Set(Object.keys(data.encrypting_content.protected).filter((n) => isJOSEHeaderParamName(n))),
                     b64u: data.encrypting_content.protected_b64u,
                 }
                 : undefined,
             su: data.encrypting_content.unprotected
                 ? {
                     initialValue: data.encrypting_content.unprotected,
-                    paramNames: new Set(Object.keys(data.encrypting_content.unprotected).filter((n) => isJOSEHeaderParamName(n))),
                 }
                 : undefined,
             ru: Array.isArray(data.encrypting_key)
                 ? data.encrypting_key.map((k) => ({
                     initialValue: k.header,
-                    paramNames: k.header
-                        ? new Set(Object.keys(k.header).filter((n) => isJOSEHeaderParamName(n)))
-                        : undefined,
                 }))
                 : data.encrypting_key?.header
                     ? {
                         initialValue: data.encrypting_key.header,
-                        paramNames: new Set(Object.keys(data.encrypting_key.header).filter((n) => isJOSEHeaderParamName(n))),
                     }
                     : undefined,
         },
