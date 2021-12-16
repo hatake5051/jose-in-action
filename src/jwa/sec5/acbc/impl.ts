@@ -1,20 +1,14 @@
 import { EncOperator } from 'jwe/ineterface';
 import { JWEAAD, JWECEK, JWECiphertext, JWEIV, JWETag } from 'jwe/type';
 import { BASE64URL, CONCAT } from 'utility';
+import { ACBCEnc } from './encalg';
 
-export { ACBCEnc, isACBCEnc, ACBCEncOperator, generateCEKForACBCEnc };
+export { ACBCEncOperator, generateCEKForACBCEnc };
 
 /**
  * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムの実装.
  */
 const ACBCEncOperator: EncOperator<ACBCEnc> = { enc, dec };
-
-/**
- * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムを列挙する。
- */
-type ACBCEnc = typeof acbcEncList[number];
-const isACBCEnc = (arg: unknown): arg is ACBCEnc => acbcEncList.some((a) => a === arg);
-const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'] as const;
 
 /**
  * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムに従って暗号化する。

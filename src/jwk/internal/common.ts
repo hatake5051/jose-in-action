@@ -1,6 +1,8 @@
 // --------------------BEGIN JWK common parameters --------------------
 
-import { Alg, isAlg, isEncAlg, isKeyOps, isKeyUse, isKty, KeyOps, KeyUse, Kty } from 'iana';
+import { Alg, isAlg, isEncAlg } from 'iana/alg';
+import { isKeyOps, isKeyUse, KeyOps, KeyUse } from 'iana/jwk';
+import { isKty, Kty } from 'iana/kty';
 import { isObject } from 'utility';
 
 export { CommomJWKParams, isCommonJWKParams, equalsCommonJWKParams, validCommonJWKParams };

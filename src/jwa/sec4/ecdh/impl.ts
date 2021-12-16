@@ -1,23 +1,14 @@
-import { EncAlg, isEncAlg, JOSEHeader } from 'iana';
+import { EncAlg, isEncAlg } from 'iana/alg';
+import { JOSEHeader } from 'iana/header';
 import { DirectKeyAgreementer, KeyAgreementerWithKeyWrapping } from 'jwe/ineterface';
 import { JWECEK, JWEEncryptedKey } from 'jwe/type';
-import { equalsJWK, exportPublicKey, isJWK, JWK } from 'jwk';
-import { ASCII, BASE64URL, BASE64URL_DECODE, CONCAT, isObject } from 'utility';
-import { AKWKeyWrapper } from './aeskw';
+import { exportPublicKey, isJWK, JWK } from 'jwk';
+import { ASCII, BASE64URL, BASE64URL_DECODE, CONCAT } from 'utility';
+import { AKWKeyWrapper } from '../aeskw/impl';
+import { ECDH_ESAlg, ECDH_ESKWAlg, isECDH_ESAlg, isECDH_ESKWAlg } from './alg';
+import { ECDH_ESHeaderParams, isECDH_ESHeaderParams } from './header';
 
-export {
-  ECDH_ESAlg,
-  isECDH_ESAlg,
-  ECDH_ESKWAlg,
-  isECDH_ESKWAlg,
-  ECDH_ESHeaderParams,
-  ECDH_ESHeaderParamNames,
-  isECDH_ESHeaderParams,
-  isPartialECDH_ESHeaderParams,
-  equalsECDH_ESHeaderParams,
-  ECDHDirectKeyAgreementer,
-  ECDHKeyAgreementerWithKeyWrapping,
-};
+export { ECDHDirectKeyAgreementer, ECDHKeyAgreementerWithKeyWrapping };
 
 const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
   partyU: async (key: JWK<'EC', 'Pub'>, h: JOSEHeader<'JWE'>, eprivk?: JWK<'EC', 'Priv'>) => {
@@ -121,75 +112,6 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
 
     return unwrap(key, ek, { ...h, alg, enc });
   },
-};
-
-/**
- * RFC7518#4.6 Key Agreement with Elliptic Curve Diffie-Hellman Ephemeral Static (ECDH-ES)
- * ECDH 鍵合意アルゴリズムを列挙する。
- */
-
-/**
- * "enc" アルゴリズムのための Content Encryption Key として直接、鍵合意結果を使うアルゴリズムを列挙。
- * これらはアルゴリズムは鍵管理のうち、 Direct Key Agreement mode である。
- */
-type ECDH_ESAlg = 'ECDH-ES';
-const isECDH_ESAlg = (arg: unknown): arg is ECDH_ESAlg =>
-  typeof arg === 'string' && arg === 'ECDH-ES';
-
-/**
- * "enc" アルゴリズムのための Content Encryption Key を AES Key wrapping するときの対称鍵として
- * 鍵合意結果を使うアルゴリズムを列挙。
- * これらはアルゴリズムは鍵管理のうち、 Key Agreement with Key Wrapping mode である。
- */
-type ECDH_ESKWAlg = typeof ecdhEsKwAlgList[number];
-const isECDH_ESKWAlg = (arg: unknown): arg is ECDH_ESKWAlg =>
-  typeof arg === 'string' && ecdhEsKwAlgList.some((a) => a === arg);
-const ecdhEsKwAlgList = ['ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'] as const;
-
-/**
- * RFC7518#4.6.1 Header Parameters Used for ECDH Key Agreement
- * ECDH 鍵合意アルゴリズムのためのヘッダパラメータ
- */
-type ECDH_ESHeaderParams = {
-  /**
-   * RFC8518#4.6.1.1 Ephemeral Public Key Header Parameter
-   * 鍵合意アルゴリズム使用される、 originator が作成した公開鍵であり、 JWK で表現。
-   * 鍵を表すために必要な最小限の JWK パラメータのみを含むべき (SHOULD)
-   */
-  epk: JWK<'EC', 'Pub'>;
-  // agreement PartyUinfo (the producer に関する情報)
-  /**
-   * RFC8518#4.6.1.2 Agreement PartyUInfo Header Parameter
-   * the producer に関係する情報を含む、 BASE64URL-encoded された文字列。
-   * ephemeral key pair を作る側。
-   */
-  apu?: string;
-  /**
-   * RFC8518#4.6.1.3 Agreement PartyVInfo Header Parameter
-   * the recipient に関係する情報を含む、 BASE64URL-encoded された文字列。
-   * static public key を渡す側。
-   */
-  apv?: string;
-};
-
-const ECDH_ESHeaderParamNames = ['epk', 'apu', 'apv'] as const;
-
-const isECDH_ESHeaderParams = (arg: unknown): arg is ECDH_ESHeaderParams =>
-  isPartialECDH_ESHeaderParams(arg) && arg.epk != null;
-
-const isPartialECDH_ESHeaderParams = (arg: unknown): arg is Partial<ECDH_ESHeaderParams> =>
-  isObject<Partial<ECDH_ESHeaderParams>>(arg) &&
-  ECDH_ESHeaderParamNames.every(
-    (n) => !arg[n] || (n === 'epk' ? isJWK<'EC', 'Pub'>(arg.epk) : typeof arg[n] === 'string')
-  );
-
-const equalsECDH_ESHeaderParams = (
-  l?: Partial<ECDH_ESHeaderParams>,
-  r?: Partial<ECDH_ESHeaderParams>
-): boolean => {
-  if (l == null && r == null) return true;
-  if (l == null || r == null) return false;
-  return equalsJWK(l.epk, r.epk) && l.apu === r.apu && l.apv === r.apv;
 };
 
 /**

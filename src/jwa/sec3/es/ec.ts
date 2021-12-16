@@ -4,26 +4,14 @@ import { JWACrv } from 'jwa/sec6/kty';
 import { JWK } from 'jwk';
 import { SigOperator } from 'jws/interface';
 import { JWSSignature } from 'jws/type';
+import { ESAlg } from './alg';
 
-export { ESAlg, isESAlg, ESSigOperator };
+export { ESSigOperator };
 
 /**
  * ECDSA アルゴリズムで署名の作成と検証を行うオペレータを定義する
  */
 const ESSigOperator: SigOperator<ESAlg> = { sign, verify };
-
-/**
- * RFC7518#3.4.  Digital Signature with ECDSA のアルゴリズム識別子を列挙する
- */
-type ESAlg = typeof esAlgList[number];
-
-/**
- * 引数が ECDSA アルゴリズム識別子か確認する。
- */
-const isESAlg = (arg: unknown): arg is ESAlg =>
-  typeof arg === 'string' && esAlgList.some((a) => a === arg);
-
-const esAlgList = ['ES256', 'ES384', 'ES512'] as const;
 
 /**
  * ECDSA (alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。

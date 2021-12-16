@@ -1,19 +1,16 @@
 // --------------------BEGIN JWA JWS algorithms --------------------
 
-import { MACOperator, SigOperator } from 'jws/interface';
-import { ESAlg, ESSigOperator, isESAlg } from './ec';
-import { HMACOperator, HSAlg, isHSAlg } from './hmac';
-import { isPSAlg, isRSAlg, PSAlg, RSAlg, RSASigOperator } from './rsa';
+import { ESAlg, isESAlg } from './es/alg';
+import { HSAlg, isHSAlg } from './hmac/alg';
+import { isPSAlg, isRSAlg, PSAlg, RSAlg } from './rsa/alg';
 
 export {
   JWASigAlg,
   isJWASigAlg,
-  newJWASigOperator,
   JWAMACAlg,
   isJWAMACAlg,
   JWANoneAlg,
   isJWANoneAlg,
-  newJWAMACOperator,
   KtyFromJWAJWSAlg,
   ktyFromJWAJWSAlg,
 };
@@ -27,15 +24,6 @@ const isJWASigAlg = (arg: unknown): arg is JWASigAlg =>
   isRSAlg(arg) || isPSAlg(arg) || isESAlg(arg);
 
 /**
- * JWA で定義されている署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newJWASigOperator<A extends JWASigAlg>(alg: A): SigOperator<A> {
-  if (isRSAlg(alg) || isPSAlg(alg)) return RSASigOperator as SigOperator<A>;
-  if (isESAlg(alg)) return ESSigOperator as SigOperator<A>;
-  throw new TypeError(`SigOperator<${alg}> は実装されていない`);
-}
-
-/**
  * JWS の MAC アルゴリズムを列挙する
  */
 type JWAMACAlg = HSAlg;
@@ -44,14 +32,6 @@ type JWAMACAlg = HSAlg;
  * 引数が JWS の MAC アルゴリズムか確認する
  */
 const isJWAMACAlg = (arg: unknown): arg is JWAMACAlg => isHSAlg(arg);
-
-/**
- * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newJWAMACOperator<A extends JWAMACAlg>(alg: A): MACOperator<A> {
-  if (isHSAlg(alg)) return HMACOperator as MACOperator<A>;
-  throw TypeError(`MacOperator<${alg}> は実装されていない`);
-}
 
 /**
  * JWS の Unsecure な none アルゴリズムを列挙する。

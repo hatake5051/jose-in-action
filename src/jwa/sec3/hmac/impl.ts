@@ -4,25 +4,14 @@ import { JWK } from 'jwk';
 import { MACOperator } from 'jws/interface';
 import { JWSSignature } from 'jws/type';
 import { BASE64URL_DECODE } from 'utility';
-export { HSAlg, isHSAlg, HMACOperator };
+import { HSAlg } from './alg';
+
+export { HMACOperator };
 
 /**
  * HMAC アルゴリズムで MAC の生成と検証を行うオペレータを定義する
  */
 const HMACOperator: MACOperator<HSAlg> = { mac, verify };
-
-/**
- * RFC7518#3.2.  HMAC with SHA-2 Functions のアルゴリズム識別子を列挙する。
- */
-type HSAlg = typeof hsAlgList[number];
-
-/**
- * 引数が HMAC アルゴリズム識別子か確認する。
- */
-const isHSAlg = (arg: unknown): arg is HSAlg =>
-  typeof arg === 'string' && hsAlgList.some((a) => a === arg);
-
-const hsAlgList = ['HS256', 'HS384', 'HS512'] as const;
 
 /**
  * HMAC アルゴリズムに従い MAC を計算する。

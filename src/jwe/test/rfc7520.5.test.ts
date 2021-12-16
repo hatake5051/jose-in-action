@@ -1,4 +1,5 @@
-import { Alg, EncAlg, isAlg, isEncAlg, isJOSEHeader } from 'iana';
+import { Alg, EncAlg, isAlg, isEncAlg } from 'iana/alg';
+import { isJOSEHeader } from 'iana/header';
 import { isJWEFlattenedJSONSerialization, isJWEJSONSerialization } from 'jwe';
 import {
   JWECompactSerialization,

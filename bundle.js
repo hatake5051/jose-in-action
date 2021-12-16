@@ -1,42 +1,115 @@
 'use strict';
 
-// --------------------BEGIN JWA EC algorithms --------------------
-/**
- * ECDSA アルゴリズムで署名の作成と検証を行うオペレータを定義する
- */
-const ESSigOperator = { sign: sign$2, verify: verify$3 };
 /**
  * 引数が ECDSA アルゴリズム識別子か確認する。
  */
 const isESAlg = (arg) => typeof arg === 'string' && esAlgList.some((a) => a === arg);
 const esAlgList = ['ES256', 'ES384', 'ES512'];
+
 /**
- * ECDSA (alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。
+ * 引数が HMAC アルゴリズム識別子か確認する。
  */
-async function sign$2(alg, key, m) {
-    const { keyAlg, sigAlg } = params$2(alg, key.crv);
-    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
-    const s = await window.crypto.subtle.sign(sigAlg, k, m);
-    return new Uint8Array(s);
-}
+const isHSAlg = (arg) => typeof arg === 'string' && hsAlgList.some((a) => a === arg);
+const hsAlgList = ['HS256', 'HS384', 'HS512'];
+
 /**
- * ECDSA (alg)に従い、与えられたメッセージ(m)と公開鍵(key) を署名(s)で検証する。
+ * 引数が RSA-PKCS1-v1.5 アルゴリズム識別子か確認する。
  */
-async function verify$3(alg, key, m, s) {
-    const { keyAlg, sigAlg } = params$2(alg, key.crv);
-    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
-        'verify',
-    ]);
-    const sig = await window.crypto.subtle.verify(sigAlg, k, s, m);
-    return sig;
+const isRSAlg = (arg) => typeof arg === 'string' && rsAlgList.some((a) => a === arg);
+const rsAlgList = ['RS256', 'RS384', 'RS512'];
+/**
+ * 引数が RSA-PSS アルゴリズム識別子か確認する。
+ */
+const isPSAlg = (arg) => typeof arg === 'string' && psAlgList.some((a) => a === arg);
+const psAlgList = ['PS256', 'PS384', 'PS512'];
+
+// --------------------BEGIN JWA JWS algorithms --------------------
+const isJWASigAlg = (arg) => isRSAlg(arg) || isPSAlg(arg) || isESAlg(arg);
+/**
+ * 引数が JWS の MAC アルゴリズムか確認する
+ */
+const isJWAMACAlg = (arg) => isHSAlg(arg);
+const isJWANoneAlg = (arg) => typeof arg === 'string' && arg === 'none';
+/**
+ * JWS Alg に応じた Kty を返す。
+ */
+function ktyFromJWAJWSAlg(alg) {
+    if (isPSAlg(alg) || isRSAlg(alg))
+        return 'RSA';
+    if (isESAlg(alg))
+        return 'EC';
+    if (isHSAlg(alg))
+        return 'oct';
+    if (isJWANoneAlg(alg))
+        throw new EvalError('none alg で鍵は使わない');
+    throw new TypeError(`${alg} は JWA で定義された JWS の Alg ではない`);
 }
-function params$2(alg, crv) {
-    return {
-        keyAlg: { name: 'ECDSA', namedCurve: crv },
-        sigAlg: { name: 'ECDSA', hash: 'SHA-' + alg.slice(2) },
-    };
+// --------------------END JWA JWS algorithms --------------------
+
+const isAGCMKWAlg = (arg) => typeof arg === 'string' && agcmAlgList.some((a) => a === arg);
+const agcmAlgList = ['A128GCMKW', 'A192GCMKW', 'A256GCMKW'];
+
+const isAKWAlg = (arg) => typeof arg === 'string' && akwAlgList.some((a) => a === arg);
+const akwAlgList = ['A128KW', 'A192KW', 'A256KW'];
+
+const isECDH_ESAlg = (arg) => typeof arg === 'string' && arg === 'ECDH-ES';
+const isECDH_ESKWAlg = (arg) => typeof arg === 'string' && ecdhEsKwAlgList.some((a) => a === arg);
+const ecdhEsKwAlgList = ['ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'];
+
+const isPBES2Alg = (arg) => typeof arg === 'string' && pbes2AlgList.some((a) => a === arg);
+const pbes2AlgList = ['PBES2-HS256+A128KW', 'PBES2-HS384+A192KW', 'PBES2-HS512+A256KW'];
+
+const isRSA1_5Alg = (arg) => typeof arg === 'string' && arg === 'RSA1_5';
+const isRSAOAEPAlg = (arg) => typeof arg === 'string' && rsaoaepAlgList.some((a) => a === arg);
+const rsaoaepAlgList = ['RSA-OAEP', 'RSA-OAEP-256'];
+
+const isJWAKEAlg = (arg) => isRSA1_5Alg(arg) || isRSAOAEPAlg(arg);
+const isJWAKWAlg = (arg) => isAKWAlg(arg) || isAGCMKWAlg(arg) || isPBES2Alg(arg);
+const isJWADKAAlg = (arg) => isECDH_ESAlg(arg);
+const isJWAKAKWAlg = (arg) => isECDH_ESKWAlg(arg);
+const isJWADEAlg = (arg) => typeof arg === 'string' && arg === 'dir';
+function ktyFromJWAJWEAlg(alg) {
+    if (isJWAKEAlg(alg))
+        return 'RSA';
+    if (isJWAKWAlg(alg) || isJWADEAlg(alg))
+        return 'oct';
+    if (isJWADKAAlg(alg) || isJWAKAKWAlg(alg))
+        return 'EC';
+    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
 }
-// --------------------END JWA EC algorithms --------------------
+function keyMgmtModeFromJWAAlg(alg) {
+    if (isJWAKEAlg(alg))
+        return 'KE';
+    if (isJWAKWAlg(alg))
+        return 'KW';
+    if (isJWADKAAlg(alg))
+        return 'DKA';
+    if (isJWAKAKWAlg(alg))
+        return 'KAKW';
+    if (isJWADEAlg(alg))
+        return 'DE';
+    const a = alg;
+    throw new TypeError(`${a} の Key Management Mode がわからない`);
+}
+
+const isACBCEnc = (arg) => acbcEncList.some((a) => a === arg);
+const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'];
+
+const isAGCMEnc = (arg) => agcmEncList.some((a) => a === arg);
+const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'];
+
+const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
+
+function isAlg(arg, t) {
+    const isJWSAlg = (arg) => isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
+    const isJWEAlg = (arg) => isJWAKEAlg(arg) || isJWAKWAlg(arg) || isJWADKAAlg(arg) || isJWAKAKWAlg(arg) || isJWADEAlg(arg);
+    if (t === 'JWS')
+        return isJWSAlg(arg);
+    if (t === 'JWE')
+        return isJWEAlg(arg);
+    return isJWSAlg(arg) || isJWEAlg(arg);
+}
+const isEncAlg = (arg) => isJWAEncAlg(arg);
 
 // --------------------BEGIN util functions --------------------
 /**
@@ -116,172 +189,6 @@ function CONCAT(A, B) {
 const isObject = (value) => typeof value === 'object' && value !== null;
 // --------------------END util functions --------------------
 
-// --------------------BEGIN JWA HMAC algorithms --------------------
-/**
- * HMAC アルゴリズムで MAC の生成と検証を行うオペレータを定義する
- */
-const HMACOperator = { mac, verify: verify$2 };
-/**
- * 引数が HMAC アルゴリズム識別子か確認する。
- */
-const isHSAlg = (arg) => typeof arg === 'string' && hsAlgList.some((a) => a === arg);
-const hsAlgList = ['HS256', 'HS384', 'HS512'];
-/**
- * HMAC アルゴリズムに従い MAC を計算する。
- * 計算を行う前に、鍵長が十分かどうか判定を行う。
- */
-async function mac(alg, key, m) {
-    // ハッシュの出力サイズ以上の鍵長が必要である (RFC8517#3.2)
-    if (BASE64URL_DECODE(key.k).length < parseInt(alg.slice(2)) / 8) {
-        throw new EvalError(`${alg} では鍵長が ${parseInt(alg.slice(2)) / 8} 以上にしてください`);
-    }
-    const { k: keyAlg, s: sigAlg } = params$1(alg);
-    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
-    const s = await window.crypto.subtle.sign(sigAlg, k, m);
-    return new Uint8Array(s);
-}
-/**
- * HMAC アルゴリズムに従い、与えられた MAC を検証する。
- */
-async function verify$2(alg, key, m, s) {
-    // ハッシュの出力サイズ以上の鍵長が必要である (RFC8517#3.2)
-    if (BASE64URL_DECODE(key.k).length < parseInt(alg.slice(2)) / 8) {
-        throw new EvalError(`${alg} では鍵長が ${parseInt(alg.slice(2)) / 8} 以上にしてください`);
-    }
-    const { k: keyAlg, s: sigAlg } = params$1(alg);
-    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
-        'verify',
-    ]);
-    const isValid = await window.crypto.subtle.verify(sigAlg, k, s, m);
-    return isValid;
-}
-function params$1(alg) {
-    const name = 'HMAC';
-    const keyAlg = { name, hash: 'SHA-' + alg.slice(2) };
-    const sigAlg = name;
-    return { k: keyAlg, s: sigAlg };
-}
-// --------------------END JWA HMAC algorithms --------------------
-
-// --------------------BEGIN JWA RSA algorithms --------------------
-/**
- * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズムで署名の作成と検証を行うオペレータを定義する
- */
-const RSASigOperator = {
-    sign: sign$1,
-    verify: verify$1,
-};
-/**
- * 引数が RSA-PKCS1-v1.5 アルゴリズム識別子か確認する。
- */
-const isRSAlg = (arg) => typeof arg === 'string' && rsAlgList.some((a) => a === arg);
-const rsAlgList = ['RS256', 'RS384', 'RS512'];
-/**
- * 引数が RSA-PSS アルゴリズム識別子か確認する。
- */
-const isPSAlg = (arg) => typeof arg === 'string' && psAlgList.some((a) => a === arg);
-const psAlgList = ['PS256', 'PS384', 'PS512'];
-/**
- * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズム(alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。
- * 計算を行う前に、鍵長が十分かどうか判定を行う。
- */
-async function sign$1(alg, key, m) {
-    const { keyAlg, sigAlg } = params(alg);
-    if (BASE64URL_DECODE(key.n).length * 8 < 2048 && BASE64URL_DECODE(key.d).length * 8 < 2048) {
-        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#3.3)
-        throw new EvalError(`RSA sig では鍵長が 2048 以上にしてください`);
-    }
-    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
-    const s = await window.crypto.subtle.sign(sigAlg, k, m);
-    return new Uint8Array(s);
-}
-/**
- * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズム(alg)に従い、与えられたメッセージ(m)と公開鍵(key) を署名(sig)で検証する。
- * 計算を行う前に、鍵長が十分かどうか判定を行う。
- */
-async function verify$1(alg, key, m, sig) {
-    if (BASE64URL_DECODE(key.n).length * 8 < 2048) {
-        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#3.3)
-        throw new EvalError(`RSA sig では鍵長が 2048 以上にしてください`);
-    }
-    const { keyAlg, sigAlg } = params(alg);
-    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
-        'verify',
-    ]);
-    const s = await window.crypto.subtle.verify(sigAlg, k, sig, m);
-    return s;
-}
-function params(alg) {
-    let name, sigAlg;
-    if (isRSAlg(alg)) {
-        name = 'RSASSA-PKCS1-v1_5';
-        sigAlg = name;
-    }
-    else {
-        // isPSAlg(alg) === true
-        name = 'RSA-PSS';
-        // ソルト値のサイズはハッシュ関数の出力と同じサイズ (RFC7518#3.5)
-        sigAlg = { name, saltLength: parseInt(alg.slice(2)) / 8 };
-    }
-    const keyAlg = { name, hash: 'SHA-' + alg.slice(2) };
-    return { keyAlg, sigAlg };
-}
-// --------------------END JWA RSA algorithms --------------------
-
-// --------------------BEGIN JWA JWS algorithms --------------------
-const isJWASigAlg = (arg) => isRSAlg(arg) || isPSAlg(arg) || isESAlg(arg);
-/**
- * JWA で定義されている署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newJWASigOperator(alg) {
-    if (isRSAlg(alg) || isPSAlg(alg))
-        return RSASigOperator;
-    if (isESAlg(alg))
-        return ESSigOperator;
-    throw new TypeError(`SigOperator<${alg}> は実装されていない`);
-}
-/**
- * 引数が JWS の MAC アルゴリズムか確認する
- */
-const isJWAMACAlg = (arg) => isHSAlg(arg);
-/**
- * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newJWAMACOperator(alg) {
-    if (isHSAlg(alg))
-        return HMACOperator;
-    throw TypeError(`MacOperator<${alg}> は実装されていない`);
-}
-const isJWANoneAlg = (arg) => typeof arg === 'string' && arg === 'none';
-/**
- * JWS Alg に応じた Kty を返す。
- */
-function ktyFromJWAJWSAlg(alg) {
-    if (isPSAlg(alg) || isRSAlg(alg))
-        return 'RSA';
-    if (isESAlg(alg))
-        return 'EC';
-    if (isHSAlg(alg))
-        return 'oct';
-    if (isJWANoneAlg(alg))
-        throw new EvalError('none alg で鍵は使わない');
-    throw new TypeError(`${alg} は JWA で定義された JWS の Alg ではない`);
-}
-// --------------------END JWA JWS algorithms --------------------
-
-const AGCMKeyWrapper = {
-    wrap: async (key, cek, h) => {
-        return wrap$3(key, cek, h);
-    },
-    unwrap: async (key, ek, h) => {
-        if (!isAGCMKWHeaderParams(h)) {
-            throw new TypeError(`JOSE Header for AES-GCM Key Wrapping に必須パラメータがない(iv, tag)`);
-        }
-        return unwrap$3(key, ek, h);
-    },
-};
-const isAGCMKWAlg = (arg) => typeof arg === 'string' && agcmAlgList.some((a) => a === arg);
-const agcmAlgList = ['A128GCMKW', 'A192GCMKW', 'A256GCMKW'];
 const AGCMKWHeaderParamNames = ['iv', 'tag'];
 const isPartialAGCMKWHeaderParams = (arg) => isObject(arg) &&
     AGCMKWHeaderParamNames.every((n) => !arg[n] || typeof arg[n] === 'string');
@@ -293,79 +200,58 @@ function equalsAGCMKWHeaderParams(l, r) {
         return false;
     return l.iv === r.iv && l.tag === r.tag;
 }
-/**
- * AES GCM アルゴリズムを使って CEK を暗号化する。
- */
-async function wrap$3(key, cek, h) {
-    const iv = h?.iv ? BASE64URL_DECODE(h.iv) : window.crypto.getRandomValues(new Uint8Array(12));
-    // IV は 96bit である必要がある (REQUIRED)
-    if (iv.length * 8 !== 96) {
-        throw new TypeError('IV は 96bit である必要がある。');
+
+// --------------------BEGIN JWA Kty and Crv definition --------------------
+const isJWAKty = (arg) => typeof arg == 'string' && jwaKtyList.some((k) => k === arg);
+const jwaKtyList = ['EC', 'RSA', 'oct'];
+const isJWACrv = (arg) => typeof arg === 'string' && jwaCrvList.some((u) => u === arg);
+const jwaCrvList = ['P-256', 'P-384', 'P-521'];
+// --------------------BEGIN JWA Kty and Crv definition --------------------
+
+const isKty = (arg) => isJWAKty(arg);
+function ktyFromAlg(alg) {
+    if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
+        return ktyFromJWAJWSAlg(alg);
     }
-    // WecCryptoAPI を使うと JWK.alg チェックでエラーが出てしまう c.f.) https://w3c.github.io/webcrypto/#aes-gcm-operations
-    // WebCryptoAPI は JWE.alg に対応できていないのかな...
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { alg, ...keyWithoutAlg } = key;
-    const k = await window.crypto.subtle.importKey('jwk', keyWithoutAlg, { name: 'AES-GCM' }, false, [
-        'encrypt',
-    ]);
-    const e = new Uint8Array(await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, cek));
-    const ek = e.slice(0, e.length - 16);
-    // tag は Header に格納される。
-    const tag = e.slice(e.length - 16);
-    return { ek, h: { iv: h?.iv ?? BASE64URL(iv), tag: BASE64URL(tag) } };
-}
-/**
- * AES GCM アルゴリズムを使って Encrypted Key を復号する。
- */
-async function unwrap$3(key, ek, h) {
-    const iv = BASE64URL_DECODE(h.iv);
-    // IV は 96bit である必要がある (REQUIRED)
-    if (iv.length * 8 !== 96) {
-        throw new TypeError('IV は 96bit である必要がある。');
+    if (isJWAKEAlg(alg) ||
+        isJWAKWAlg(alg) ||
+        isJWADKAAlg(alg) ||
+        isJWAKAKWAlg(alg) ||
+        isJWADEAlg(alg)) {
+        return ktyFromJWAJWEAlg(alg);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { alg, ...keyWithoutAlg } = key;
-    const k = await window.crypto.subtle.importKey('jwk', keyWithoutAlg, { name: 'AES-GCM' }, false, [
-        'decrypt',
-    ]);
-    const e = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, k, CONCAT(ek, BASE64URL_DECODE(h.tag)));
-    return new Uint8Array(e);
+    if (isJWAEncAlg(alg)) {
+        return 'oct';
+    }
+    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
 }
 
-const AKWKeyWrapper = {
-    wrap: async (key, cek) => {
-        return { ek: await wrap$2(key, cek) };
-    },
-    unwrap: unwrap$2,
+const keyUseList = ['sig', 'enc'];
+const isKeyUse = (arg) => {
+    if (typeof arg === 'string') {
+        return keyUseList.some((u) => u === arg);
+    }
+    return false;
 };
-const isAKWAlg = (arg) => typeof arg === 'string' && akwAlgList.some((a) => a === arg);
-const akwAlgList = ['A128KW', 'A192KW', 'A256KW'];
 /**
- * AES Key Wrapping アルゴリズムに従い、 Content Encryption Key をラッピングして暗号化する。
+ * JSON Web Key Operations を列挙する。
  */
-async function wrap$2(key, cek) {
-    // Crypto API の wrapKey を使って CEK をラッピングするが、
-    // wrapKey の引数には Crypt API の CryptoKey 形式にして、 CEK を渡す必要がある。
-    // また、 CryptoKey をインポートする際は鍵の仕様用途などを指定する必要がある。
-    // しかし指定した情報はラッピングに同梱されないため、適当に AES-GCM の鍵として CEK をインポートしている。
-    const apiCEK = await window.crypto.subtle.importKey('raw', cek, 'AES-GCM', true, ['encrypt']);
-    const k = await window.crypto.subtle.importKey('jwk', key, { name: 'AES-KW' }, false, [
-        'wrapKey',
-    ]);
-    const e = await window.crypto.subtle.wrapKey('raw', apiCEK, k, { name: 'AES-KW' });
-    return new Uint8Array(e);
-}
-/**
- * AES Key Wrapping アルゴリズムに従い、 JWE Encrypted Key を案ラップして CEK を復号する。
- */
-async function unwrap$2(key, ek) {
-    const k = await window.crypto.subtle.importKey('jwk', key, { name: 'AES-KW' }, false, [
-        'unwrapKey',
-    ]);
-    const e = await window.crypto.subtle.unwrapKey('raw', ek, k, { name: 'AES-KW' }, 'AES-GCM', true, ['decrypt']);
-    return new Uint8Array(await window.crypto.subtle.exportKey('raw', e));
-}
+const keyOpsList = [
+    'sign',
+    'verify',
+    'encrypt',
+    'decrypt',
+    'wrapKey',
+    'unwrapKey',
+    'deriveKey',
+    'deriveBits',
+];
+const isKeyOps = (arg) => {
+    if (typeof arg === 'string') {
+        return keyOpsList.some((u) => u === arg);
+    }
+    return false;
+};
 
 // --------------------BEGIN JWK common parameters --------------------
 const commonJWKParamNameList = [
@@ -457,13 +343,6 @@ function validCommonJWKParams(params) {
     return true;
 }
 // --------------------END JWK common parameters --------------------
-
-// --------------------BEGIN JWA Kty and Crv definition --------------------
-const isJWAKty = (arg) => typeof arg == 'string' && jwaKtyList.some((k) => k === arg);
-const jwaKtyList = ['EC', 'RSA', 'oct'];
-const isJWACrv = (arg) => typeof arg === 'string' && jwaCrvList.some((u) => u === arg);
-const jwaCrvList = ['P-256', 'P-384', 'P-521'];
-// --------------------BEGIN JWA Kty and Crv definition --------------------
 
 // --------------------BEGIN JWA EC keys --------------------
 /**
@@ -1231,6 +1110,298 @@ async function validJWKx5c(jwk, selfSigned = false) {
 }
 // --------------------END JWK definition --------------------
 
+const ECDH_ESHeaderParamNames = ['epk', 'apu', 'apv'];
+const isECDH_ESHeaderParams = (arg) => isPartialECDH_ESHeaderParams(arg) && arg.epk != null;
+const isPartialECDH_ESHeaderParams = (arg) => isObject(arg) &&
+    ECDH_ESHeaderParamNames.every((n) => !arg[n] || (n === 'epk' ? isJWK(arg.epk) : typeof arg[n] === 'string'));
+const equalsECDH_ESHeaderParams = (l, r) => {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    return equalsJWK(l.epk, r.epk) && l.apu === r.apu && l.apv === r.apv;
+};
+
+const PBES2HeaderParamNames = ['p2c', 'p2s'];
+const isPBES2HeaderParams = (arg) => isPartialPBES2HeaderParams(arg) && arg.p2c != null && arg.p2s != null;
+const isPartialPBES2HeaderParams = (arg) => isObject(arg) &&
+    PBES2HeaderParamNames.every((n) => !arg[n] || (n === 'p2c' ? typeof arg[n] === 'number' : typeof arg[n] === 'string'));
+function equalsPBES2HeaderParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    return l.p2c === r.p2c && l.p2s === r.p2s;
+}
+
+const JWAAlgSpecificJOSEHeaderParamNames = [
+    ...AGCMKWHeaderParamNames,
+    ...ECDH_ESHeaderParamNames,
+    ...PBES2HeaderParamNames,
+];
+const isPartialJWAAlgSpecificJOSEHeader = (arg) => isPartialAGCMKWHeaderParams(arg) ||
+    isPartialECDH_ESHeaderParams(arg) ||
+    isPartialPBES2HeaderParams(arg);
+const equalsJWAAlgSpecificJOSEHeader = (l, r) => equalsAGCMKWHeaderParams(l, r) ||
+    equalsECDH_ESHeaderParams(l, r) ||
+    equalsPBES2HeaderParams(l, r);
+
+const JWEJOSEHeaderParamNames = [
+    'alg',
+    'enc',
+    'zip',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
+const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
+    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isAlg(arg[n], 'JWE')
+            : n === 'enc'
+                ? isEncAlg(arg[n])
+                : n === 'jwk'
+                    ? isJWK(arg[n])
+                    : n === 'x5c' || n === 'crit'
+                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                        : typeof arg[n] === 'string'));
+function equalsJWEJOSEHeader(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of JWEJOSEHeaderParamNames) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        switch (n) {
+            case 'jwk': {
+                const ll = ln;
+                const rr = rn;
+                if (equalsJWK(ll, rr))
+                    continue;
+                return false;
+            }
+            case 'x5t':
+            case 'crit': {
+                const ll = ln;
+                const rr = rn;
+                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
+                    continue;
+                return false;
+            }
+            default: {
+                const ll = ln;
+                const rr = rn;
+                if (ll === rr)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+const JWSJOSEHeaderParamNames = [
+    'alg',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
+/**
+ * 引数が Partial<JWSJOSEHeader> か確認する。
+ * isJWSJOSEHeader は alg が値を持っているか確認するが、これでは undefined でも良いとしている。
+ */
+const isPartialJWSJOSEHeader = (arg) => isObject(arg) &&
+    JWSJOSEHeaderParamNames.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isAlg(arg[n], 'JWS')
+            : n === 'jwk'
+                ? isJWK(arg[n])
+                : n === 'x5c' || n === 'crit'
+                    ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                    : typeof arg[n] === 'string'));
+/**
+ * ２つの JWSJOSEHEader が同じか判定する
+ */
+function equalsJWSJOSEHeader(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of JWSJOSEHeaderParamNames) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        switch (n) {
+            case 'jwk': {
+                const ll = ln;
+                const rr = rn;
+                if (equalsJWK(ll, rr))
+                    continue;
+                return false;
+            }
+            case 'x5t':
+            case 'crit': {
+                const ll = ln;
+                const rr = rn;
+                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
+                    continue;
+                return false;
+            }
+            default: {
+                const ll = ln;
+                const rr = rn;
+                if (ll === rr)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+const equalsJOSEHeader = (l, r) => {
+    if (isJOSEHeader(l, 'JWS')) {
+        if (!isJOSEHeader(r, 'JWS'))
+            return false;
+        return equalsJWSJOSEHeader(l, r);
+    }
+    else if (isJOSEHeader(l, 'JWE')) {
+        if (!isJOSEHeader(r, 'JWE'))
+            return false;
+        return equalsJWEJOSEHeader(l, r) && equalsJWAAlgSpecificJOSEHeader(l, r);
+    }
+    return false;
+};
+function isJOSEHeader(arg, t) {
+    if (t === 'JWE') {
+        return isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg);
+    }
+    // TODO;
+    if (t === 'JWS') {
+        return isPartialJWSJOSEHeader(arg);
+    }
+    return (isPartialJWSJOSEHeader(arg) ||
+        (isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg)));
+}
+function isJOSEHeaderParamName(arg, t) {
+    if (t === 'JWE') {
+        return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some((n) => n === arg);
+    }
+    if (t === 'JWS') {
+        return [...JWSJOSEHeaderParamNames].some((n) => n === arg);
+    }
+    return [
+        ...JWEJOSEHeaderParamNames,
+        ...JWAAlgSpecificJOSEHeaderParamNames,
+        ...JWSJOSEHeaderParamNames,
+    ].some((n) => n === arg);
+}
+
+const AGCMKeyWrapper = {
+    wrap: async (key, cek, h) => {
+        return wrap$3(key, cek, h);
+    },
+    unwrap: async (key, ek, h) => {
+        if (!isAGCMKWHeaderParams(h)) {
+            throw new TypeError(`JOSE Header for AES-GCM Key Wrapping に必須パラメータがない(iv, tag)`);
+        }
+        return unwrap$3(key, ek, h);
+    },
+};
+/**
+ * AES GCM アルゴリズムを使って CEK を暗号化する。
+ */
+async function wrap$3(key, cek, h) {
+    const iv = h?.iv ? BASE64URL_DECODE(h.iv) : window.crypto.getRandomValues(new Uint8Array(12));
+    // IV は 96bit である必要がある (REQUIRED)
+    if (iv.length * 8 !== 96) {
+        throw new TypeError('IV は 96bit である必要がある。');
+    }
+    // WecCryptoAPI を使うと JWK.alg チェックでエラーが出てしまう c.f.) https://w3c.github.io/webcrypto/#aes-gcm-operations
+    // WebCryptoAPI は JWE.alg に対応できていないのかな...
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { alg, ...keyWithoutAlg } = key;
+    const k = await window.crypto.subtle.importKey('jwk', keyWithoutAlg, { name: 'AES-GCM' }, false, [
+        'encrypt',
+    ]);
+    const e = new Uint8Array(await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, cek));
+    const ek = e.slice(0, e.length - 16);
+    // tag は Header に格納される。
+    const tag = e.slice(e.length - 16);
+    return { ek, h: { iv: h?.iv ?? BASE64URL(iv), tag: BASE64URL(tag) } };
+}
+/**
+ * AES GCM アルゴリズムを使って Encrypted Key を復号する。
+ */
+async function unwrap$3(key, ek, h) {
+    const iv = BASE64URL_DECODE(h.iv);
+    // IV は 96bit である必要がある (REQUIRED)
+    if (iv.length * 8 !== 96) {
+        throw new TypeError('IV は 96bit である必要がある。');
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { alg, ...keyWithoutAlg } = key;
+    const k = await window.crypto.subtle.importKey('jwk', keyWithoutAlg, { name: 'AES-GCM' }, false, [
+        'decrypt',
+    ]);
+    const e = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, k, CONCAT(ek, BASE64URL_DECODE(h.tag)));
+    return new Uint8Array(e);
+}
+
+const AKWKeyWrapper = {
+    wrap: async (key, cek) => {
+        return { ek: await wrap$2(key, cek) };
+    },
+    unwrap: unwrap$2,
+};
+/**
+ * AES Key Wrapping アルゴリズムに従い、 Content Encryption Key をラッピングして暗号化する。
+ */
+async function wrap$2(key, cek) {
+    // Crypto API の wrapKey を使って CEK をラッピングするが、
+    // wrapKey の引数には Crypt API の CryptoKey 形式にして、 CEK を渡す必要がある。
+    // また、 CryptoKey をインポートする際は鍵の仕様用途などを指定する必要がある。
+    // しかし指定した情報はラッピングに同梱されないため、適当に AES-GCM の鍵として CEK をインポートしている。
+    const apiCEK = await window.crypto.subtle.importKey('raw', cek, 'AES-GCM', true, ['encrypt']);
+    const k = await window.crypto.subtle.importKey('jwk', key, { name: 'AES-KW' }, false, [
+        'wrapKey',
+    ]);
+    const e = await window.crypto.subtle.wrapKey('raw', apiCEK, k, { name: 'AES-KW' });
+    return new Uint8Array(e);
+}
+/**
+ * AES Key Wrapping アルゴリズムに従い、 JWE Encrypted Key を案ラップして CEK を復号する。
+ */
+async function unwrap$2(key, ek) {
+    const k = await window.crypto.subtle.importKey('jwk', key, { name: 'AES-KW' }, false, [
+        'unwrapKey',
+    ]);
+    const e = await window.crypto.subtle.unwrapKey('raw', ek, k, { name: 'AES-KW' }, 'AES-GCM', true, ['decrypt']);
+    return new Uint8Array(await window.crypto.subtle.exportKey('raw', e));
+}
+
 const ECDHDirectKeyAgreementer = {
     partyU: async (key, h, eprivk) => {
         if (!isEncAlg(h.enc)) {
@@ -1318,20 +1489,6 @@ const ECDHKeyAgreementerWithKeyWrapping = {
         }
         return unwrap$1(key, ek, { ...h, alg, enc });
     },
-};
-const isECDH_ESAlg = (arg) => typeof arg === 'string' && arg === 'ECDH-ES';
-const isECDH_ESKWAlg = (arg) => typeof arg === 'string' && ecdhEsKwAlgList.some((a) => a === arg);
-const ecdhEsKwAlgList = ['ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'];
-const ECDH_ESHeaderParamNames = ['epk', 'apu', 'apv'];
-const isECDH_ESHeaderParams = (arg) => isPartialECDH_ESHeaderParams(arg) && arg.epk != null;
-const isPartialECDH_ESHeaderParams = (arg) => isObject(arg) &&
-    ECDH_ESHeaderParamNames.every((n) => !arg[n] || (n === 'epk' ? isJWK(arg.epk) : typeof arg[n] === 'string'));
-const equalsECDH_ESHeaderParams = (l, r) => {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    return equalsJWK(l.epk, r.epk) && l.apu === r.apu && l.apv === r.apv;
 };
 /**
  * RFC7518#4.6.2 に基づいて鍵合意を行う。
@@ -1514,19 +1671,6 @@ const PBES2KeyWrapper = {
         return unwrap(key, ek, { ...h, alg });
     },
 };
-const isPBES2Alg = (arg) => typeof arg === 'string' && pbes2AlgList.some((a) => a === arg);
-const pbes2AlgList = ['PBES2-HS256+A128KW', 'PBES2-HS384+A192KW', 'PBES2-HS512+A256KW'];
-const PBES2HeaderParamNames = ['p2c', 'p2s'];
-const isPBES2HeaderParams = (arg) => isPartialPBES2HeaderParams(arg) && arg.p2c != null && arg.p2s != null;
-const isPartialPBES2HeaderParams = (arg) => isObject(arg) &&
-    PBES2HeaderParamNames.every((n) => !arg[n] || (n === 'p2c' ? typeof arg[n] === 'number' : typeof arg[n] === 'string'));
-function equalsPBES2HeaderParams(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    return l.p2c === r.p2c && l.p2s === r.p2s;
-}
 /**
  * RFC2898#6.2.1 に基づいて、ユーザが指定したパスワードで CEK をラップする。
  * パスワードは JWK<oct> で表現されているが、k にはパスワードの UTF-8 表現を BASE64URL エンコードしたものが入る。
@@ -1599,9 +1743,6 @@ async function PBKDF2(P, S, c, dkLen, hash) {
 }
 
 const RSAKeyEncryptor = { enc: enc$3, dec: dec$3 };
-const isRSA1_5Alg = (arg) => typeof arg === 'string' && arg === 'RSA1_5';
-const isRSAOAEPAlg = (arg) => typeof arg === 'string' && rsaoaepAlgList.some((a) => a === arg);
-const rsaoaepAlgList = ['RSA-OAEP', 'RSA-OAEP-256'];
 /**
  * RSAES-PKCS1-v1_5 か RSA-OAEP アルゴリズム(alg) に従い、与えられた Content Encryption Key を key を使って暗号化する。
  * 計算を行う前に、鍵長が 2048 以上か確認する。
@@ -1762,13 +1903,11 @@ async function modPow(g, k, n) {
     return r;
 }
 
-const isJWAKEAlg = (arg) => isRSA1_5Alg(arg) || isRSAOAEPAlg(arg);
 function newJWAKeyEncryptor(alg) {
     if (isRSA1_5Alg(alg) || isRSAOAEPAlg(alg))
         return RSAKeyEncryptor;
     throw TypeError(`KeyEncryptor<$alg> は実装されていない`);
 }
-const isJWAKWAlg = (arg) => isAKWAlg(arg) || isAGCMKWAlg(arg) || isPBES2Alg(arg);
 function newJWAKeyWrapper(alg) {
     if (isAKWAlg(alg))
         return AKWKeyWrapper;
@@ -1778,19 +1917,16 @@ function newJWAKeyWrapper(alg) {
         return PBES2KeyWrapper;
     throw TypeError(`KeyWrapper<$alg> is not implemented`);
 }
-const isJWADKAAlg = (arg) => isECDH_ESAlg(arg);
 function newJWADirectAgreementer(alg) {
     if (isECDH_ESAlg(alg))
         return ECDHDirectKeyAgreementer;
     throw TypeError(`KeyAgreement<$alg> is not implemented`);
 }
-const isJWAKAKWAlg = (arg) => isECDH_ESKWAlg(arg);
 function newJWAKeyAgreementerWithKeyWrapping(alg) {
     if (isECDH_ESKWAlg(alg))
         return ECDHKeyAgreementerWithKeyWrapping;
     throw TypeError(`KeyAgreementerWithKeyWrapping<$alg> is not implemented`);
 }
-const isJWADEAlg = (arg) => typeof arg === 'string' && arg === 'dir';
 function newJWADirectEncryptor(alg) {
     if (isJWADEAlg(alg))
         return {
@@ -1798,47 +1934,11 @@ function newJWADirectEncryptor(alg) {
         };
     throw TypeError(`DirecyEncryptor<$alg> is not implemented`);
 }
-function ktyFromJWAJWEAlg(alg) {
-    if (isJWAKEAlg(alg))
-        return 'RSA';
-    if (isJWAKWAlg(alg) || isJWADEAlg(alg))
-        return 'oct';
-    if (isJWADKAAlg(alg) || isJWAKAKWAlg(alg))
-        return 'EC';
-    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
-}
-const JWAAlgSpecificJOSEHeaderParamNames = [
-    ...AGCMKWHeaderParamNames,
-    ...ECDH_ESHeaderParamNames,
-    ...PBES2HeaderParamNames,
-];
-const isPartialJWAAlgSpecificJOSEHeader = (arg) => isPartialAGCMKWHeaderParams(arg) ||
-    isPartialECDH_ESHeaderParams(arg) ||
-    isPartialPBES2HeaderParams(arg);
-const equalsJWAAlgSpecificJOSEHeader = (l, r) => equalsAGCMKWHeaderParams(l, r) ||
-    equalsECDH_ESHeaderParams(l, r) ||
-    equalsPBES2HeaderParams(l, r);
-function keyMgmtModeFromJWAAlg(alg) {
-    if (isJWAKEAlg(alg))
-        return 'KE';
-    if (isJWAKWAlg(alg))
-        return 'KW';
-    if (isJWADKAAlg(alg))
-        return 'DKA';
-    if (isJWAKAKWAlg(alg))
-        return 'KAKW';
-    if (isJWADEAlg(alg))
-        return 'DE';
-    const a = alg;
-    throw new TypeError(`${a} の Key Management Mode がわからない`);
-}
 
 /**
  * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムの実装.
  */
 const ACBCEncOperator = { enc: enc$2, dec: dec$2 };
-const isACBCEnc = (arg) => acbcEncList.some((a) => a === arg);
-const acbcEncList = ['A128CBC-HS256', 'A192CBC-HS384', 'A256CBC-HS512'];
 /**
  * RFC7518#5.2.  AES_CBC_HMAC_SHA2 Algorithms のアルゴリズムに従って暗号化する。
  */
@@ -1957,8 +2057,6 @@ function intToOctets(x, xLen) {
 }
 
 const AGCMEncOperator = { enc: enc$1, dec: dec$1 };
-const isAGCMEnc = (arg) => agcmEncList.some((a) => a === arg);
-const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'];
 async function enc$1(enc, cek, m, aad, iv) {
     if (!iv) {
         iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -1992,7 +2090,6 @@ function generateCEKForAGCMEnc(enc) {
     return window.crypto.getRandomValues(new Uint8Array(len));
 }
 
-const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
 function generateCEKforJWACEK(enc) {
     if (isACBCEnc(enc))
         return generateCEKForACBCEnc(enc);
@@ -2007,234 +2104,6 @@ function newJWAEncOperator(enc) {
         return AGCMEncOperator;
     throw TypeError(`EncOperator<$alg> is not implemented`);
 }
-
-const JWEJOSEHeaderParamNames = [
-    'alg',
-    'enc',
-    'zip',
-    'jku',
-    'jwk',
-    'kid',
-    'x5u',
-    'x5c',
-    'x5t',
-    'x5t#S256',
-    'typ',
-    'cty',
-    'crit',
-];
-const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
-    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
-        (n === 'alg'
-            ? isAlg(arg[n], 'JWE')
-            : n === 'enc'
-                ? isEncAlg(arg[n])
-                : n === 'jwk'
-                    ? isJWK(arg[n])
-                    : n === 'x5c' || n === 'crit'
-                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
-                        : typeof arg[n] === 'string'));
-function equalsJWEJOSEHeader(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    for (const n of JWEJOSEHeaderParamNames) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        switch (n) {
-            case 'jwk': {
-                const ll = ln;
-                const rr = rn;
-                if (equalsJWK(ll, rr))
-                    continue;
-                return false;
-            }
-            case 'x5t':
-            case 'crit': {
-                const ll = ln;
-                const rr = rn;
-                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
-                    continue;
-                return false;
-            }
-            default: {
-                const ll = ln;
-                const rr = rn;
-                if (ll === rr)
-                    continue;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-const JWSJOSEHeaderParamNames = [
-    'alg',
-    'jku',
-    'jwk',
-    'kid',
-    'x5u',
-    'x5c',
-    'x5t',
-    'x5t#S256',
-    'typ',
-    'cty',
-    'crit',
-];
-/**
- * 引数が Partial<JWSJOSEHeader> か確認する。
- * isJWSJOSEHeader は alg が値を持っているか確認するが、これでは undefined でも良いとしている。
- */
-const isPartialJWSJOSEHeader = (arg) => isObject(arg) &&
-    JWSJOSEHeaderParamNames.every((n) => arg[n] == null ||
-        (n === 'alg'
-            ? isAlg(arg[n], 'JWS')
-            : n === 'jwk'
-                ? isJWK(arg[n])
-                : n === 'x5c' || n === 'crit'
-                    ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
-                    : typeof arg[n] === 'string'));
-/**
- * ２つの JWSJOSEHEader が同じか判定する
- */
-function equalsJWSJOSEHeader(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    for (const n of JWSJOSEHeaderParamNames) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        switch (n) {
-            case 'jwk': {
-                const ll = ln;
-                const rr = rn;
-                if (equalsJWK(ll, rr))
-                    continue;
-                return false;
-            }
-            case 'x5t':
-            case 'crit': {
-                const ll = ln;
-                const rr = rn;
-                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
-                    continue;
-                return false;
-            }
-            default: {
-                const ll = ln;
-                const rr = rn;
-                if (ll === rr)
-                    continue;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-// --------------------BEGIN iana constants --------------------
-const equalsJOSEHeader = (l, r) => {
-    if (isJOSEHeader(l, 'JWS')) {
-        if (!isJOSEHeader(r, 'JWS'))
-            return false;
-        return equalsJWSJOSEHeader(l, r);
-    }
-    else if (isJOSEHeader(l, 'JWE')) {
-        if (!isJOSEHeader(r, 'JWE'))
-            return false;
-        return equalsJWEJOSEHeader(l, r) && equalsJWAAlgSpecificJOSEHeader(l, r);
-    }
-    return false;
-};
-function isJOSEHeader(arg, t) {
-    if (t === 'JWE') {
-        return isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg);
-    }
-    // TODO;
-    if (t === 'JWS') {
-        return isPartialJWSJOSEHeader(arg);
-    }
-    return (isPartialJWSJOSEHeader(arg) ||
-        (isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg)));
-}
-function isJOSEHeaderParamName(arg, t) {
-    if (t === 'JWE') {
-        return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some((n) => n === arg);
-    }
-    if (t === 'JWS') {
-        return [...JWSJOSEHeaderParamNames].some((n) => n === arg);
-    }
-    return [
-        ...JWEJOSEHeaderParamNames,
-        ...JWAAlgSpecificJOSEHeaderParamNames,
-        ...JWSJOSEHeaderParamNames,
-    ].some((n) => n === arg);
-}
-function isAlg(arg, t) {
-    const isJWSAlg = (arg) => isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
-    const isJWEAlg = (arg) => isJWAKEAlg(arg) || isJWAKWAlg(arg) || isJWADKAAlg(arg) || isJWAKAKWAlg(arg) || isJWADEAlg(arg);
-    if (t === 'JWS')
-        return isJWSAlg(arg);
-    if (t === 'JWE')
-        return isJWEAlg(arg);
-    return isJWSAlg(arg) || isJWEAlg(arg);
-}
-const isEncAlg = (arg) => isJWAEncAlg(arg);
-const isKty = (arg) => isJWAKty(arg);
-function ktyFromAlg(alg) {
-    if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
-        return ktyFromJWAJWSAlg(alg);
-    }
-    if (isJWAKEAlg(alg) ||
-        isJWAKWAlg(alg) ||
-        isJWADKAAlg(alg) ||
-        isJWAKAKWAlg(alg) ||
-        isJWADEAlg(alg)) {
-        return ktyFromJWAJWEAlg(alg);
-    }
-    if (isEncAlg(alg)) {
-        return 'oct';
-    }
-    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
-}
-const keyUseList = ['sig', 'enc'];
-const isKeyUse = (arg) => {
-    if (typeof arg === 'string') {
-        return keyUseList.some((u) => u === arg);
-    }
-    return false;
-};
-/**
- * JSON Web Key Operations を列挙する。
- */
-const keyOpsList = [
-    'sign',
-    'verify',
-    'encrypt',
-    'decrypt',
-    'wrapKey',
-    'unwrapKey',
-    'deriveKey',
-    'deriveBits',
-];
-const isKeyOps = (arg) => {
-    if (typeof arg === 'string') {
-        return keyOpsList.some((u) => u === arg);
-    }
-    return false;
-};
-// --------------------END iana constants --------------------
 
 function keyMgmtModeFromAlg(alg) {
     if (isJWAKEAlg(alg) ||
@@ -3872,6 +3741,155 @@ async function test$1() {
     return { title, log, allGreen };
 }
 // --------------------END RFC7520 Section.3 for RSA test --------------------
+
+// --------------------BEGIN JWA EC algorithms --------------------
+/**
+ * ECDSA アルゴリズムで署名の作成と検証を行うオペレータを定義する
+ */
+const ESSigOperator = { sign: sign$2, verify: verify$3 };
+/**
+ * ECDSA (alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。
+ */
+async function sign$2(alg, key, m) {
+    const { keyAlg, sigAlg } = params$2(alg, key.crv);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
+    const s = await window.crypto.subtle.sign(sigAlg, k, m);
+    return new Uint8Array(s);
+}
+/**
+ * ECDSA (alg)に従い、与えられたメッセージ(m)と公開鍵(key) を署名(s)で検証する。
+ */
+async function verify$3(alg, key, m, s) {
+    const { keyAlg, sigAlg } = params$2(alg, key.crv);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
+        'verify',
+    ]);
+    const sig = await window.crypto.subtle.verify(sigAlg, k, s, m);
+    return sig;
+}
+function params$2(alg, crv) {
+    return {
+        keyAlg: { name: 'ECDSA', namedCurve: crv },
+        sigAlg: { name: 'ECDSA', hash: 'SHA-' + alg.slice(2) },
+    };
+}
+// --------------------END JWA EC algorithms --------------------
+
+// --------------------BEGIN JWA HMAC algorithms --------------------
+/**
+ * HMAC アルゴリズムで MAC の生成と検証を行うオペレータを定義する
+ */
+const HMACOperator = { mac, verify: verify$2 };
+/**
+ * HMAC アルゴリズムに従い MAC を計算する。
+ * 計算を行う前に、鍵長が十分かどうか判定を行う。
+ */
+async function mac(alg, key, m) {
+    // ハッシュの出力サイズ以上の鍵長が必要である (RFC8517#3.2)
+    if (BASE64URL_DECODE(key.k).length < parseInt(alg.slice(2)) / 8) {
+        throw new EvalError(`${alg} では鍵長が ${parseInt(alg.slice(2)) / 8} 以上にしてください`);
+    }
+    const { k: keyAlg, s: sigAlg } = params$1(alg);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
+    const s = await window.crypto.subtle.sign(sigAlg, k, m);
+    return new Uint8Array(s);
+}
+/**
+ * HMAC アルゴリズムに従い、与えられた MAC を検証する。
+ */
+async function verify$2(alg, key, m, s) {
+    // ハッシュの出力サイズ以上の鍵長が必要である (RFC8517#3.2)
+    if (BASE64URL_DECODE(key.k).length < parseInt(alg.slice(2)) / 8) {
+        throw new EvalError(`${alg} では鍵長が ${parseInt(alg.slice(2)) / 8} 以上にしてください`);
+    }
+    const { k: keyAlg, s: sigAlg } = params$1(alg);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
+        'verify',
+    ]);
+    const isValid = await window.crypto.subtle.verify(sigAlg, k, s, m);
+    return isValid;
+}
+function params$1(alg) {
+    const name = 'HMAC';
+    const keyAlg = { name, hash: 'SHA-' + alg.slice(2) };
+    const sigAlg = name;
+    return { k: keyAlg, s: sigAlg };
+}
+// --------------------END JWA HMAC algorithms --------------------
+
+// --------------------BEGIN JWA RSA algorithms --------------------
+/**
+ * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズムで署名の作成と検証を行うオペレータを定義する
+ */
+const RSASigOperator = {
+    sign: sign$1,
+    verify: verify$1,
+};
+/**
+ * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズム(alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。
+ * 計算を行う前に、鍵長が十分かどうか判定を行う。
+ */
+async function sign$1(alg, key, m) {
+    const { keyAlg, sigAlg } = params(alg);
+    if (BASE64URL_DECODE(key.n).length * 8 < 2048 && BASE64URL_DECODE(key.d).length * 8 < 2048) {
+        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#3.3)
+        throw new EvalError(`RSA sig では鍵長が 2048 以上にしてください`);
+    }
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, ['sign']);
+    const s = await window.crypto.subtle.sign(sigAlg, k, m);
+    return new Uint8Array(s);
+}
+/**
+ * RSASSA-PKCS1-v1.5 か RSA-PSS アルゴリズム(alg)に従い、与えられたメッセージ(m)と公開鍵(key) を署名(sig)で検証する。
+ * 計算を行う前に、鍵長が十分かどうか判定を行う。
+ */
+async function verify$1(alg, key, m, sig) {
+    if (BASE64URL_DECODE(key.n).length * 8 < 2048) {
+        // キーサイズが 2048 bit 以上であることが MUST (RFC7518#3.3)
+        throw new EvalError(`RSA sig では鍵長が 2048 以上にしてください`);
+    }
+    const { keyAlg, sigAlg } = params(alg);
+    const k = await window.crypto.subtle.importKey('jwk', key, keyAlg, false, [
+        'verify',
+    ]);
+    const s = await window.crypto.subtle.verify(sigAlg, k, sig, m);
+    return s;
+}
+function params(alg) {
+    let name, sigAlg;
+    if (isRSAlg(alg)) {
+        name = 'RSASSA-PKCS1-v1_5';
+        sigAlg = name;
+    }
+    else {
+        // isPSAlg(alg) === true
+        name = 'RSA-PSS';
+        // ソルト値のサイズはハッシュ関数の出力と同じサイズ (RFC7518#3.5)
+        sigAlg = { name, saltLength: parseInt(alg.slice(2)) / 8 };
+    }
+    const keyAlg = { name, hash: 'SHA-' + alg.slice(2) };
+    return { keyAlg, sigAlg };
+}
+// --------------------END JWA RSA algorithms --------------------
+
+/**
+ * JWA で定義されている署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newJWASigOperator(alg) {
+    if (isRSAlg(alg) || isPSAlg(alg))
+        return RSASigOperator;
+    if (isESAlg(alg))
+        return ESSigOperator;
+    throw new TypeError(`SigOperator<${alg}> は実装されていない`);
+}
+/**
+ * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newJWAMACOperator(alg) {
+    if (isHSAlg(alg))
+        return HMACOperator;
+    throw TypeError(`MacOperator<${alg}> は実装されていない`);
+}
 
 // --------------------BEGIN JWS dependency injection --------------------
 function JWSOpeModeFromAlg(alg) {

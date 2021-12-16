@@ -1,6 +1,9 @@
 // --------------------BEGIN JWK definition --------------------
 
-import { Alg, JOSEHeader, KeyUse, Kty, KtyFromAlg, ktyFromAlg } from 'iana';
+import { Alg } from 'iana/alg';
+import { JOSEHeader } from 'iana/header';
+import { KeyUse } from 'iana/jwk';
+import { Kty, KtyFromAlg, ktyFromAlg } from 'iana/kty';
 import { equalsJWAJWK, exportJWAPublicKey, isJWAJWK, JWAJWK } from 'jwa/sec6/jwk';
 import { isJWAKty, JWAKty } from 'jwa/sec6/kty';
 import { BASE64URL, isObject } from 'utility';

@@ -1,4 +1,4 @@
-import { equalsJOSEHeader, isJOSEHeader } from 'iana';
+import { equalsJOSEHeader, isJOSEHeader } from 'iana/header';
 import {
   JWEAAD,
   JWECiphertext,

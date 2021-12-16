@@ -1,6 +1,7 @@
 // --------------------BEGIN RFC7520 Section 4 test data definition --------------------
 
-import { Alg, isAlg, isJOSEHeader } from 'iana';
+import { Alg, isAlg } from 'iana/alg';
+import { isJOSEHeader } from 'iana/header';
 import { isJWK, JWK } from 'jwk';
 import { JWSFlattenedJSONSerializer, JWSJSONSerializer } from 'jws';
 import {

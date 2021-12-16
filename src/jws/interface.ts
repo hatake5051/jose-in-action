@@ -1,4 +1,5 @@
-import { Alg, KtyFromAlg } from 'iana';
+import { Alg } from 'iana/alg';
+import { KtyFromAlg } from 'iana/kty';
 import { JWK } from 'jwk';
 import { JWSSignature } from './type';
 

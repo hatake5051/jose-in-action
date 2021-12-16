@@ -1,6 +1,8 @@
 // --------------------BEGIN JWS implementation --------------------
 
-import { Alg, JOSEHeaderParamName, ktyFromAlg } from 'iana';
+import { Alg } from 'iana/alg';
+import { JOSEHeaderParamName } from 'iana/header';
+import { ktyFromAlg } from 'iana/kty';
 import { identifyJWK, isJWK, JWKSet } from 'jwk';
 import { JWSPayload, JWSProtectedHeader, JWSSignature, JWSUnprotectedHeader } from 'jws/type';
 import { ASCII, BASE64URL } from 'utility';

@@ -1,8 +1,9 @@
 import { KeyWrapper } from 'jwe/ineterface';
 import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { JWK } from 'jwk';
+import { AKWAlg } from './alg';
 
-export { AKWAlg, isAKWAlg, AKWKeyWrapper };
+export { AKWKeyWrapper };
 
 const AKWKeyWrapper: KeyWrapper<AKWAlg> = {
   wrap: async (key: JWK<'oct'>, cek: JWECEK) => {
@@ -10,14 +11,6 @@ const AKWKeyWrapper: KeyWrapper<AKWAlg> = {
   },
   unwrap,
 };
-
-/**
- * RFC7518#4.4.  Key Wrapping with AES Key Wrap のアルゴリズムを列挙する。
- */
-type AKWAlg = typeof akwAlgList[number];
-const isAKWAlg = (arg: unknown): arg is AKWAlg =>
-  typeof arg === 'string' && akwAlgList.some((a) => a === arg);
-const akwAlgList = ['A128KW', 'A192KW', 'A256KW'] as const;
 
 /**
  * AES Key Wrapping アルゴリズムに従い、 Content Encryption Key をラッピングして暗号化する。

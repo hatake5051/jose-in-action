@@ -1,6 +1,6 @@
 // --------------------BEGIN JWS Serialization definition --------------------
 
-import { equalsJOSEHeader, isJOSEHeader } from 'iana';
+import { equalsJOSEHeader, isJOSEHeader } from 'iana/header';
 import {
   JWSCompactSerialization,
   JWSFlattenedJSONSerialization,

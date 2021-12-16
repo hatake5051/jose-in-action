@@ -1,4 +1,5 @@
-import { Alg, EncAlg, JOSEHeader, JOSEHeaderParamName } from 'iana';
+import { Alg, EncAlg } from 'iana/alg';
+import { JOSEHeader, JOSEHeaderParamName } from 'iana/header';
 import {
   JWEAAD,
   JWECEK,

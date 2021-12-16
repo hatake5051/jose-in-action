@@ -1,18 +1,11 @@
 import { KeyWrapper } from 'jwe/ineterface';
 import { JWECEK, JWEEncryptedKey, JWETag } from 'jwe/type';
 import { JWK } from 'jwk';
-import { BASE64URL, BASE64URL_DECODE, CONCAT, isObject } from 'utility';
+import { BASE64URL, BASE64URL_DECODE, CONCAT } from 'utility';
+import { AGCMKWAlg } from './alg';
+import { AGCMKWHeaderParams, isAGCMKWHeaderParams } from './header';
 
-export {
-  AGCMKWAlg,
-  isAGCMKWAlg,
-  AGCMKWHeaderParams,
-  AGCMKWHeaderParamNames,
-  isPartialAGCMKWHeaderParams,
-  isAGCMKWHeaderParams,
-  equalsAGCMKWHeaderParams,
-  AGCMKeyWrapper,
-};
+export { AGCMKeyWrapper };
 
 const AGCMKeyWrapper: KeyWrapper<AGCMKWAlg> = {
   wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: Partial<AGCMKWHeaderParams>) => {
@@ -25,46 +18,6 @@ const AGCMKeyWrapper: KeyWrapper<AGCMKWAlg> = {
     return unwrap(key, ek, h);
   },
 };
-
-/**
- * RFC7518#4.7.  Key Encryption with AES GCM のアルゴリズムを列挙する
- */
-type AGCMKWAlg = typeof agcmAlgList[number];
-const isAGCMKWAlg = (arg: unknown): arg is AGCMKWAlg =>
-  typeof arg === 'string' && agcmAlgList.some((a) => a === arg);
-const agcmAlgList = ['A128GCMKW', 'A192GCMKW', 'A256GCMKW'] as const;
-
-/**
- * RFC7518#4.7.1 AES GCM Key Encryption で使用されるヘッダーパラメータ
- */
-type AGCMKWHeaderParams = {
-  /**
-   * Initialization Vector Parameter はキー暗号化に使用される 96 bit の iv を base64url-encode した文字列
-   */
-  iv: string;
-  /**
-   * Authentication Tag Parameter はキー暗号化の結果の認証タグを base64url-encode した文字列
-   */
-  tag: string;
-};
-
-const AGCMKWHeaderParamNames = ['iv', 'tag'] as const;
-
-const isPartialAGCMKWHeaderParams = (arg: unknown): arg is Partial<AGCMKWHeaderParams> =>
-  isObject<Partial<AGCMKWHeaderParams>>(arg) &&
-  AGCMKWHeaderParamNames.every((n) => !arg[n] || typeof arg[n] === 'string');
-
-const isAGCMKWHeaderParams = (arg: unknown): arg is AGCMKWHeaderParams =>
-  isPartialAGCMKWHeaderParams(arg) && arg.iv != null && arg.tag != null;
-
-function equalsAGCMKWHeaderParams(
-  l?: Partial<AGCMKWHeaderParams>,
-  r?: Partial<AGCMKWHeaderParams>
-): boolean {
-  if (l == null && r == null) return true;
-  if (l == null || r == null) return false;
-  return l.iv === r.iv && l.tag === r.tag;
-}
 
 /**
  * AES GCM アルゴリズムを使って CEK を暗号化する。

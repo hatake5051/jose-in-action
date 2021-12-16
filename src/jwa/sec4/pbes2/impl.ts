@@ -1,20 +1,13 @@
-import { JOSEHeader } from 'iana';
+import { JOSEHeader } from 'iana/header';
 import { KeyWrapper } from 'jwe/ineterface';
 import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { JWK } from 'jwk';
-import { BASE64URL, BASE64URL_DECODE, CONCAT, isObject, UTF8 } from 'utility';
-import { AKWKeyWrapper } from './aeskw';
+import { BASE64URL, BASE64URL_DECODE, CONCAT, UTF8 } from 'utility';
+import { AKWKeyWrapper } from '../aeskw/impl';
+import { isPBES2Alg, PBES2Alg } from './alg';
+import { isPBES2HeaderParams, PBES2HeaderParams } from './header';
 
-export {
-  PBES2Alg,
-  isPBES2Alg,
-  PBES2HeaderParams,
-  PBES2HeaderParamNames,
-  isPartialPBES2HeaderParams,
-  isPBES2HeaderParams,
-  equalsPBES2HeaderParams,
-  PBES2KeyWrapper,
-};
+export { PBES2KeyWrapper };
 
 const PBES2KeyWrapper: KeyWrapper<PBES2Alg> = {
   wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: JOSEHeader<'JWE'>) => {
@@ -35,50 +28,6 @@ const PBES2KeyWrapper: KeyWrapper<PBES2Alg> = {
     return unwrap(key, ek, { ...h, alg });
   },
 };
-
-/**
- * RFC7518#4.8.  Key Encryption with PBES2
- */
-type PBES2Alg = typeof pbes2AlgList[number];
-const isPBES2Alg = (arg: unknown): arg is PBES2Alg =>
-  typeof arg === 'string' && pbes2AlgList.some((a) => a === arg);
-const pbes2AlgList = ['PBES2-HS256+A128KW', 'PBES2-HS384+A192KW', 'PBES2-HS512+A256KW'] as const;
-
-/**
- * RFC7518#4.8.1 PBES2 Key Encryption 用のヘッダーパラメータ
- */
-type PBES2HeaderParams = {
-  /**
-   * RFC7518#4.8.1.2 PBES2 Count Header Parameter は PBKDF2 iteration count を表現する。
-   * 最小反復回数は 1000 が推奨されている (RFC2898)
-   */
-  p2c: number;
-  /**
-   * RFC7518#4.8.1.1 PBES2 Salt Input Header Parameter は PBKDF2 salt input を BASE64URL エンコードしている。
-   * 使用される salt value は UTF8(Alg) || 0x00 || Salt Input である。
-   */
-  p2s: string;
-};
-
-const PBES2HeaderParamNames = ['p2c', 'p2s'] as const;
-
-const isPBES2HeaderParams = (arg: unknown): arg is PBES2HeaderParams =>
-  isPartialPBES2HeaderParams(arg) && arg.p2c != null && arg.p2s != null;
-
-const isPartialPBES2HeaderParams = (arg: unknown): arg is Partial<PBES2HeaderParams> =>
-  isObject<PBES2HeaderParams>(arg) &&
-  PBES2HeaderParamNames.every(
-    (n) => !arg[n] || (n === 'p2c' ? typeof arg[n] === 'number' : typeof arg[n] === 'string')
-  );
-
-function equalsPBES2HeaderParams(
-  l?: Partial<PBES2HeaderParams>,
-  r?: Partial<PBES2HeaderParams>
-): boolean {
-  if (l == null && r == null) return true;
-  if (l == null || r == null) return false;
-  return l.p2c === r.p2c && l.p2s === r.p2s;
-}
 
 /**
  * RFC2898#6.2.1 に基づいて、ユーザが指定したパスワードで CEK をラップする。

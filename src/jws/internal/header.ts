@@ -1,13 +1,13 @@
 // --------------------BEGIN JWS Header definition --------------------
 
+import { Alg } from 'iana/alg';
 import {
-  Alg,
   equalsJOSEHeader,
   isJOSEHeader,
   isJOSEHeaderParamName,
   JOSEHeader,
   JOSEHeaderParamName,
-} from 'iana';
+} from 'iana/header';
 import { JWSProtectedHeader, JWSUnprotectedHeader } from 'jws/type';
 import { BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
 

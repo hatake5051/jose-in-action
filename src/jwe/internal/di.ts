@@ -1,4 +1,4 @@
-import { Alg, EncAlg, isEncAlg } from 'iana';
+import { Alg, EncAlg, isEncAlg } from 'iana/alg';
 import {
   isJWADEAlg,
   isJWADKAAlg,
@@ -6,13 +6,16 @@ import {
   isJWAKEAlg,
   isJWAKWAlg,
   keyMgmtModeFromJWAAlg,
+} from 'jwa/sec4/alg';
+import {
   newJWADirectAgreementer,
   newJWADirectEncryptor,
   newJWAKeyAgreementerWithKeyWrapping,
   newJWAKeyEncryptor,
   newJWAKeyWrapper,
-} from 'jwa/sec4/alg';
-import { generateCEKforJWACEK, isJWAEncAlg, newJWAEncOperator } from 'jwa/sec5/encalg';
+} from 'jwa/sec4/impl';
+import { isJWAEncAlg } from 'jwa/sec5/encalg';
+import { generateCEKforJWACEK, newJWAEncOperator } from 'jwa/sec5/impl';
 import {
   DirectEncryptor,
   DirectKeyAgreementer,

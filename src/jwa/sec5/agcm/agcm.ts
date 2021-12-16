@@ -1,16 +1,11 @@
 import { EncOperator } from 'jwe/ineterface';
 import { JWEAAD, JWECEK, JWECiphertext, JWEIV, JWETag } from 'jwe/type';
 import { CONCAT } from 'utility';
+import { AGCMEnc } from './encalg';
 
-export { AGCMEnc, isAGCMEnc, AGCMEncOperator, generateCEKForAGCMEnc };
+export { AGCMEncOperator, generateCEKForAGCMEnc };
 
 const AGCMEncOperator: EncOperator<AGCMEnc> = { enc, dec };
-/**
- * jwa#5.3.  Content Encryption with AES GCM
- */
-type AGCMEnc = typeof agcmEncList[number];
-const isAGCMEnc = (arg: unknown): arg is AGCMEnc => agcmEncList.some((a) => a === arg);
-const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'] as const;
 
 async function enc(
   enc: AGCMEnc,

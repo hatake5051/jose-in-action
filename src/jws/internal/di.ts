@@ -1,13 +1,8 @@
 // --------------------BEGIN JWS dependency injection --------------------
 
-import { Alg } from 'iana';
-import {
-  isJWAMACAlg,
-  isJWANoneAlg,
-  isJWASigAlg,
-  newJWAMACOperator,
-  newJWASigOperator,
-} from 'jwa/sec3/alg';
+import { Alg } from 'iana/alg';
+import { isJWAMACAlg, isJWANoneAlg, isJWASigAlg } from 'jwa/sec3/alg';
+import { newJWAMACOperator, newJWASigOperator } from 'jwa/sec3/impl';
 import { JWSOpeMode, MACOperator, SigOperator } from 'jws/interface';
 
 export { newSigOperator, newMacOperator };

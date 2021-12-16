@@ -1,12 +1,11 @@
+import { Alg, EncAlg } from 'iana/alg';
 import {
-  Alg,
-  EncAlg,
   equalsJOSEHeader,
   isJOSEHeader,
   isJOSEHeaderParamName,
   JOSEHeader,
   JOSEHeaderParamName,
-} from 'iana';
+} from 'iana/header';
 import {
   JWEPerRecipientUnprotectedHeader,
   JWEProtectedHeader,

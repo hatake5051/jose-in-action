@@ -1,4 +1,5 @@
-import { Alg, isAlg, JOSEHeader } from 'iana';
+import { Alg, isAlg } from 'iana/alg';
+import { JOSEHeader } from 'iana/header';
 import { equalsJWK, isJWK, JWK } from 'jwk';
 import { isObject } from 'utility';
 
