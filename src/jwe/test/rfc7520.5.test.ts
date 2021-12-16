@@ -1,6 +1,6 @@
 import { Alg, EncAlg, isAlg, isEncAlg } from 'iana/alg';
 import { isJOSEHeader } from 'iana/header';
-import { isJWEFlattenedJSONSerialization, isJWEJSONSerialization } from 'jwe';
+import { JWEFlattenedJSONSerializer, JWEJSONSerializer } from 'jwe';
 import {
   JWECompactSerialization,
   JWEFlattenedJSONSerialization,
@@ -117,8 +117,8 @@ const isData = (arg: unknown): arg is Data =>
     isJOSEHeader(arg.encrypting_content.unprotected, 'JWE')) &&
   isObject<Data['output']>(arg.output) &&
   (arg.output.compact == null || typeof arg.output.compact === 'string') &&
-  isJWEJSONSerialization(arg.output.json) &&
-  (arg.output.json_flat == null || isJWEFlattenedJSONSerialization(arg.output.json_flat));
+  JWEJSONSerializer.is(arg.output.json) &&
+  (arg.output.json_flat == null || JWEFlattenedJSONSerializer.is(arg.output.json_flat));
 
 type Arrayable<T> = T | Array<T>;
 type Flatten<T> = T extends Array<infer E> ? E : T;

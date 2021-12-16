@@ -2711,10 +2711,10 @@ function jweSerializationFormat(data) {
     if (typeof data == 'string') {
         return 'compact';
     }
-    if (isJWEJSONSerialization$1(data)) {
+    if (isJWEJSONSerialization(data)) {
         return 'json';
     }
-    if (isJWEFlattenedJSONSerialization$1(data)) {
+    if (isJWEFlattenedJSONSerialization(data)) {
         return 'json_flat';
     }
     throw new TypeError(`${data} は Serialized JWE ではない`);
@@ -2726,14 +2726,14 @@ const JWECompactSerializer = {
 const JWEJSONSerializer = {
     serialize: serializeJSON$1,
     deserialize: deserializeJSON$1,
-    is: isJWEJSONSerialization$1,
-    equals: equalsJWEJSONSerialization$1,
+    is: isJWEJSONSerialization,
+    equals: equalsJWEJSONSerialization,
 };
 const JWEFlattenedJSONSerializer = {
     serialize: serializeFlattenedJSON,
     deserialize: deserializeFlattenedJSON,
-    is: isJWEFlattenedJSONSerialization$1,
-    equals: equalsJWEFlattenedJSONSerialization$1,
+    is: isJWEFlattenedJSONSerialization,
+    equals: equalsJWEFlattenedJSONSerialization,
 };
 function serializeCompact$1(p_b64u, ek, iv, c, tag) {
     return `${p_b64u}.${BASE64URL(ek)}.${BASE64URL(iv)}.${BASE64URL(c)}.${BASE64URL(tag)}`;
@@ -2752,7 +2752,7 @@ function deserializeCompact$1(compact) {
         tag: BASE64URL_DECODE(tag),
     };
 }
-function isJWEJSONSerialization$1(arg) {
+function isJWEJSONSerialization(arg) {
     return (isObject(arg) &&
         (arg.protected == null || typeof arg.protected === 'string') &&
         (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
@@ -2765,7 +2765,7 @@ function isJWEJSONSerialization$1(arg) {
             (u.header == null || isJOSEHeader(u.header, 'JWE')) &&
             (u.encrypted_key == null || typeof u.encrypted_key === 'string')));
 }
-function equalsJWEJSONSerialization$1(l, r) {
+function equalsJWEJSONSerialization(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
@@ -2833,7 +2833,7 @@ function deserializeJSON$1(json) {
         tag: json.tag ? BASE64URL_DECODE(json.tag) : new Uint8Array(),
     };
 }
-function isJWEFlattenedJSONSerialization$1(arg) {
+function isJWEFlattenedJSONSerialization(arg) {
     return (isObject(arg) &&
         (arg.protected == null || typeof arg.protected === 'string') &&
         (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
@@ -2844,7 +2844,7 @@ function isJWEFlattenedJSONSerialization$1(arg) {
         (arg.header == null || isJOSEHeader(arg.header, 'JWE')) &&
         (arg.encrypted_key == null || typeof arg.encrypted_key === 'string'));
 }
-function equalsJWEFlattenedJSONSerialization$1(l, r) {
+function equalsJWEFlattenedJSONSerialization(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
@@ -3150,11 +3150,6 @@ async function recvCEK(keys, h, ek) {
     }
 }
 
-const isJWEJSONSerialization = JWEJSONSerializer.is;
-const equalsJWEJSONSerialization = JWEJSONSerializer.equals;
-const isJWEFlattenedJSONSerialization = JWEFlattenedJSONSerializer.is;
-const equalsJWEFlattenedJSONSerialization = JWEFlattenedJSONSerializer.equals;
-
 const paths$1 = [
     '5_1.key_encryption_using_rsa_v15_and_aes-hmac-sha2.json',
     '5_2.key_encryption_using_rsa-oaep_with_aes-gcm.json',
@@ -3218,8 +3213,8 @@ const isData$1 = (arg) => isObject(arg) &&
         isJOSEHeader(arg.encrypting_content.unprotected, 'JWE')) &&
     isObject(arg.output) &&
     (arg.output.compact == null || typeof arg.output.compact === 'string') &&
-    isJWEJSONSerialization(arg.output.json) &&
-    (arg.output.json_flat == null || isJWEFlattenedJSONSerialization(arg.output.json_flat));
+    JWEJSONSerializer.is(arg.output.json) &&
+    (arg.output.json_flat == null || JWEFlattenedJSONSerializer.is(arg.output.json_flat));
 const isArrayable = (arg, f) => {
     return Array.isArray(arg) ? arg.every(f) : f(arg);
 };
@@ -3294,13 +3289,13 @@ async function test$6(path) {
         }
         if (data.output.json) {
             const json = jwe.serialize('json');
-            const same = equalsJWEJSONSerialization(data.output.json, json);
+            const same = JWEJSONSerializer.equals(data.output.json, json);
             allGreen &&= same;
             log += 'JSON: ' + (same ? '(OK) ' : 'X ');
         }
         if (data.output.json_flat) {
             const flat = jwe.serialize('json_flat');
-            const same = equalsJWEFlattenedJSONSerialization(data.output.json_flat, flat);
+            const same = JWEFlattenedJSONSerializer.equals(data.output.json_flat, flat);
             allGreen &&= same;
             log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');
         }

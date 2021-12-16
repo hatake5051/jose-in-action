@@ -1,4 +1,4 @@
-import { equalsJWEFlattenedJSONSerialization, equalsJWEJSONSerialization, JWE } from 'jwe';
+import { JWE, JWEFlattenedJSONSerializer, JWEJSONSerializer } from 'jwe';
 import { JWEAAD, JWECEK, JWEIV } from 'jwe/type';
 import { exportPublicKey, isJWK, JWK, JWKSet } from 'jwk';
 import { BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
@@ -80,13 +80,13 @@ async function test(path: string): Promise<{
     }
     if (data.output.json) {
       const json = jwe.serialize('json');
-      const same = equalsJWEJSONSerialization(data.output.json, json);
+      const same = JWEJSONSerializer.equals(data.output.json, json);
       allGreen &&= same;
       log += 'JSON: ' + (same ? '(OK) ' : 'X ');
     }
     if (data.output.json_flat) {
       const flat = jwe.serialize('json_flat');
-      const same = equalsJWEFlattenedJSONSerialization(data.output.json_flat, flat);
+      const same = JWEFlattenedJSONSerializer.equals(data.output.json_flat, flat);
       allGreen &&= same;
       log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');
     }
