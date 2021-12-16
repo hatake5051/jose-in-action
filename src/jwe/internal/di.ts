@@ -48,11 +48,6 @@ function keyMgmtModeFromAlg(alg: Alg<'JWE'>): KeyMgmtMode {
   throw new TypeError(`${a} の Key Management Mode がわからない`);
 }
 
-function generateCEK(enc: EncAlg): JWECEK {
-  if (isJWAEncAlg(enc)) return generateCEKforJWACEK(enc);
-  throw new TypeError(`${enc} の CEK を生成できない`);
-}
-
 function newKeyEncryptor<A extends Alg<'JWE'>>(alg: A): KeyEncryptor<A> {
   if (isJWAKEAlg(alg)) return newJWAKeyEncryptor(alg) as KeyEncryptor<A>;
   throw new TypeError(`KeyEncryptor<${alg}> は実装されていない`);
@@ -79,6 +74,11 @@ function newKeyAgreementerWithKeyWrapping<A extends Alg<'JWE'>>(
 function newDirectEncrytor<A extends Alg<'JWE'>>(alg: A): DirectEncryptor<A> {
   if (isJWADEAlg(alg)) return newJWADirectEncryptor(alg) as DirectEncryptor<A>;
   throw new TypeError(`DirectEncrypto<${alg}> は実装されていない`);
+}
+
+function generateCEK(enc: EncAlg): JWECEK {
+  if (isJWAEncAlg(enc)) return generateCEKforJWACEK(enc);
+  throw new TypeError(`${enc} の CEK を生成できない`);
 }
 
 function newEncOperator<E extends EncAlg>(enc: E): EncOperator<E> {

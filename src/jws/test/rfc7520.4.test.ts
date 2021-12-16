@@ -1,18 +1,15 @@
 // --------------------BEGIN RFC7520 Section 4 test data definition --------------------
 
-import { Alg, isAlg } from 'iana';
-import { isJWK, JWK, JWKSet } from 'jwk';
+import { Alg, isAlg, isJOSEHeader } from 'iana';
+import { isJWK, JWK } from 'jwk';
+import { JWSFlattenedJSONSerializer, JWSJSONSerializer } from 'jws';
 import {
-  isJWSFlattenedJSONSerialization,
-  isJWSJSONSerialization,
-  isJWSProtectedHeader,
-  isJWSUnprotectedHeader,
   JWSCompactSerialization,
   JWSFlattenedJSONSerialization,
   JWSJSONSerialization,
   JWSProtectedHeader,
   JWSUnprotectedHeader,
-} from 'jws';
+} from 'jws/type';
 import { isObject } from 'utility';
 
 export { fetchData, paths };
@@ -43,15 +40,17 @@ type Data = {
   input: {
     payload: string;
     key: JWK | JWK[];
-    alg: Alg | Alg[];
+    alg: Alg<'JWS'> | Alg<'JWS'>[];
   };
   signing:
     | {
         protected?: JWSProtectedHeader;
+        protected_b64u?: string;
         unprotected?: JWSUnprotectedHeader;
       }
     | {
         protected?: JWSProtectedHeader;
+        protected_b64u?: string;
         unprotected?: JWSUnprotectedHeader;
       }[];
   output: {
@@ -66,7 +65,7 @@ function isData(arg: unknown): arg is Data {
     isObject<Data>(arg) &&
     typeof arg.title === 'string' &&
     (arg.reproducible == null || typeof arg.reproducible === 'boolean') &&
-    isObject<{ payload: string; key: JWK | JWKSet; alg: Alg }>(arg.input) &&
+    isObject<Data['input']>(arg.input) &&
     typeof arg.input.payload === 'string' &&
     (Array.isArray(arg.input.key)
       ? arg.input.key.every((k: unknown) => isJWK(k))
@@ -74,27 +73,26 @@ function isData(arg: unknown): arg is Data {
     (Array.isArray(arg.input.alg)
       ? arg.input.alg.every((a: unknown) => isAlg(a))
       : isAlg(arg.input.alg)) &&
-    isObject<
-      | { protected?: JWSProtectedHeader; unprotected?: JWSUnprotectedHeader }
-      | { protected?: JWSProtectedHeader; unprotected?: JWSUnprotectedHeader }[]
-    >(arg.signing) &&
+    isObject<Data['signing']>(arg.signing) &&
     (Array.isArray(arg.signing)
       ? arg.signing.every(
-          (s: unknown) =>
-            isObject<{ protected?: JWSProtectedHeader; unprotected?: JWSUnprotectedHeader }>(s) &&
-            (s.protected == null || isJWSProtectedHeader(s.protected)) &&
-            (s.unprotected == null || isJWSUnprotectedHeader(s.unprotected))
+          (s) =>
+            isObject<{
+              protected?: JWSProtectedHeader;
+              protected_b64u?: string;
+              unprotected?: JWSUnprotectedHeader;
+            }>(s) &&
+            (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
+            (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
+            (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS'))
         )
-      : (arg.signing.protected == null || isJWSProtectedHeader(arg.signing.protected)) &&
-        (arg.signing.unprotected == null || isJWSUnprotectedHeader(arg.signing.unprotected))) &&
-    isObject<{
-      compact?: JWSCompactSerialization;
-      json: JWSJSONSerialization;
-      json_flat: JWSFlattenedJSONSerialization;
-    }>(arg.output) &&
+      : (arg.signing.protected == null || isJOSEHeader(arg.signing.protected, 'JWS')) &&
+        (arg.signing.protected_b64u == null || typeof arg.signing.protected_b64u === 'string') &&
+        (arg.signing.unprotected == null || isJOSEHeader(arg.signing.unprotected, 'JWS'))) &&
+    isObject<Data['output']>(arg.output) &&
     (arg.output.compact == null || typeof arg.output.compact === 'string') &&
-    isJWSJSONSerialization(arg.output.json) &&
-    (arg.output.json_flat == null || isJWSFlattenedJSONSerialization(arg.output.json_flat))
+    JWSJSONSerializer.is(arg.output.json) &&
+    (arg.output.json_flat == null || JWSFlattenedJSONSerializer.is(arg.output.json_flat))
   );
 }
 

@@ -36,7 +36,12 @@ import {
   JWEJOSEHeader,
   JWEJOSEHeaderParamNames,
 } from 'jwe/type';
-import { equalsJWSJOSEHeader, JWSJOSEHeader } from 'jws';
+import {
+  equalsJWSJOSEHeader,
+  isPartialJWSJOSEHeader,
+  JWSJOSEHeader,
+  JWSJOSEHeaderParamNames,
+} from 'jws/type';
 
 export {
   JOSEHeader,
@@ -88,22 +93,30 @@ function isJOSEHeader<T extends JWX>(arg: unknown, t?: T): arg is JOSEHeader<T> 
   }
   // TODO;
   if (t === 'JWS') {
-    return true;
+    return isPartialJWSJOSEHeader(arg);
   }
-  return true;
+  return (
+    isPartialJWSJOSEHeader(arg) ||
+    (isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg))
+  );
 }
 
 type JOSEHeaderParamName<T extends JWX = JWX> = keyof JOSEHeader<T>;
 
-// TODO
 function isJOSEHeaderParamName<T extends JWX>(arg: unknown, t?: T): arg is JOSEHeaderParamName<T> {
   if (t === 'JWE') {
     return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some(
       (n) => n === arg
     );
   }
-  // todo
-  return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some((n) => n === arg);
+  if (t === 'JWS') {
+    return [...JWSJOSEHeaderParamNames].some((n) => n === arg);
+  }
+  return [
+    ...JWEJOSEHeaderParamNames,
+    ...JWAAlgSpecificJOSEHeaderParamNames,
+    ...JWSJOSEHeaderParamNames,
+  ].some((n) => n === arg);
 }
 
 /**

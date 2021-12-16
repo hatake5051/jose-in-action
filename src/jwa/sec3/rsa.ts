@@ -1,7 +1,8 @@
 // --------------------BEGIN JWA RSA algorithms --------------------
 
 import { JWK } from 'jwk';
-import { JWSSignature, SigOperator } from 'jws';
+import { SigOperator } from 'jws/interface';
+import { JWSSignature } from 'jws/type';
 import { BASE64URL_DECODE } from 'utility';
 
 export { RSAlg, isRSAlg, PSAlg, isPSAlg, RSASigOperator };
@@ -57,7 +58,7 @@ async function sign(
 
   const k = await window.crypto.subtle.importKey('jwk', key as JsonWebKey, keyAlg, false, ['sign']);
   const s = await window.crypto.subtle.sign(sigAlg, k, m);
-  return new Uint8Array(s);
+  return new Uint8Array(s) as JWSSignature;
 }
 
 /**

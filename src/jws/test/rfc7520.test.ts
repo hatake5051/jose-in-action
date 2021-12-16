@@ -1,7 +1,8 @@
 // --------------------BEGIN RFC7520 Section 4 test --------------------
 
 import { exportPublicKey, isJWK, JWKSet } from 'jwk';
-import { equalsJWSFlattenedJSONSerialization, equalsJWSJSONSerialization, JWS } from 'jws';
+import { JWS, JWSFlattenedJSONSerializer, JWSJSONSerializer } from 'jws';
+import { JWSPayload } from 'jws/type';
 import { UTF8 } from 'utility';
 import { fetchData } from './rfc7520.4.test';
 
@@ -17,18 +18,42 @@ async function test(path: string): Promise<{
   const title = 'RFC7520#4 TEST NAME: ' + data.title;
   let log = '';
   // 準備
-  const payload = UTF8(data.input.payload);
-  let header;
-  if (Array.isArray(data.signing)) {
-    header = data.signing.map((sig) => ({ p: sig.protected, u: sig.unprotected }));
-  } else {
-    header = { p: data.signing.protected, u: data.signing.unprotected };
-  }
+  const payload = UTF8(data.input.payload) as JWSPayload;
+  const options: Parameters<typeof JWS.produce>[3] = {
+    header: Array.isArray(data.signing)
+      ? data.signing.map((s) => ({
+          p: s.protected
+            ? {
+                initialValue: s.protected,
+                b64u: s.protected_b64u,
+              }
+            : undefined,
+          u: s.unprotected
+            ? {
+                initialValue: s.unprotected,
+              }
+            : undefined,
+        }))
+      : {
+          p: data.signing.protected
+            ? {
+                initialValue: data.signing.protected,
+                b64u: data.signing.protected_b64u,
+              }
+            : undefined,
+          u: data.signing.unprotected
+            ? {
+                initialValue: data.signing.unprotected,
+              }
+            : undefined,
+        },
+  };
+
   const keys: JWKSet = {
     keys: Array.isArray(data.input.key) ? data.input.key : [data.input.key],
   };
   // 生成
-  const jws = await JWS.produce(keys, payload, header);
+  const jws = await JWS.produce(data.input.alg, keys, payload, options);
 
   // 検証の準備
   const verifyKeys: JWKSet = {
@@ -50,13 +75,13 @@ async function test(path: string): Promise<{
     }
     if (output.json) {
       const json = jws.serialize('json');
-      const same = equalsJWSJSONSerialization(output.json, json);
+      const same = JWSJSONSerializer.equals(output.json, json);
       allGreen &&= same;
       log += 'JSON: ' + (same ? '(OK) ' : 'X ');
     }
     if (output.json_flat) {
-      const flat = jws.serialize('json-flat');
-      const same = equalsJWSFlattenedJSONSerialization(output.json_flat, flat);
+      const flat = jws.serialize('json_flat');
+      const same = JWSFlattenedJSONSerializer.equals(output.json_flat, flat);
       allGreen &&= same;
       log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');
     }

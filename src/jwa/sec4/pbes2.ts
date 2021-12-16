@@ -1,5 +1,6 @@
+import { JOSEHeader } from 'iana';
 import { KeyWrapper } from 'jwe/ineterface';
-import { isJWEJOSEHeader, JWECEK, JWEEncryptedKey, JWEJOSEHeader } from 'jwe/type';
+import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { JWK } from 'jwk';
 import { BASE64URL, BASE64URL_DECODE, CONCAT, isObject, UTF8 } from 'utility';
 import { AKWKeyWrapper } from './aeskw';
@@ -16,27 +17,22 @@ export {
 };
 
 const PBES2KeyWrapper: KeyWrapper<PBES2Alg> = {
-  wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: Partial<PBES2HeaderParams & JWEJOSEHeader>) => {
-    if (!isJWEJOSEHeader(h)) {
-      throw new TypeError('JOSE Header for PBES2 Key Wrapping に必須パラメータがない');
-    }
-    if (!isPBES2Alg(h.alg)) {
+  wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: JOSEHeader<'JWE'>) => {
+    if (!h || !isPBES2Alg(h.alg)) {
       throw new TypeError('PBES2 algorithm identifier ではなかった');
     }
     return wrap(key, cek, { ...h, alg: h.alg });
   },
-  unwrap: async (
-    key: JWK<'oct'>,
-    ek: JWEEncryptedKey,
-    h?: Partial<PBES2HeaderParams & JWEJOSEHeader>
-  ) => {
-    if (!isJWEJOSEHeader(h) || !isPBES2HeaderParams(h)) {
-      throw new TypeError('JOSE Header for PBES2 Key Wrapping に必須パラメータがない');
-    }
-    if (!isPBES2Alg(h.alg)) {
+  unwrap: async (key: JWK<'oct'>, ek: JWEEncryptedKey, h?: JOSEHeader<'JWE'>) => {
+    if (!h || !isPBES2Alg(h.alg)) {
       throw new TypeError('PBES2 algorithm identifier ではなかった');
     }
-    return unwrap(key, ek, { ...h, alg: h.alg });
+    const alg = h.alg;
+    if (!isPBES2HeaderParams(h)) {
+      throw new TypeError('JOSE Header for PBES2 Key Wrapping に必須パラメータがない');
+    }
+
+    return unwrap(key, ek, { ...h, alg });
   },
 };
 

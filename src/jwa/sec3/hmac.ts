@@ -1,7 +1,8 @@
 // --------------------BEGIN JWA HMAC algorithms --------------------
 
 import { JWK } from 'jwk';
-import { JWSSignature, MACOperator } from 'jws';
+import { MACOperator } from 'jws/interface';
+import { JWSSignature } from 'jws/type';
 import { BASE64URL_DECODE } from 'utility';
 export { HSAlg, isHSAlg, HMACOperator };
 
@@ -36,7 +37,7 @@ async function mac(alg: HSAlg, key: JWK<'oct'>, m: Uint8Array): Promise<JWSSigna
   const { k: keyAlg, s: sigAlg } = params(alg);
   const k = await window.crypto.subtle.importKey('jwk', key as JsonWebKey, keyAlg, false, ['sign']);
   const s = await window.crypto.subtle.sign(sigAlg, k, m);
-  return new Uint8Array(s);
+  return new Uint8Array(s) as JWSSignature;
 }
 
 /**

@@ -1,31 +1,15 @@
 // --------------------BEGIN JWS Serialization definition --------------------
 
-import { BASE64URL, BASE64URL_DECODE, isObject, UTF8, UTF8_DECODE } from 'utility';
+import { equalsJOSEHeader, isJOSEHeader } from 'iana';
 import {
-  equalsJWSJOSEHeader,
-  isJWSUnprotectedHeader,
-  JWSHeader,
-  JWSProtectedHeader,
-  JWSUnprotectedHeader,
-} from './header';
-import { JWSHeaderAndSig, JWSPayload, JWSSignature } from './types';
-
-export {
-  JWSSerialization,
-  SerializationType,
-  serializationType,
   JWSCompactSerialization,
-  JWSJSONSerialization,
   JWSFlattenedJSONSerialization,
-  serializeCompact,
-  deserializeCompact,
-  serializeJSON,
-  deserializeJSON,
-  equalsJWSJSONSerialization,
-  equalsJWSFlattenedJSONSerialization,
-  isJWSJSONSerialization,
-  isJWSFlattenedJSONSerialization,
-};
+  JWSJSONSerialization,
+  JWSPayload,
+  JWSSignature,
+  JWSUnprotectedHeader,
+} from 'jws/type';
+import { BASE64URL, BASE64URL_DECODE, isObject } from 'utility';
 
 /**
  * JWS には2つのシリアライぜーションがあり、
@@ -33,53 +17,63 @@ export {
  * 複数の署名や MAC を１つのコンテンツに適用したものを JSON で表現する JWS JSON Serialization がある。
  * さらに、 JWS JSON Serialization は署名が１つだけの場合に JWS Flattened JSON Serializatino がある。
  */
-type JWSSerialization = 'compact' | 'json' | 'json-flat';
+export type JWSSerializationFormat = 'compact' | 'json' | 'json_flat';
 
 /**
  * Serialization の型を表現する。
  */
-type SerializationType<S extends JWSSerialization = JWSSerialization> = S extends 'compact'
-  ? JWSCompactSerialization
-  : S extends 'json'
-  ? JWSJSONSerialization
-  : S extends 'json-flat'
-  ? JWSFlattenedJSONSerialization
-  : never;
+export type JWSSerialization<S extends JWSSerializationFormat = JWSSerializationFormat> =
+  S extends 'compact'
+    ? JWSCompactSerialization
+    : S extends 'json'
+    ? JWSJSONSerialization
+    : S extends 'json_flat'
+    ? JWSFlattenedJSONSerialization
+    : never;
 
 /**
  * Serialization された JWS のフォーマットが何か判定する
  */
-function serializationType(data: unknown): JWSSerialization {
+export function jwsSerializationFormat(data: unknown): JWSSerializationFormat {
   if (typeof data == 'string') {
     return 'compact';
   }
   if (typeof data == 'object' && data != null) {
     if ('signatures' in data) return 'json';
-    return 'json-flat';
+    return 'json_flat';
   }
   throw TypeError(`${data} は JWSSerialization ではない`);
 }
 
-/**
- * JWS を URL-safe な文字列をする serialization
- * 署名は１つだけしか表現できず、 Unprotected Header も表現できない
- * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
- * で表現する。
- */
-type JWSCompactSerialization = string;
+export const JWSCompactSerializer = {
+  serialize: serializeCompact,
+  deserialize: deserializeCompact,
+};
+
+export const JWSJSONSerializer = {
+  serialize: serializeJSON,
+  deserialize: deserializeJSON,
+  is: isJWSJSONSerialization,
+  equals: equalsJWSJSONSerialization,
+};
+
+export const JWSFlattenedJSONSerializer = {
+  serialize: serializeJWSFlattenedJSON,
+  deserialize: deserializeJWSFlattenedJSON,
+  is: isJWSFlattenedJSONSerialization,
+  equals: equalsJWSFlattenedJSONSerialization,
+};
 
 /**
  * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
  * に JWS をシリアライズする。
  */
 function serializeCompact(
-  h: JWSProtectedHeader,
+  p_b64u: string,
   m: JWSPayload,
   s?: JWSSignature
 ): JWSCompactSerialization {
-  let ans = BASE64URL(UTF8(JSON.stringify(h))) + '.' + BASE64URL(m);
-  if (s != null) ans += '.' + BASE64URL(s);
-  return ans;
+  return `${p_b64u}.${BASE64URL(m)}.${s ? BASE64URL(s) : ''}`;
 }
 
 /**
@@ -87,7 +81,7 @@ function serializeCompact(
  * を JWS にデシリアライズする。
  */
 function deserializeCompact(compact: JWSCompactSerialization): {
-  h: JWSProtectedHeader;
+  p_b64u: string;
   m: JWSPayload;
   s: JWSSignature;
 } {
@@ -100,41 +94,11 @@ function deserializeCompact(compact: JWSCompactSerialization): {
     throw 'JWS Compact Serialization では Protected Header が必須';
   }
   return {
-    h: JSON.parse(UTF8_DECODE(BASE64URL_DECODE(header))),
-    m: BASE64URL_DECODE(payload),
-    s: BASE64URL_DECODE(signature),
+    p_b64u: header,
+    m: BASE64URL_DECODE(payload) as JWSPayload,
+    s: BASE64URL_DECODE(signature) as JWSSignature,
   };
 }
-
-/**
- * JSON で Serialization する
- * コンパクトでもないし、 url-safe でもないが表現に制限はない。
- */
-type JWSJSONSerialization = {
-  /**
-   * BASE64URL(JWS Payload)
-   */
-  payload: string;
-  /**
-   * 署名を表現するオブジェクトの配列
-   */
-  signatures: {
-    /**
-     * BASE64URL(JWS Signature)
-     */
-    signature: string;
-    /**
-     * UNprotected Header があればそのまま JSON でシリアライズ。
-     * ないときは存在してはならない。
-     */
-    header?: JWSUnprotectedHeader;
-    /**
-     * Protected Header があれば BASE64URL(UTF8(JWS Protected Header)) デシリアライズ。
-     * ないときは存在してはならない。
-     */
-    protected?: string;
-  }[];
-};
 
 function isJWSJSONSerialization(arg: unknown): arg is JWSJSONSerialization {
   return (
@@ -149,7 +113,7 @@ function isJWSJSONSerialization(arg: unknown): arg is JWSJSONSerialization {
           protected?: string;
         }>(s) &&
         typeof s.signature === 'string' &&
-        (s.header == null || isJWSUnprotectedHeader(s.header)) &&
+        (s.header == null || isJOSEHeader(s.header, 'JWS')) &&
         (s.protected == null || typeof s.protected === 'string')
     )
   );
@@ -157,22 +121,18 @@ function isJWSJSONSerialization(arg: unknown): arg is JWSJSONSerialization {
 
 function serializeJSON(
   m: JWSPayload,
-  hs: JWSHeaderAndSig | JWSHeaderAndSig[]
+  hs:
+    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }
+    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }[]
 ): JWSJSONSerialization {
   const hsList = Array.isArray(hs) ? hs : [hs];
   return {
     payload: BASE64URL(m),
     signatures: hsList.map((hs) => {
-      if (hs.s === undefined) {
-        throw '署名を終えていない';
-      }
       return {
-        signature: BASE64URL(hs.s),
-        header: hs.h.Unprotected,
-        protected:
-          hs.h.Protected !== undefined
-            ? BASE64URL(UTF8(JSON.stringify(hs.h.Protected)))
-            : undefined,
+        signature: BASE64URL(hs.sig),
+        header: hs.u,
+        protected: hs.p_b64u,
       };
     }),
   };
@@ -180,20 +140,17 @@ function serializeJSON(
 
 function deserializeJSON(json: JWSJSONSerialization): {
   m: JWSPayload;
-  hs: JWSHeaderAndSig[];
+  hs:
+    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }
+    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }[];
 } {
-  return {
-    m: BASE64URL_DECODE(json.payload),
-    hs: json.signatures.map((sig) => ({
-      s: BASE64URL_DECODE(sig.signature),
-      h: new JWSHeader(
-        sig.protected !== undefined
-          ? JSON.parse(UTF8_DECODE(BASE64URL_DECODE(sig.protected)))
-          : undefined,
-        sig.header
-      ),
-    })),
-  };
+  const m = BASE64URL_DECODE(json.payload) as JWSPayload;
+  const hslist = json.signatures.map((sig) => ({
+    p_b64u: sig.protected,
+    u: sig.header,
+    sig: BASE64URL_DECODE(sig.signature) as JWSSignature,
+  }));
+  return { m, hs: hslist.length === 1 ? hslist[0] : hslist };
 }
 
 function equalsJWSJSONSerialization(l?: JWSJSONSerialization, r?: JWSJSONSerialization): boolean {
@@ -252,7 +209,7 @@ function equalsSignatureInJWSJSONSerialization(
       case 'header': {
         const ll = ln as JWSUnprotectedHeader;
         const rr = rn as JWSUnprotectedHeader;
-        if (equalsJWSJOSEHeader(ll, rr)) continue;
+        if (equalsJOSEHeader(ll, rr)) continue;
         return false;
       }
       case 'protected':
@@ -265,16 +222,30 @@ function equalsSignatureInJWSJSONSerialization(
   return true;
 }
 
-/**
- * 署名が１つだけの時に、JSON serialization は平滑化できる。
- * signatures は存在してはならない。
- */
-type JWSFlattenedJSONSerialization = {
-  payload: string;
-  signature: string;
-  header?: JWSUnprotectedHeader;
-  protected?: string;
-};
+function serializeJWSFlattenedJSON(
+  h: { p_b64u?: string; u?: JWSUnprotectedHeader },
+  m: JWSPayload,
+  s: JWSSignature
+): JWSFlattenedJSONSerialization {
+  return {
+    payload: BASE64URL(m),
+    signature: BASE64URL(s),
+    header: h.u,
+    protected: h.p_b64u,
+  };
+}
+
+function deserializeJWSFlattenedJSON(flat: JWSFlattenedJSONSerialization): {
+  h: { p_b64u?: string; u?: JWSUnprotectedHeader };
+  m: JWSPayload;
+  s: JWSSignature;
+} {
+  return {
+    h: { p_b64u: flat.protected, u: flat.header },
+    m: BASE64URL_DECODE(flat.payload) as JWSPayload,
+    s: BASE64URL_DECODE(flat.signature) as JWSSignature,
+  };
+}
 
 function equalsJWSFlattenedJSONSerialization(
   l?: JWSFlattenedJSONSerialization,
@@ -286,11 +257,14 @@ function equalsJWSFlattenedJSONSerialization(
   return equalsSignatureInJWSJSONSerialization(l, r);
 }
 
-const isJWSFlattenedJSONSerialization = (arg: unknown): arg is JWSFlattenedJSONSerialization =>
-  isObject<JWSFlattenedJSONSerialization>(arg) &&
-  typeof arg.payload === 'string' &&
-  (arg.protected == null || typeof arg.protected === 'string') &&
-  typeof arg.signature === 'string' &&
-  (arg.header == null || isJWSUnprotectedHeader(arg.header));
+function isJWSFlattenedJSONSerialization(arg: unknown): arg is JWSFlattenedJSONSerialization {
+  return (
+    isObject<JWSFlattenedJSONSerialization>(arg) &&
+    typeof arg.payload === 'string' &&
+    (arg.protected == null || typeof arg.protected === 'string') &&
+    typeof arg.signature === 'string' &&
+    (arg.header == null || isJOSEHeader(arg.header, 'JWS'))
+  );
+}
 
 // --------------------END JWS Serialization definition --------------------

@@ -4,12 +4,12 @@
 /**
  * ECDSA アルゴリズムで署名の作成と検証を行うオペレータを定義する
  */
-const ECSigOperator = { sign: sign$2, verify: verify$3 };
+const ESSigOperator = { sign: sign$2, verify: verify$3 };
 /**
  * 引数が ECDSA アルゴリズム識別子か確認する。
  */
-const isECAlg = (arg) => typeof arg === 'string' && ecAlgList.some((a) => a === arg);
-const ecAlgList = ['ES256', 'ES384', 'ES512'];
+const isESAlg = (arg) => typeof arg === 'string' && esAlgList.some((a) => a === arg);
+const esAlgList = ['ES256', 'ES384', 'ES512'];
 /**
  * ECDSA (alg)に従い、与えられたメッセージ(m)と秘密鍵(key) から署名を作成する。
  */
@@ -229,15 +229,15 @@ function params(alg) {
 // --------------------END JWA RSA algorithms --------------------
 
 // --------------------BEGIN JWA JWS algorithms --------------------
-const isJWASigAlg = (arg) => isRSAlg(arg) || isPSAlg(arg) || isECAlg(arg);
+const isJWASigAlg = (arg) => isRSAlg(arg) || isPSAlg(arg) || isESAlg(arg);
 /**
  * JWA で定義されている署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
  */
 function newJWASigOperator(alg) {
     if (isRSAlg(alg) || isPSAlg(alg))
         return RSASigOperator;
-    if (isECAlg(alg))
-        return ECSigOperator;
+    if (isESAlg(alg))
+        return ESSigOperator;
     throw new TypeError(`SigOperator<${alg}> は実装されていない`);
 }
 /**
@@ -259,7 +259,7 @@ const isJWANoneAlg = (arg) => typeof arg === 'string' && arg === 'none';
 function ktyFromJWAJWSAlg(alg) {
     if (isPSAlg(alg) || isRSAlg(alg))
         return 'RSA';
-    if (isECAlg(alg))
+    if (isESAlg(alg))
         return 'EC';
     if (isHSAlg(alg))
         return 'oct';
@@ -1496,91 +1496,22 @@ function intToOctets$1(x, xLen) {
     return ans;
 }
 
-const isJWEJOSEHeader = (arg) => isPartialJWEJOSEHeader(arg) && arg.alg != null && arg.enc != null;
-const JWEJOSEHeaderParamNames = [
-    'alg',
-    'enc',
-    'zip',
-    'jku',
-    'jwk',
-    'kid',
-    'x5u',
-    'x5c',
-    'x5t',
-    'x5t#S256',
-    'typ',
-    'cty',
-    'crit',
-];
-const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
-    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
-        (n === 'alg'
-            ? isAlg(arg[n], 'JWE')
-            : n === 'enc'
-                ? isEncAlg(arg[n])
-                : n === 'jwk'
-                    ? isJWK(arg[n])
-                    : n === 'x5c' || n === 'crit'
-                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
-                        : typeof arg[n] === 'string'));
-function equalsJWEJOSEHeader(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    for (const n of JWEJOSEHeaderParamNames) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        switch (n) {
-            case 'jwk': {
-                const ll = ln;
-                const rr = rn;
-                if (equalsJWK(ll, rr))
-                    continue;
-                return false;
-            }
-            case 'x5t':
-            case 'crit': {
-                const ll = ln;
-                const rr = rn;
-                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
-                    continue;
-                return false;
-            }
-            default: {
-                const ll = ln;
-                const rr = rn;
-                if (ll === rr)
-                    continue;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 const PBES2KeyWrapper = {
     wrap: async (key, cek, h) => {
-        if (!isJWEJOSEHeader(h)) {
-            throw new TypeError('JOSE Header for PBES2 Key Wrapping に必須パラメータがない');
-        }
-        if (!isPBES2Alg(h.alg)) {
+        if (!h || !isPBES2Alg(h.alg)) {
             throw new TypeError('PBES2 algorithm identifier ではなかった');
         }
         return wrap(key, cek, { ...h, alg: h.alg });
     },
     unwrap: async (key, ek, h) => {
-        if (!isJWEJOSEHeader(h) || !isPBES2HeaderParams(h)) {
-            throw new TypeError('JOSE Header for PBES2 Key Wrapping に必須パラメータがない');
-        }
-        if (!isPBES2Alg(h.alg)) {
+        if (!h || !isPBES2Alg(h.alg)) {
             throw new TypeError('PBES2 algorithm identifier ではなかった');
         }
-        return unwrap(key, ek, { ...h, alg: h.alg });
+        const alg = h.alg;
+        if (!isPBES2HeaderParams(h)) {
+            throw new TypeError('JOSE Header for PBES2 Key Wrapping に必須パラメータがない');
+        }
+        return unwrap(key, ek, { ...h, alg });
     },
 };
 const isPBES2Alg = (arg) => typeof arg === 'string' && pbes2AlgList.some((a) => a === arg);
@@ -2077,79 +2008,10 @@ function newJWAEncOperator(enc) {
     throw TypeError(`EncOperator<$alg> is not implemented`);
 }
 
-// --------------------BEGIN JWS dependency injection --------------------
-/**
- * 引数が JWS の署名アルゴリズム識別子か確認する
- */
-const isJWSSigAlg = (arg) => isJWASigAlg(arg);
-function ktyFromJWSSigAlg(alg) {
-    return ktyFromJWAJWSAlg(alg);
-}
-/**
- * 署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newSigOperator(alg) {
-    if (isJWASigAlg(alg))
-        return newJWASigOperator(alg);
-    throw new TypeError(`SigOperator<${alg}> は実装されていない`);
-}
-/**
- * 引数が JWS の MAC アルゴリズムか確認する
- */
-const isJWSMACAlg = (arg) => isJWAMACAlg(arg);
-/**
- * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newMacOperator(alg) {
-    if (isJWAMACAlg(alg))
-        return newJWAMACOperator(alg);
-    throw TypeError(`MacOperator<${alg}> は実装されていない`);
-}
-const isJWSUnsecureAlg = (arg) => isJWANoneAlg(arg);
-// --------------------END JWS dependency injection --------------------
-
-// --------------------BEGIN JWS Teminology definition --------------------
-const isJWSAlg = (arg) => isJWSSigAlg(arg) || isJWSMACAlg(arg) || isJWSUnsecureAlg(arg);
-// --------------------END JWS Teminology definition --------------------
-
-// --------------------BEGIN JWS Header definition --------------------
-/**
- * JWS では JOSE Header は JWS Protected Header と JWS Unprotected Header の union で表現されるが、
- * 内部構造としてヘッダーパラメータが Protected かどうかという情報を保持し続けるためにクラスで定義している。
- * p と u のいずれか一方は存在することが必要で、どちらかには alg パラメータが含まれている
- */
-class JWSHeader {
-    constructor(p, u) {
-        const h = { ...u, ...p };
-        if (!isJWSJOSEHeader(h))
-            throw new TypeError('JOSE Header for JWS に必要なパラメータが不足している');
-        this.h = h;
-        this.p = p;
-        this.u = u;
-    }
-    /**
-     * JWS Protected Header と JWS Unprotected Header の Union を返す
-     */
-    get JOSEHeader() {
-        return this.h;
-    }
-    /**
-     * JWS Protected Header があれば返す。
-     */
-    get Protected() {
-        return this.p;
-    }
-    /**
-     * JWS Unprotected Header があれば返す。
-     */
-    get Unprotected() {
-        return this.u;
-    }
-}
-const isJWSProtectedHeader = (arg) => isPartialJWSJOSEHeader(arg);
-const isJWSUnprotectedHeader = (arg) => isPartialJWSJOSEHeader(arg);
-const jwsJOSEHeaderNameList = [
+const JWEJOSEHeaderParamNames = [
     'alg',
+    'enc',
+    'zip',
     'jku',
     'jwk',
     'kid',
@@ -2161,15 +2023,23 @@ const jwsJOSEHeaderNameList = [
     'cty',
     'crit',
 ];
-/**
- * ２つの JWSJOSEHEader が同じか判定する
- */
-function equalsJWSJOSEHeader(l, r) {
+const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
+    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isAlg(arg[n], 'JWE')
+            : n === 'enc'
+                ? isEncAlg(arg[n])
+                : n === 'jwk'
+                    ? isJWK(arg[n])
+                    : n === 'x5c' || n === 'crit'
+                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                        : typeof arg[n] === 'string'));
+function equalsJWEJOSEHeader(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
         return false;
-    for (const n of jwsJOSEHeaderNameList) {
+    for (const n of JWEJOSEHeaderParamNames) {
         const ln = l[n];
         const rn = r[n];
         if (ln == null && rn == null)
@@ -2203,142 +2073,42 @@ function equalsJWSJOSEHeader(l, r) {
     }
     return true;
 }
-/**
- * 引数が JWSJOSEHeader か確認する。
- * JWS で定義されている JWSJOSEHeader パラメータをもち、 alg を持っているか確認する。
- */
-const isJWSJOSEHeader = (arg) => isPartialJWSJOSEHeader(arg) && arg.alg != null;
+
+const JWSJOSEHeaderParamNames = [
+    'alg',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
 /**
  * 引数が Partial<JWSJOSEHeader> か確認する。
  * isJWSJOSEHeader は alg が値を持っているか確認するが、これでは undefined でも良いとしている。
  */
 const isPartialJWSJOSEHeader = (arg) => isObject(arg) &&
-    jwsJOSEHeaderNameList.every((n) => arg[n] == null ||
+    JWSJOSEHeaderParamNames.every((n) => arg[n] == null ||
         (n === 'alg'
-            ? isJWSAlg(arg[n])
+            ? isAlg(arg[n], 'JWS')
             : n === 'jwk'
                 ? isJWK(arg[n])
                 : n === 'x5c' || n === 'crit'
                     ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
                     : typeof arg[n] === 'string'));
-// --------------------END JWS Header definition --------------------
-
-// --------------------BEGIN JWS Serialization definition --------------------
 /**
- * Serialization された JWS のフォーマットが何か判定する
+ * ２つの JWSJOSEHEader が同じか判定する
  */
-function serializationType(data) {
-    if (typeof data == 'string') {
-        return 'compact';
-    }
-    if (typeof data == 'object' && data != null) {
-        if ('signatures' in data)
-            return 'json';
-        return 'json-flat';
-    }
-    throw TypeError(`${data} は JWSSerialization ではない`);
-}
-/**
- * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
- * に JWS をシリアライズする。
- */
-function serializeCompact$1(h, m, s) {
-    let ans = BASE64URL(UTF8(JSON.stringify(h))) + '.' + BASE64URL(m);
-    if (s != null)
-        ans += '.' + BASE64URL(s);
-    return ans;
-}
-/**
- * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
- * を JWS にデシリアライズする。
- */
-function deserializeCompact$1(compact) {
-    const c = compact.split('.');
-    if (c.length !== 3) {
-        throw 'JWS Compact Serialization の形式ではない';
-    }
-    const [header, payload, signature] = c;
-    if (header === '') {
-        throw 'JWS Compact Serialization では Protected Header が必須';
-    }
-    return {
-        h: JSON.parse(UTF8_DECODE(BASE64URL_DECODE(header))),
-        m: BASE64URL_DECODE(payload),
-        s: BASE64URL_DECODE(signature),
-    };
-}
-function isJWSJSONSerialization(arg) {
-    return (isObject(arg) &&
-        typeof arg.payload === 'string' &&
-        Array.isArray(arg.signatures) &&
-        arg.signatures.every((s) => isObject(s) &&
-            typeof s.signature === 'string' &&
-            (s.header == null || isJWSUnprotectedHeader(s.header)) &&
-            (s.protected == null || typeof s.protected === 'string')));
-}
-function serializeJSON$1(m, hs) {
-    const hsList = Array.isArray(hs) ? hs : [hs];
-    return {
-        payload: BASE64URL(m),
-        signatures: hsList.map((hs) => {
-            if (hs.s === undefined) {
-                throw '署名を終えていない';
-            }
-            return {
-                signature: BASE64URL(hs.s),
-                header: hs.h.Unprotected,
-                protected: hs.h.Protected !== undefined
-                    ? BASE64URL(UTF8(JSON.stringify(hs.h.Protected)))
-                    : undefined,
-            };
-        }),
-    };
-}
-function deserializeJSON$1(json) {
-    return {
-        m: BASE64URL_DECODE(json.payload),
-        hs: json.signatures.map((sig) => ({
-            s: BASE64URL_DECODE(sig.signature),
-            h: new JWSHeader(sig.protected !== undefined
-                ? JSON.parse(UTF8_DECODE(BASE64URL_DECODE(sig.protected)))
-                : undefined, sig.header),
-        })),
-    };
-}
-function equalsJWSJSONSerialization(l, r) {
+function equalsJWSJOSEHeader(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
         return false;
-    for (const n of ['payload', 'signatures']) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        if (n === 'payload') {
-            if (ln === rn)
-                continue;
-            return false;
-        }
-        else if (n === 'signatures') {
-            const ll = ln;
-            const rr = rn;
-            if (ll.every((l) => rr.some((r) => equalsSignatureInJWSJSONSerialization(l, r))) &&
-                rr.every((r) => ll.some((l) => equalsSignatureInJWSJSONSerialization(l, r))))
-                continue;
-            return false;
-        }
-    }
-    return true;
-}
-function equalsSignatureInJWSJSONSerialization(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    for (const n of ['signature', 'header', 'protected']) {
+    for (const n of JWSJOSEHeaderParamNames) {
         const ln = l[n];
         const rn = r[n];
         if (ln == null && rn == null)
@@ -2346,16 +2116,25 @@ function equalsSignatureInJWSJSONSerialization(l, r) {
         if (ln == null || rn == null)
             return false;
         switch (n) {
-            case 'header': {
+            case 'jwk': {
                 const ll = ln;
                 const rr = rn;
-                if (equalsJWSJOSEHeader(ll, rr))
+                if (equalsJWK(ll, rr))
                     continue;
                 return false;
             }
-            case 'protected':
-            case 'signature': {
-                if (ln === rn)
+            case 'x5t':
+            case 'crit': {
+                const ll = ln;
+                const rr = rn;
+                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
+                    continue;
+                return false;
+            }
+            default: {
+                const ll = ln;
+                const rr = rn;
+                if (ll === rr)
                     continue;
                 return false;
             }
@@ -2363,167 +2142,6 @@ function equalsSignatureInJWSJSONSerialization(l, r) {
     }
     return true;
 }
-function equalsJWSFlattenedJSONSerialization(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    if (l.payload !== r.payload)
-        return false;
-    return equalsSignatureInJWSJSONSerialization(l, r);
-}
-const isJWSFlattenedJSONSerialization = (arg) => isObject(arg) &&
-    typeof arg.payload === 'string' &&
-    (arg.protected == null || typeof arg.protected === 'string') &&
-    typeof arg.signature === 'string' &&
-    (arg.header == null || isJWSUnprotectedHeader(arg.header));
-// --------------------END JWS Serialization definition --------------------
-
-// --------------------BEGIN JWS implementation --------------------
-/**
- * JWS はデジタル署名もしくはメッセージ認証コードで保護されたコンテンツを表現する JSON ベースのデータ構造である。
- */
-class JWS {
-    constructor(m, hs) {
-        this.m = m;
-        this.hs = hs;
-    }
-    /**
-     * RFC7515#5.1 Message Signature or MAC Computation
-     *
-     */
-    static async produce(keys, 
-    /**
-     * JWS Payload として使用するコンテンツ。
-     */
-    m, 
-    /**
-     * JOSE ヘッダー。複数署名を行う場合は配列で表現。
-     */
-    h) {
-        const headerList = Array.isArray(h)
-            ? h.map((h) => new JWSHeader(h.p, h.u))
-            : [new JWSHeader(h.p, h.u)];
-        // ヘッダーごとにコンテンツに対して署名や MAC 計算を行う。
-        // 計算の実体は sign で実装。
-        const hsList = await Promise.all(headerList.map(async (h) => ({ h, s: await sign(keys, m, h) })));
-        if (hsList.length === 1)
-            return new JWS(m, hsList[0]);
-        return new JWS(m, hsList);
-    }
-    async validate(keys, isAllValidation = true) {
-        const hsList = Array.isArray(this.hs) ? this.hs : [this.hs];
-        const verifiedList = await Promise.all(hsList.map(async (hs) => await verify(keys, this.m, hs)));
-        return verifiedList.reduce((prev, now) => (isAllValidation ? prev && now : prev || now));
-    }
-    static deserialize(data) {
-        switch (serializationType(data)) {
-            case 'compact': {
-                const { h, m, s } = deserializeCompact$1(data);
-                return new JWS(m, { h: new JWSHeader(h), s });
-            }
-            case 'json': {
-                const { m, hs } = deserializeJSON$1(data);
-                if (hs.length === 1) {
-                    return new JWS(m, hs[0]);
-                }
-                return new JWS(m, hs);
-            }
-            case 'json-flat': {
-                const d = data;
-                const { m, hs } = deserializeJSON$1({ payload: d.payload, signatures: [d] });
-                return new JWS(m, hs[0]);
-            }
-        }
-    }
-    serialize(s) {
-        switch (s) {
-            case 'compact':
-                if (Array.isArray(this.hs)) {
-                    throw 'JWS Compact Serialization は複数署名を表現できない';
-                }
-                if (this.hs.h.Protected == null) {
-                    // つまり this.hs.h.u != null
-                    throw 'JWS Compact Serialization は JWS Unprotected Header を表現できない';
-                }
-                if (this.hs.s == null) {
-                    throw '署名を終えていない';
-                }
-                return serializeCompact$1(this.hs.h.Protected, this.m, this.hs.s);
-            case 'json':
-                return serializeJSON$1(this.m, this.hs);
-            case 'json-flat': {
-                const json = serializeJSON$1(this.m, this.hs);
-                if (json.signatures.length > 1) {
-                    throw 'Flattened JWS JSON Serialization は複数署名を表現できない';
-                }
-                return {
-                    payload: json.payload,
-                    signature: json.signatures[0].signature,
-                    header: json.signatures[0].header,
-                    protected: json.signatures[0].protected,
-                };
-            }
-            default:
-                throw TypeError(`${s} はJWSSerialization format ではない`);
-        }
-    }
-}
-/**
- * RFC7515#5.1
- * ヘッダーに応じて署名アルゴリズムの選択と、署名鍵を keys から選択する。
- * 署名鍵と署名アルゴリズムを用いて、 JWS Payload と JWS Protected Header に対して署名 or MAC 計算を行い、
- * その結果を返す。
- */
-async function sign(keys, m, h) {
-    const input = jwsinput(m, h.Protected);
-    const jh = h.JOSEHeader;
-    const alg = jh.alg;
-    if (jh.alg === 'none') {
-        // Unsecured JWS の場合は、署名値がない。
-        return new Uint8Array();
-    }
-    else if (isJWSSigAlg(alg)) {
-        // JOSE Header の alg がデジタル署名の場合
-        const key = identifyJWK(jh, keys);
-        // key が秘密鍵かどうか、型ガードを行う
-        if (!isJWK(key, ktyFromJWSSigAlg(alg), 'Priv'))
-            throw new TypeError('公開鍵で署名しようとしている');
-        return newSigOperator(alg).sign(alg, key, input);
-    }
-    else if (isJWSMACAlg(alg)) {
-        // JOSE Header の alg が MAC の場合
-        const key = identifyJWK(jh, keys);
-        return newMacOperator(alg).mac(alg, key, input);
-    }
-    throw new EvalError(`sign(alg: ${alg}) is unimplemented`);
-}
-async function verify(keys, m, hs) {
-    const jh = hs.h.JOSEHeader;
-    const alg = jh.alg;
-    if (alg === 'none')
-        return true;
-    if (hs.s === undefined)
-        return false;
-    const input = jwsinput(m, hs.h.Protected);
-    if (isJWSSigAlg(alg)) {
-        const key = identifyJWK(jh, keys);
-        if (!isJWK(key, ktyFromJWSSigAlg(alg), 'Pub'))
-            throw new TypeError('秘密鍵で検証しようとしている');
-        return newSigOperator(alg).verify(alg, key, input, hs.s);
-    }
-    else if (isJWSMACAlg(alg)) {
-        const key = identifyJWK(jh, keys);
-        return newMacOperator(alg).verify(alg, key, input, hs.s);
-    }
-    throw new EvalError(`verify(alg: $alg) is unimplemented`);
-}
-/**
- * RFC7515#2 JWS Signing Input はデジタル署名や MAC の計算に対する入力。
- * この値は、ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload))
- */
-const jwsinput = (m, p) => ASCII((p !== undefined ? BASE64URL(UTF8(JSON.stringify(p))) : '') + '.' + BASE64URL(m));
-// --------------------END JWS implementation --------------------
 
 // --------------------BEGIN iana constants --------------------
 const equalsJOSEHeader = (l, r) => {
@@ -2545,17 +2163,23 @@ function isJOSEHeader(arg, t) {
     }
     // TODO;
     if (t === 'JWS') {
-        return true;
+        return isPartialJWSJOSEHeader(arg);
     }
-    return true;
+    return (isPartialJWSJOSEHeader(arg) ||
+        (isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg)));
 }
-// TODO
 function isJOSEHeaderParamName(arg, t) {
     if (t === 'JWE') {
         return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some((n) => n === arg);
     }
-    // todo
-    return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some((n) => n === arg);
+    if (t === 'JWS') {
+        return [...JWSJOSEHeaderParamNames].some((n) => n === arg);
+    }
+    return [
+        ...JWEJOSEHeaderParamNames,
+        ...JWAAlgSpecificJOSEHeaderParamNames,
+        ...JWSJOSEHeaderParamNames,
+    ].some((n) => n === arg);
 }
 function isAlg(arg, t) {
     const isJWSAlg = (arg) => isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
@@ -2622,11 +2246,6 @@ function keyMgmtModeFromAlg(alg) {
     const a = alg;
     throw new TypeError(`${a} の Key Management Mode がわからない`);
 }
-function generateCEK(enc) {
-    if (isJWAEncAlg(enc))
-        return generateCEKforJWACEK(enc);
-    throw new TypeError(`${enc} の CEK を生成できない`);
-}
 function newKeyEncryptor(alg) {
     if (isJWAKEAlg(alg))
         return newJWAKeyEncryptor(alg);
@@ -2651,6 +2270,11 @@ function newDirectEncrytor(alg) {
     if (isJWADEAlg(alg))
         return newJWADirectEncryptor(alg);
     throw new TypeError(`DirectEncrypto<${alg}> は実装されていない`);
+}
+function generateCEK(enc) {
+    if (isJWAEncAlg(enc))
+        return generateCEKforJWACEK(enc);
+    throw new TypeError(`${enc} の CEK を生成できない`);
 }
 function newEncOperator(enc) {
     if (isEncAlg(enc))
@@ -3227,12 +2851,12 @@ function jweSerializationFormat(data) {
     throw new TypeError(`${data} は Serialized JWE ではない`);
 }
 const JWECompactSerializer = {
-    serialize: serializeCompact,
-    deserialize: deserializeCompact,
+    serialize: serializeCompact$1,
+    deserialize: deserializeCompact$1,
 };
 const JWEJSONSerializer = {
-    serialize: serializeJSON,
-    deserialize: deserializeJSON,
+    serialize: serializeJSON$1,
+    deserialize: deserializeJSON$1,
     is: isJWEJSONSerialization$1,
     equals: equalsJWEJSONSerialization$1,
 };
@@ -3242,10 +2866,10 @@ const JWEFlattenedJSONSerializer = {
     is: isJWEFlattenedJSONSerialization$1,
     equals: equalsJWEFlattenedJSONSerialization$1,
 };
-function serializeCompact(p_b64u, ek, iv, c, tag) {
+function serializeCompact$1(p_b64u, ek, iv, c, tag) {
     return `${p_b64u}.${BASE64URL(ek)}.${BASE64URL(iv)}.${BASE64URL(c)}.${BASE64URL(tag)}`;
 }
-function deserializeCompact(compact) {
+function deserializeCompact$1(compact) {
     const l = compact.split('.');
     if (l.length !== 5) {
         throw new EvalError('JWS Compact Serialization の形式ではない');
@@ -3301,7 +2925,7 @@ function equalsRecipientInJWEJSONSerialization(l, r) {
         return false;
     return true;
 }
-function serializeJSON(c, rcpt, p_b64u, hsu, iv, aad, tag) {
+function serializeJSON$1(c, rcpt, p_b64u, hsu, iv, aad, tag) {
     return {
         protected: p_b64u,
         unprotected: hsu,
@@ -3317,7 +2941,7 @@ function serializeJSON(c, rcpt, p_b64u, hsu, iv, aad, tag) {
             : [{ header: rcpt.h, encrypted_key: rcpt.ek ? BASE64URL(rcpt.ek) : undefined }],
     };
 }
-function deserializeJSON(json) {
+function deserializeJSON$1(json) {
     return {
         c: BASE64URL_DECODE(json.ciphertext),
         rcpt: json.recipients.length === 1
@@ -3369,7 +2993,7 @@ function equalsJWEFlattenedJSONSerialization$1(l, r) {
     return equalsRecipientInJWEJSONSerialization(l, r);
 }
 function serializeFlattenedJSON(c, h, ek, p_b64u, hsu, iv, aad, tag) {
-    const json = serializeJSON(c, { h, ek }, p_b64u, hsu, iv, aad, tag);
+    const json = serializeJSON$1(c, { h, ek }, p_b64u, hsu, iv, aad, tag);
     return {
         protected: json.protected,
         unprotected: json.unprotected,
@@ -3382,7 +3006,7 @@ function serializeFlattenedJSON(c, h, ek, p_b64u, hsu, iv, aad, tag) {
     };
 }
 function deserializeFlattenedJSON(flat) {
-    const jwe = deserializeJSON({
+    const jwe = deserializeJSON$1({
         ...flat,
         recipients: [{ header: flat.header, encrypted_key: flat.encrypted_key }],
     });
@@ -4249,6 +3873,605 @@ async function test$1() {
 }
 // --------------------END RFC7520 Section.3 for RSA test --------------------
 
+// --------------------BEGIN JWS dependency injection --------------------
+function JWSOpeModeFromAlg(alg) {
+    if (isJWANoneAlg(alg))
+        return 'None';
+    if (isJWASigAlg(alg))
+        return 'Sig';
+    if (isJWAMACAlg(alg))
+        return 'MAC';
+    throw new TypeError(`${alg} は JWS のものではない`);
+}
+/**
+ * 署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newSigOperator(alg) {
+    if (isJWASigAlg(alg))
+        return newJWASigOperator(alg);
+    throw new TypeError(`SigOperator<${alg}> は実装されていない`);
+}
+/**
+ * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newMacOperator(alg) {
+    if (isJWAMACAlg(alg))
+        return newJWAMACOperator(alg);
+    throw TypeError(`MacOperator<${alg}> は実装されていない`);
+}
+// --------------------END JWS dependency injection --------------------
+
+// --------------------BEGIN JWS Header definition --------------------
+function JWSHeaderBuilderFromSerializedJWS(p_b64u, u) {
+    let alg;
+    let options;
+    if (p_b64u) {
+        const initialValue = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(p_b64u)));
+        if (!isJOSEHeader(initialValue, 'JWS')) {
+            throw new TypeError('JWS Protected Header の b64u 表現ではなかった');
+        }
+        if (initialValue.alg) {
+            alg = initialValue.alg;
+        }
+        if (options) {
+            options.p = { initialValue: initialValue, b64u: p_b64u };
+        }
+        else {
+            options = {
+                p: { initialValue: initialValue, b64u: p_b64u },
+            };
+        }
+    }
+    if (u) {
+        const initialValue = u;
+        if (initialValue.alg) {
+            alg = initialValue.alg;
+        }
+        if (options) {
+            options.u = { initialValue };
+        }
+        else {
+            options = { u: { initialValue } };
+        }
+    }
+    if (!alg) {
+        throw new TypeError('JOSEHeder.alg がなかった');
+    }
+    return JWSHeaderBuilder(alg, options);
+}
+function JWSHeaderBuilder(alg, options) {
+    return new JWSHeader(alg, options);
+}
+/**
+ * JWS では JOSE Header は JWS Protected Header と JWS Unprotected Header の union で表現されるが、
+ * 内部構造としてヘッダーパラメータが Protected かどうかという情報を保持し続けるためにクラスで定義している。
+ * p と u のいずれか一方は存在することが必要で、どちらかには alg パラメータが含まれている
+ */
+class JWSHeader {
+    constructor(alg, options) {
+        if (!options) {
+            this.h = { alg };
+            this.paramNames = { p: new Set(['alg']), u: new Set() };
+            return;
+        }
+        // alg をどのヘッダに組み込むか決定する。また options との整合性をチェック
+        {
+            let isConfigured = false;
+            for (const i of ['p', 'u']) {
+                const opt = options[i];
+                if (opt?.initialValue?.alg) {
+                    if (opt.initialValue.alg !== alg) {
+                        throw new TypeError(`オプションで指定する ${i}.InitialValue Header と alg の値が一致していない`);
+                    }
+                    isConfigured = true;
+                    continue;
+                }
+                if (opt?.paramNames?.has('alg')) {
+                    opt.initialValue = { ...opt.initialValue, alg };
+                    isConfigured = true;
+                    continue;
+                }
+            }
+            if (!isConfigured) {
+                if (options.p) {
+                    if (options.p.initialValue) {
+                        options.p.initialValue = { ...options.p.initialValue, alg };
+                    }
+                    else {
+                        options.p.initialValue = { alg };
+                    }
+                    if (options.p.paramNames) {
+                        options.p.paramNames.add('alg');
+                    }
+                }
+                else {
+                    options.p = { initialValue: { alg } };
+                }
+            }
+        }
+        let value = {};
+        const paramNames = {
+            p: new Set(),
+            u: new Set(),
+        };
+        for (const i of ['p', 'u']) {
+            const h = options[i];
+            if (!h)
+                continue;
+            // 初期値として与えるヘッダー情報とヘッダー名情報が矛盾していないかチェック
+            if (h.initialValue) {
+                if (h.paramNames) {
+                    for (const n of Object.keys(h.initialValue)) {
+                        if (isJOSEHeaderParamName(n) && !h.paramNames.has(n)) {
+                            throw new TypeError(`オプションで指定する ${i}.Header の初期値と Header Parameter Names が一致していない` +
+                                ` because: initValue にあるパラメータ名 ${n} は paramNames ${h.paramNames} に含まれていません`);
+                        }
+                    }
+                    h.paramNames.forEach((n) => paramNames[i].add(n));
+                }
+                else {
+                    Object.keys(h.initialValue).forEach((n) => {
+                        if (isJOSEHeaderParamName(n))
+                            paramNames[i].add(n);
+                    });
+                }
+                value = { ...value, ...h.initialValue };
+            }
+            else {
+                h.paramNames?.forEach((n) => paramNames[i].add(n));
+            }
+        }
+        // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
+        if (options.p?.b64u) {
+            const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
+            if (!isJOSEHeader(p, 'JWS')) {
+                throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
+            }
+        }
+        // params の整合性チェック。重複していないかどうか判断する
+        const params = new Set();
+        let paramsDesiredSize = 0;
+        paramNames.p.forEach((n) => params.add(n));
+        paramsDesiredSize += paramNames.p.size;
+        paramNames.u.forEach((n) => params.add(n));
+        paramsDesiredSize += paramNames.u.size;
+        if (paramsDesiredSize !== params.size) {
+            throw new TypeError('オプションで指定する Header Parameter Names が衝突しています。同じパラメータを異なるヘッダーに組み込むことはできません');
+        }
+        this.h = value;
+        this.paramNames = paramNames;
+        return;
+    }
+    /**
+     * JWS Protected Header と JWS Unprotected Header の Union を返す
+     */
+    JOSE() {
+        return this.h;
+    }
+    /**
+     * JWS Protected Header があれば返す。
+     */
+    Protected() {
+        const entries = Object.entries(this.h).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.p.has(n));
+        if (entries.length === 0)
+            return undefined;
+        return Object.fromEntries(entries);
+    }
+    Protected_b64u() {
+        if (this.p_b64u) {
+            const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(this.p_b64u)));
+            if (!isJOSEHeader(p, 'JWS')) {
+                throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
+            }
+            if (!equalsJOSEHeader(p, this.Protected())) {
+                throw new TypeError('オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
+                    `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected()}`);
+            }
+            return this.p_b64u;
+        }
+        const p = this.Protected();
+        if (p) {
+            return BASE64URL(UTF8(JSON.stringify(p)));
+        }
+        return undefined;
+    }
+    /**
+     * JWS Unprotected Header があれば返す。
+     */
+    Unprotected() {
+        const entries = Object.entries(this.h).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.u.has(n));
+        if (entries.length === 0)
+            return undefined;
+        return Object.fromEntries(entries);
+    }
+    update(v) {
+        Object.entries(v).forEach(([n, vv]) => {
+            if (!isJOSEHeaderParamName(n))
+                return;
+            this.h = { ...this.h, [n]: vv };
+            if (this.paramNames.p.has(n) || this.paramNames.u.has(n)) {
+                return;
+            }
+            if (this.paramNames.p.has('alg')) {
+                this.paramNames.p.add(n);
+            }
+            else {
+                this.paramNames.u.add(n);
+            }
+        });
+    }
+}
+// --------------------END JWS Header definition --------------------
+
+// --------------------BEGIN JWS Serialization definition --------------------
+/**
+ * Serialization された JWS のフォーマットが何か判定する
+ */
+function jwsSerializationFormat(data) {
+    if (typeof data == 'string') {
+        return 'compact';
+    }
+    if (typeof data == 'object' && data != null) {
+        if ('signatures' in data)
+            return 'json';
+        return 'json_flat';
+    }
+    throw TypeError(`${data} は JWSSerialization ではない`);
+}
+const JWSCompactSerializer = {
+    serialize: serializeCompact,
+    deserialize: deserializeCompact,
+};
+const JWSJSONSerializer = {
+    serialize: serializeJSON,
+    deserialize: deserializeJSON,
+    is: isJWSJSONSerialization,
+    equals: equalsJWSJSONSerialization,
+};
+const JWSFlattenedJSONSerializer = {
+    serialize: serializeJWSFlattenedJSON,
+    deserialize: deserializeJWSFlattenedJSON,
+    is: isJWSFlattenedJSONSerialization,
+    equals: equalsJWSFlattenedJSONSerialization,
+};
+/**
+ * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
+ * に JWS をシリアライズする。
+ */
+function serializeCompact(p_b64u, m, s) {
+    return `${p_b64u}.${BASE64URL(m)}.${s ? BASE64URL(s) : ''}`;
+}
+/**
+ * BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) || '.' || BASE64URL(JWS Signature)
+ * を JWS にデシリアライズする。
+ */
+function deserializeCompact(compact) {
+    const c = compact.split('.');
+    if (c.length !== 3) {
+        throw 'JWS Compact Serialization の形式ではない';
+    }
+    const [header, payload, signature] = c;
+    if (header === '') {
+        throw 'JWS Compact Serialization では Protected Header が必須';
+    }
+    return {
+        p_b64u: header,
+        m: BASE64URL_DECODE(payload),
+        s: BASE64URL_DECODE(signature),
+    };
+}
+function isJWSJSONSerialization(arg) {
+    return (isObject(arg) &&
+        typeof arg.payload === 'string' &&
+        Array.isArray(arg.signatures) &&
+        arg.signatures.every((s) => isObject(s) &&
+            typeof s.signature === 'string' &&
+            (s.header == null || isJOSEHeader(s.header, 'JWS')) &&
+            (s.protected == null || typeof s.protected === 'string')));
+}
+function serializeJSON(m, hs) {
+    const hsList = Array.isArray(hs) ? hs : [hs];
+    return {
+        payload: BASE64URL(m),
+        signatures: hsList.map((hs) => {
+            return {
+                signature: BASE64URL(hs.sig),
+                header: hs.u,
+                protected: hs.p_b64u,
+            };
+        }),
+    };
+}
+function deserializeJSON(json) {
+    const m = BASE64URL_DECODE(json.payload);
+    const hslist = json.signatures.map((sig) => ({
+        p_b64u: sig.protected,
+        u: sig.header,
+        sig: BASE64URL_DECODE(sig.signature),
+    }));
+    return { m, hs: hslist.length === 1 ? hslist[0] : hslist };
+}
+function equalsJWSJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of ['payload', 'signatures']) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        if (n === 'payload') {
+            if (ln === rn)
+                continue;
+            return false;
+        }
+        else if (n === 'signatures') {
+            const ll = ln;
+            const rr = rn;
+            if (ll.every((l) => rr.some((r) => equalsSignatureInJWSJSONSerialization(l, r))) &&
+                rr.every((r) => ll.some((l) => equalsSignatureInJWSJSONSerialization(l, r))))
+                continue;
+            return false;
+        }
+    }
+    return true;
+}
+function equalsSignatureInJWSJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    for (const n of ['signature', 'header', 'protected']) {
+        const ln = l[n];
+        const rn = r[n];
+        if (ln == null && rn == null)
+            continue;
+        if (ln == null || rn == null)
+            return false;
+        switch (n) {
+            case 'header': {
+                const ll = ln;
+                const rr = rn;
+                if (equalsJOSEHeader(ll, rr))
+                    continue;
+                return false;
+            }
+            case 'protected':
+            case 'signature': {
+                if (ln === rn)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+function serializeJWSFlattenedJSON(h, m, s) {
+    return {
+        payload: BASE64URL(m),
+        signature: BASE64URL(s),
+        header: h.u,
+        protected: h.p_b64u,
+    };
+}
+function deserializeJWSFlattenedJSON(flat) {
+    return {
+        h: { p_b64u: flat.protected, u: flat.header },
+        m: BASE64URL_DECODE(flat.payload),
+        s: BASE64URL_DECODE(flat.signature),
+    };
+}
+function equalsJWSFlattenedJSONSerialization(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    if (l.payload !== r.payload)
+        return false;
+    return equalsSignatureInJWSJSONSerialization(l, r);
+}
+function isJWSFlattenedJSONSerialization(arg) {
+    return (isObject(arg) &&
+        typeof arg.payload === 'string' &&
+        (arg.protected == null || typeof arg.protected === 'string') &&
+        typeof arg.signature === 'string' &&
+        (arg.header == null || isJOSEHeader(arg.header, 'JWS')));
+}
+// --------------------END JWS Serialization definition --------------------
+
+// --------------------BEGIN JWS implementation --------------------
+/**
+ * JWS はデジタル署名もしくはメッセージ認証コードで保護されたコンテンツを表現する JSON ベースのデータ構造である。
+ */
+class JWS {
+    constructor(
+    // 完全性が保護されるコンテンツ
+    m, 
+    // 署名値と署名操作を表すヘッダーからなる。複数署名の場合は配列になる
+    hs) {
+        this.m = m;
+        this.hs = hs;
+    }
+    /**
+     * RFC7515#5.1 Message Signature or MAC Computation
+     *
+     */
+    static async produce(alg, keys, 
+    /**
+     * JWS Payload として使用するコンテンツ。
+     */
+    m, options) {
+        let headerPerRcpt;
+        if (Array.isArray(alg)) {
+            if (alg.length < 2) {
+                throw new TypeError('alg を配列として渡す場合は長さが2以上にしてください');
+            }
+            if (!options?.header) {
+                const h = alg.map((a) => JWSHeaderBuilder(a));
+                headerPerRcpt = [h[0], h[1], ...h.slice(2)];
+            }
+            else {
+                const oh = options.header;
+                if (!Array.isArray(oh) || oh.length !== alg.length) {
+                    throw new TypeError('alg を配列としてわたし、オプションを指定する場合は同じ長さの配列にしてください。さらに、インデックスが同じ受信者を表すようにしてください');
+                }
+                const h = alg.map((a, i) => JWSHeaderBuilder(a, oh[i]));
+                headerPerRcpt = [h[0], h[1], ...h.slice(2)];
+            }
+        }
+        else {
+            const oh = options?.header;
+            if (oh && Array.isArray(oh)) {
+                throw new TypeError('alg が一つの時は、オプションを複数指定しないでください');
+            }
+            headerPerRcpt = JWSHeaderBuilder(alg, oh);
+        }
+        // ヘッダーごとにコンテンツに対して署名や MAC 計算を行う。
+        // 計算の実体は sign で実装。
+        if (Array.isArray(headerPerRcpt)) {
+            const hsList = await Promise.all(headerPerRcpt.map(async (header) => ({ header, sig: await sign(keys, m, header) })));
+            return new JWS(m, hsList);
+        }
+        const sig = await sign(keys, m, headerPerRcpt);
+        return new JWS(m, { header: headerPerRcpt, sig });
+    }
+    async validate(keys, isAllValidation = true) {
+        const hsList = Array.isArray(this.hs) ? this.hs : [this.hs];
+        const verifiedList = await Promise.all(hsList.map(async (hs) => await verify(keys, this.m, hs.header, hs.sig)));
+        return verifiedList.reduce((prev, now) => (isAllValidation ? prev && now : prev || now));
+    }
+    static deserialize(data) {
+        switch (jwsSerializationFormat(data)) {
+            case 'compact': {
+                const { p_b64u, m, s } = JWSCompactSerializer.deserialize(data);
+                const header = JWSHeaderBuilderFromSerializedJWS(p_b64u);
+                return new JWS(m, { header, sig: s });
+            }
+            case 'json': {
+                const { m, hs } = JWSJSONSerializer.deserialize(data);
+                const h = Array.isArray(hs)
+                    ? hs.map((h) => ({
+                        header: JWSHeaderBuilderFromSerializedJWS(h.p_b64u, h.u),
+                        sig: h.sig,
+                    }))
+                    : { header: JWSHeaderBuilderFromSerializedJWS(hs.p_b64u, hs.u), sig: hs.sig };
+                return new JWS(m, h);
+            }
+            case 'json_flat': {
+                const { m, h, s } = JWSFlattenedJSONSerializer.deserialize(data);
+                return new JWS(m, { header: JWSHeaderBuilderFromSerializedJWS(h.p_b64u, h.u), sig: s });
+            }
+        }
+    }
+    serialize(s) {
+        switch (s) {
+            case 'compact': {
+                if (Array.isArray(this.hs)) {
+                    throw 'JWS Compact Serialization は複数署名を表現できない';
+                }
+                const p_b64u = this.hs.header.Protected_b64u();
+                if (!p_b64u || this.hs.header.Unprotected()) {
+                    throw 'JWS Compact Serialization は JWS Unprotected Header を表現できない';
+                }
+                return JWSCompactSerializer.serialize(p_b64u, this.m, this.hs.sig);
+            }
+            case 'json': {
+                const hs = Array.isArray(this.hs)
+                    ? this.hs.map((h) => ({
+                        p_b64u: h.header.Protected_b64u(),
+                        u: h.header.Unprotected(),
+                        sig: h.sig,
+                    }))
+                    : {
+                        p_b64u: this.hs.header.Protected_b64u(),
+                        u: this.hs.header.Unprotected(),
+                        sig: this.hs.sig,
+                    };
+                return JWSJSONSerializer.serialize(this.m, hs);
+            }
+            case 'json_flat': {
+                if (Array.isArray(this.hs) && this.hs.length > 1) {
+                    throw 'Flattened JWS JSON Serialization は複数署名を表現できない';
+                }
+                if (Array.isArray(this.hs)) {
+                    return JWSFlattenedJSONSerializer.serialize({ p_b64u: this.hs[0].header.Protected_b64u(), u: this.hs[0].header.Unprotected() }, this.m, this.hs[0].sig);
+                }
+                return JWSFlattenedJSONSerializer.serialize({ p_b64u: this.hs.header.Protected_b64u(), u: this.hs.header.Unprotected() }, this.m, this.hs.sig);
+            }
+            default:
+                throw TypeError(`${s} はJWSSerialization format ではない`);
+        }
+    }
+}
+/**
+ * RFC7515#5.1
+ * ヘッダーに応じて署名アルゴリズムの選択と、署名鍵を keys から選択する。
+ * 署名鍵と署名アルゴリズムを用いて、 JWS Payload と JWS Protected Header に対して署名 or MAC 計算を行い、
+ * その結果を返す。
+ */
+async function sign(keys, m, h) {
+    const input = jwsinput(m, h.Protected_b64u());
+    const jh = h.JOSE();
+    const alg = jh.alg;
+    if (!alg) {
+        throw new EvalError('alg が指定されていない');
+    }
+    switch (JWSOpeModeFromAlg(alg)) {
+        case 'None':
+            // Unsecured JWS の場合は、署名値がない。
+            return new Uint8Array();
+        case 'Sig': {
+            // JOSE Header の alg がデジタル署名の場合
+            const key = identifyJWK(jh, keys);
+            // key が秘密鍵かどうか、型ガードを行う
+            if (!isJWK(key, ktyFromAlg(alg), 'Priv'))
+                throw new TypeError('公開鍵で署名しようとしている');
+            return newSigOperator(alg).sign(alg, key, input);
+        }
+        case 'MAC': {
+            // JOSE Header の alg が MAC の場合
+            const key = identifyJWK(jh, keys);
+            return newMacOperator(alg).mac(alg, key, input);
+        }
+    }
+}
+async function verify(keys, m, h, s) {
+    const jh = h.JOSE();
+    const alg = jh.alg;
+    if (!alg) {
+        throw new EvalError('alg が指定されていない');
+    }
+    switch (JWSOpeModeFromAlg(alg)) {
+        case 'None':
+            return true;
+        case 'Sig': {
+            if (!s)
+                return false;
+            const input = jwsinput(m, h.Protected_b64u());
+            const key = identifyJWK(jh, keys);
+            if (!isJWK(key, ktyFromAlg(alg), 'Pub'))
+                throw new TypeError('秘密鍵で検証しようとしている');
+            return newSigOperator(alg).verify(alg, key, input, s);
+        }
+        case 'MAC': {
+            if (!s)
+                return false;
+            const input = jwsinput(m, h.Protected_b64u());
+            const key = identifyJWK(jh, keys);
+            return newMacOperator(alg).verify(alg, key, input, s);
+        }
+    }
+}
+/**
+ * RFC7515#2 JWS Signing Input はデジタル署名や MAC の計算に対する入力。
+ * この値は、ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload))
+ */
+const jwsinput = (m, p_b64u) => ASCII((p_b64u ?? '') + '.' + BASE64URL(m));
+// --------------------END JWS implementation --------------------
+
 // --------------------BEGIN RFC7520 Section 4 test data definition --------------------
 const paths = [
     '4_1.rsa_v15_signature.json',
@@ -4283,14 +4506,16 @@ function isData(arg) {
         isObject(arg.signing) &&
         (Array.isArray(arg.signing)
             ? arg.signing.every((s) => isObject(s) &&
-                (s.protected == null || isJWSProtectedHeader(s.protected)) &&
-                (s.unprotected == null || isJWSUnprotectedHeader(s.unprotected)))
-            : (arg.signing.protected == null || isJWSProtectedHeader(arg.signing.protected)) &&
-                (arg.signing.unprotected == null || isJWSUnprotectedHeader(arg.signing.unprotected))) &&
+                (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
+                (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
+                (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS')))
+            : (arg.signing.protected == null || isJOSEHeader(arg.signing.protected, 'JWS')) &&
+                (arg.signing.protected_b64u == null || typeof arg.signing.protected_b64u === 'string') &&
+                (arg.signing.unprotected == null || isJOSEHeader(arg.signing.unprotected, 'JWS'))) &&
         isObject(arg.output) &&
         (arg.output.compact == null || typeof arg.output.compact === 'string') &&
-        isJWSJSONSerialization(arg.output.json) &&
-        (arg.output.json_flat == null || isJWSFlattenedJSONSerialization(arg.output.json_flat)));
+        JWSJSONSerializer.is(arg.output.json) &&
+        (arg.output.json_flat == null || JWSFlattenedJSONSerializer.is(arg.output.json_flat)));
 }
 // --------------------END RFC7520 Section 4 test data definition --------------------
 
@@ -4302,18 +4527,40 @@ async function test(path) {
     let log = '';
     // 準備
     const payload = UTF8(data.input.payload);
-    let header;
-    if (Array.isArray(data.signing)) {
-        header = data.signing.map((sig) => ({ p: sig.protected, u: sig.unprotected }));
-    }
-    else {
-        header = { p: data.signing.protected, u: data.signing.unprotected };
-    }
+    const options = {
+        header: Array.isArray(data.signing)
+            ? data.signing.map((s) => ({
+                p: s.protected
+                    ? {
+                        initialValue: s.protected,
+                        b64u: s.protected_b64u,
+                    }
+                    : undefined,
+                u: s.unprotected
+                    ? {
+                        initialValue: s.unprotected,
+                    }
+                    : undefined,
+            }))
+            : {
+                p: data.signing.protected
+                    ? {
+                        initialValue: data.signing.protected,
+                        b64u: data.signing.protected_b64u,
+                    }
+                    : undefined,
+                u: data.signing.unprotected
+                    ? {
+                        initialValue: data.signing.unprotected,
+                    }
+                    : undefined,
+            },
+    };
     const keys = {
         keys: Array.isArray(data.input.key) ? data.input.key : [data.input.key],
     };
     // 生成
-    const jws = await JWS.produce(keys, payload, header);
+    const jws = await JWS.produce(data.input.alg, keys, payload, options);
     // 検証の準備
     const verifyKeys = {
         keys: keys.keys.map((k) => {
@@ -4335,13 +4582,13 @@ async function test(path) {
         }
         if (output.json) {
             const json = jws.serialize('json');
-            const same = equalsJWSJSONSerialization(output.json, json);
+            const same = JWSJSONSerializer.equals(output.json, json);
             allGreen &&= same;
             log += 'JSON: ' + (same ? '(OK) ' : 'X ');
         }
         if (output.json_flat) {
-            const flat = jws.serialize('json-flat');
-            const same = equalsJWSFlattenedJSONSerialization(output.json_flat, flat);
+            const flat = jws.serialize('json_flat');
+            const same = JWSFlattenedJSONSerializer.equals(output.json_flat, flat);
             allGreen &&= same;
             log += 'FlattenedJSON: ' + (same ? '(OK) ' : 'X ');
         }
