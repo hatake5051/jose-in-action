@@ -36,7 +36,6 @@ async function test(): Promise<{
       }
     } else if (path === '3_5.symmetric_key_mac_computation.json') {
       if (!isJWK(data, 'oct')) {
-        console.log(data);
         log += 'oct鍵の判定に失敗。\n';
         allGreen = false;
       } else {

@@ -24,6 +24,20 @@ const isPSAlg = (arg) => typeof arg === 'string' && psAlgList.some((a) => a === 
 const psAlgList = ['PS256', 'PS384', 'PS512'];
 
 // --------------------BEGIN JWA JWS algorithms --------------------
+function isJWAJWSAlg(arg, m) {
+    switch (m) {
+        case 'Sig':
+            return isJWASigAlg(arg);
+        case 'MAC':
+            return isJWAMACAlg(arg);
+        case 'None':
+            return isJWANoneAlg(arg);
+        case undefined:
+            return isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
+        default:
+            return false;
+    }
+}
 const isJWASigAlg = (arg) => isRSAlg(arg) || isPSAlg(arg) || isESAlg(arg);
 /**
  * 引数が JWS の MAC アルゴリズムか確認する
@@ -63,6 +77,23 @@ const isRSA1_5Alg = (arg) => typeof arg === 'string' && arg === 'RSA1_5';
 const isRSAOAEPAlg = (arg) => typeof arg === 'string' && rsaoaepAlgList.some((a) => a === arg);
 const rsaoaepAlgList = ['RSA-OAEP', 'RSA-OAEP-256'];
 
+function isJWAJWEAlg(arg, m) {
+    switch (m) {
+        case 'KE':
+            return isJWAKEAlg(arg);
+        case 'KW':
+            return isJWAKWAlg(arg);
+        case 'DKA':
+            return isJWADKAAlg(arg);
+        case 'KAKW':
+            return isJWAKAKWAlg(arg);
+        case 'DE':
+            return isJWADEAlg(arg);
+    }
+    if (!m)
+        return (isJWAKEAlg(arg) || isJWAKWAlg(arg) || isJWADKAAlg(arg) || isJWAKAKWAlg(arg) || isJWADEAlg(arg));
+    return false;
+}
 const isJWAKEAlg = (arg) => isRSA1_5Alg(arg) || isRSAOAEPAlg(arg);
 const isJWAKWAlg = (arg) => isAKWAlg(arg) || isAGCMKWAlg(arg) || isPBES2Alg(arg);
 const isJWADKAAlg = (arg) => isECDH_ESAlg(arg);
@@ -101,13 +132,11 @@ const agcmEncList = ['A128GCM', 'A192GCM', 'A256GCM'];
 const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
 
 function isAlg(arg, t) {
-    const isJWSAlg = (arg) => isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
-    const isJWEAlg = (arg) => isJWAKEAlg(arg) || isJWAKWAlg(arg) || isJWADKAAlg(arg) || isJWAKAKWAlg(arg) || isJWADEAlg(arg);
     if (t === 'JWS')
-        return isJWSAlg(arg);
+        return isJWAJWSAlg(arg);
     if (t === 'JWE')
-        return isJWEAlg(arg);
-    return isJWSAlg(arg) || isJWEAlg(arg);
+        return isJWAJWEAlg(arg);
+    return isJWAJWSAlg(arg) || isJWAJWEAlg(arg);
 }
 const isEncAlg = (arg) => isJWAEncAlg(arg);
 
@@ -213,14 +242,10 @@ const jwaCrvList = ['P-256', 'P-384', 'P-521'];
 
 const isKty = (arg) => isJWAKty(arg);
 function ktyFromAlg(alg) {
-    if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
+    if (isJWAJWSAlg(alg)) {
         return ktyFromJWAJWSAlg(alg);
     }
-    if (isJWAKEAlg(alg) ||
-        isJWAKWAlg(alg) ||
-        isJWADKAAlg(alg) ||
-        isJWAKAKWAlg(alg) ||
-        isJWADEAlg(alg)) {
+    if (isJWAJWEAlg(alg)) {
         return ktyFromJWAJWEAlg(alg);
     }
     if (isJWAEncAlg(alg)) {
@@ -1282,6 +1307,10 @@ function equalsJWSJOSEHeader(l, r) {
 }
 
 const equalsJOSEHeader = (l, r) => {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
     if (isJOSEHeader(l, 'JWS')) {
         if (!isJOSEHeader(r, 'JWS'))
             return false;
@@ -1928,7 +1957,7 @@ function newJWAKeyAgreementerWithKeyWrapping(alg) {
     throw TypeError(`KeyAgreementerWithKeyWrapping<$alg> is not implemented`);
 }
 function newJWADirectEncryptor(alg) {
-    if (isJWADEAlg(alg))
+    if (isJWAJWEAlg(alg, 'DE'))
         return {
             extract: async (alg, key) => BASE64URL_DECODE(key.k),
         };
@@ -2106,37 +2135,33 @@ function newJWAEncOperator(enc) {
 }
 
 function keyMgmtModeFromAlg(alg) {
-    if (isJWAKEAlg(alg) ||
-        isJWAKWAlg(alg) ||
-        isJWADKAAlg(alg) ||
-        isJWAKAKWAlg(alg) ||
-        isJWADEAlg(alg))
+    if (isJWAJWEAlg(alg))
         return keyMgmtModeFromJWAAlg(alg);
     const a = alg;
     throw new TypeError(`${a} の Key Management Mode がわからない`);
 }
 function newKeyEncryptor(alg) {
-    if (isJWAKEAlg(alg))
+    if (isJWAJWEAlg(alg, 'KE'))
         return newJWAKeyEncryptor(alg);
     throw new TypeError(`KeyEncryptor<${alg}> は実装されていない`);
 }
 function newKeyWrappaer(alg) {
-    if (isJWAKWAlg(alg))
+    if (isJWAJWEAlg(alg, 'KW'))
         return newJWAKeyWrapper(alg);
     throw new TypeError(`KeyWrapper<${alg}> は実装されていない`);
 }
 function newDirectKeyAgreementer(alg) {
-    if (isJWADKAAlg(alg))
+    if (isJWAJWEAlg(alg, 'DKA'))
         return newJWADirectAgreementer(alg);
     throw new TypeError(`DirectKeyAgreementer<${alg}> は実装されていない`);
 }
 function newKeyAgreementerWithKeyWrapping(alg) {
-    if (isJWAKAKWAlg(alg))
+    if (isJWAJWEAlg(alg, 'KAKW'))
         return newJWAKeyAgreementerWithKeyWrapping(alg);
     throw new TypeError(`KeyAgreementerWithKeyWrapping<${alg}> は実装されていない`);
 }
 function newDirectEncrytor(alg) {
-    if (isJWADEAlg(alg))
+    if (isJWAJWEAlg(alg, 'DE'))
         return newJWADirectEncryptor(alg);
     throw new TypeError(`DirectEncrypto<${alg}> は実装されていない`);
 }
@@ -3652,7 +3677,6 @@ async function test$2() {
         }
         else if (path === '3_5.symmetric_key_mac_computation.json') {
             if (!isJWK(data, 'oct')) {
-                console.log(data);
                 log += 'oct鍵の判定に失敗。\n';
                 allGreen = false;
             }
@@ -3883,21 +3907,20 @@ function newJWAMACOperator(alg) {
     throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }
 
+const JWSOpeModeList = ['MAC', 'Sig', 'None'];
+
 // --------------------BEGIN JWS dependency injection --------------------
 function JWSOpeModeFromAlg(alg) {
-    if (isJWANoneAlg(alg))
-        return 'None';
-    if (isJWASigAlg(alg))
-        return 'Sig';
-    if (isJWAMACAlg(alg))
-        return 'MAC';
+    const m = JWSOpeModeList.find((m) => isJWAJWSAlg(alg, m));
+    if (m)
+        return m;
     throw new TypeError(`${alg} は JWS のものではない`);
 }
 /**
  * 署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
  */
 function newSigOperator(alg) {
-    if (isJWASigAlg(alg))
+    if (isJWAJWSAlg(alg, 'Sig'))
         return newJWASigOperator(alg);
     throw new TypeError(`SigOperator<${alg}> は実装されていない`);
 }
@@ -3905,7 +3928,7 @@ function newSigOperator(alg) {
  * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
  */
 function newMacOperator(alg) {
-    if (isJWAMACAlg(alg))
+    if (isJWAJWSAlg(alg, 'MAC'))
         return newJWAMACOperator(alg);
     throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }
@@ -4635,7 +4658,7 @@ async function test_jwk() {
     const logs = await Promise.all([test$5, test$4, test$3, test$2, test$1].map(async (test) => await test()));
     let allAllGreen = true;
     logs.forEach(({ title, log, allGreen }) => {
-        allAllGreen = allGreen;
+        allAllGreen &&= allGreen;
         console.group(title, allGreen);
         console.log(log);
         console.groupEnd();
@@ -4648,7 +4671,7 @@ async function test_jws() {
     const logs = await Promise.all(paths.map(async (path) => await test(path)));
     let allAllGreen = true;
     logs.forEach(({ title, log, allGreen }) => {
-        allAllGreen = allGreen;
+        allAllGreen &&= allGreen;
         console.group(title, allGreen);
         console.log(log);
         console.groupEnd();
@@ -4661,7 +4684,7 @@ async function test_jwe() {
     const logs = await Promise.all(paths$1.map(async (path) => await test$6(path)));
     let allAllGreen = true;
     logs.forEach(({ title, log, allGreen }) => {
-        allAllGreen = allGreen;
+        allAllGreen &&= allGreen;
         console.group(title, allGreen);
         console.log(log);
         console.groupEnd();

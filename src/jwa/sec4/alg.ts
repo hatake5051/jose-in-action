@@ -5,21 +5,39 @@ import { ECDH_ESAlg, ECDH_ESKWAlg, isECDH_ESAlg, isECDH_ESKWAlg } from './ecdh/a
 import { isPBES2Alg, PBES2Alg } from './pbes2/alg';
 import { isRSA1_5Alg, isRSAOAEPAlg, RSA1_5Alg, RSAOAEPAlg } from './rsa/alg';
 
-export {
-  JWAKEAlg,
-  isJWAKEAlg,
-  JWAKWAlg,
-  isJWAKWAlg,
-  JWADKAAlg,
-  isJWADKAAlg,
-  JWAKAKWAlg,
-  isJWAKAKWAlg,
-  JWADEAlg,
-  isJWADEAlg,
-  KtyFromJWAJWEAlg,
-  ktyFromJWAJWEAlg,
-  keyMgmtModeFromJWAAlg,
-};
+export { JWAJWEAlg, isJWAJWEAlg, KtyFromJWAJWEAlg, ktyFromJWAJWEAlg, keyMgmtModeFromJWAAlg };
+
+type JWAJWEAlg<M extends KeyMgmtMode = KeyMgmtMode> = M extends 'KE'
+  ? JWAKEAlg
+  : M extends 'KW'
+  ? JWAKWAlg
+  : M extends 'DKA'
+  ? JWADKAAlg
+  : M extends 'KAKW'
+  ? JWAKAKWAlg
+  : M extends 'DE'
+  ? JWADEAlg
+  : never;
+
+function isJWAJWEAlg<M extends KeyMgmtMode>(arg: unknown, m?: M): arg is JWAJWEAlg<M> {
+  switch (m) {
+    case 'KE':
+      return isJWAKEAlg(arg);
+    case 'KW':
+      return isJWAKWAlg(arg);
+    case 'DKA':
+      return isJWADKAAlg(arg);
+    case 'KAKW':
+      return isJWAKAKWAlg(arg);
+    case 'DE':
+      return isJWADEAlg(arg);
+  }
+  if (!m)
+    return (
+      isJWAKEAlg(arg) || isJWAKWAlg(arg) || isJWADKAAlg(arg) || isJWAKAKWAlg(arg) || isJWADEAlg(arg)
+    );
+  return false;
+}
 
 type JWAKEAlg = RSA1_5Alg | RSAOAEPAlg;
 
@@ -38,27 +56,22 @@ const isJWAKAKWAlg = (arg: unknown): arg is JWAKAKWAlg => isECDH_ESKWAlg(arg);
 type JWADEAlg = 'dir';
 const isJWADEAlg = (arg: unknown): arg is JWADEAlg => typeof arg === 'string' && arg === 'dir';
 
-type KtyFromJWAJWEAlg<A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg> =
-  A extends JWAKEAlg
-    ? 'RSA'
-    : A extends JWAKWAlg | JWADEAlg
-    ? 'oct'
-    : A extends JWADKAAlg | JWAKAKWAlg
-    ? 'EC'
-    : never;
+type KtyFromJWAJWEAlg<A extends JWAJWEAlg> = A extends JWAKEAlg
+  ? 'RSA'
+  : A extends JWAKWAlg | JWADEAlg
+  ? 'oct'
+  : A extends JWADKAAlg | JWAKAKWAlg
+  ? 'EC'
+  : never;
 
-function ktyFromJWAJWEAlg<A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg>(
-  alg: A
-): KtyFromJWAJWEAlg<A> {
+function ktyFromJWAJWEAlg<A extends JWAJWEAlg>(alg: A): KtyFromJWAJWEAlg<A> {
   if (isJWAKEAlg(alg)) return 'RSA' as KtyFromJWAJWEAlg<A>;
   if (isJWAKWAlg(alg) || isJWADEAlg(alg)) return 'oct' as KtyFromJWAJWEAlg<A>;
   if (isJWADKAAlg(alg) || isJWAKAKWAlg(alg)) return 'EC' as KtyFromJWAJWEAlg<A>;
   throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
 }
 
-function keyMgmtModeFromJWAAlg(
-  alg: JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
-): KeyMgmtMode {
+function keyMgmtModeFromJWAAlg(alg: JWAJWEAlg): KeyMgmtMode {
   if (isJWAKEAlg(alg)) return 'KE';
   if (isJWAKWAlg(alg)) return 'KW';
   if (isJWADKAAlg(alg)) return 'DKA';

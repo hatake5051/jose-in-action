@@ -1,5 +1,5 @@
 import { MACOperator, SigOperator } from 'jws/interface';
-import { JWAMACAlg, JWASigAlg } from './alg';
+import { JWAJWSAlg } from './alg';
 import { isESAlg } from './es/alg';
 import { ESSigOperator } from './es/impl';
 import { isHSAlg } from './hmac/alg';
@@ -12,7 +12,7 @@ export { newJWASigOperator, newJWAMACOperator };
 /**
  * JWA で定義されている署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
  */
-function newJWASigOperator<A extends JWASigAlg>(alg: A): SigOperator<A> {
+function newJWASigOperator<A extends JWAJWSAlg<'Sig'>>(alg: A): SigOperator<A> {
   if (isRSAlg(alg) || isPSAlg(alg)) return RSASigOperator as SigOperator<A>;
   if (isESAlg(alg)) return ESSigOperator as SigOperator<A>;
   throw new TypeError(`SigOperator<${alg}> は実装されていない`);
@@ -21,7 +21,7 @@ function newJWASigOperator<A extends JWASigAlg>(alg: A): SigOperator<A> {
 /**
  * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
  */
-function newJWAMACOperator<A extends JWAMACAlg>(alg: A): MACOperator<A> {
+function newJWAMACOperator<A extends JWAJWSAlg<'MAC'>>(alg: A): MACOperator<A> {
   if (isHSAlg(alg)) return HMACOperator as MACOperator<A>;
   throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }

@@ -29,6 +29,8 @@ type JOSEHeader<T extends 'JWS' | 'JWE' = 'JWS' | 'JWE'> = T extends 'JWS'
   : never;
 
 const equalsJOSEHeader = (l?: JOSEHeader, r?: JOSEHeader): boolean => {
+  if (l == null && r == null) return true;
+  if (l == null || r == null) return false;
   if (isJOSEHeader(l, 'JWS')) {
     if (!isJOSEHeader(r, 'JWS')) return false;
     return equalsJWSJOSEHeader(l, r);

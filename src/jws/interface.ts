@@ -3,7 +3,8 @@ import { KtyFromAlg } from 'iana/kty';
 import { JWK } from 'jwk';
 import { JWSSignature } from './type';
 
-export type JWSOpeMode = 'MAC' | 'Sig' | 'None';
+export type JWSOpeMode = typeof JWSOpeModeList[number];
+export const JWSOpeModeList = ['MAC', 'Sig', 'None'] as const;
 
 /**
  * MAC アルゴリズムのインターフェースを定義する。

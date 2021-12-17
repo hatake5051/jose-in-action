@@ -21,7 +21,7 @@ async function test_jwk() {
   );
   let allAllGreen = true;
   logs.forEach(({ title, log, allGreen }) => {
-    allAllGreen = allGreen;
+    allAllGreen &&= allGreen;
     console.group(title, allGreen);
     console.log(log);
     console.groupEnd();
@@ -35,7 +35,7 @@ async function test_jws() {
   const logs = await Promise.all(jwspaths.map(async (path) => await jwstest(path)));
   let allAllGreen = true;
   logs.forEach(({ title, log, allGreen }) => {
-    allAllGreen = allGreen;
+    allAllGreen &&= allGreen;
     console.group(title, allGreen);
     console.log(log);
     console.groupEnd();
@@ -49,7 +49,7 @@ async function test_jwe() {
   const logs = await Promise.all(jwepaths.map(async (path) => await jwetest(path)));
   let allAllGreen = true;
   logs.forEach(({ title, log, allGreen }) => {
-    allAllGreen = allGreen;
+    allAllGreen &&= allGreen;
     console.group(title, allGreen);
     console.log(log);
     console.groupEnd();

@@ -1,19 +1,34 @@
 // --------------------BEGIN JWA JWS algorithms --------------------
 
+import { JWSOpeMode } from 'jws/interface';
 import { ESAlg, isESAlg } from './es/alg';
 import { HSAlg, isHSAlg } from './hmac/alg';
 import { isPSAlg, isRSAlg, PSAlg, RSAlg } from './rsa/alg';
 
-export {
-  JWASigAlg,
-  isJWASigAlg,
-  JWAMACAlg,
-  isJWAMACAlg,
-  JWANoneAlg,
-  isJWANoneAlg,
-  KtyFromJWAJWSAlg,
-  ktyFromJWAJWSAlg,
-};
+export { JWAJWSAlg, isJWAJWSAlg, KtyFromJWAJWSAlg, ktyFromJWAJWSAlg };
+
+type JWAJWSAlg<M extends JWSOpeMode = JWSOpeMode> = M extends 'MAC'
+  ? JWAMACAlg
+  : M extends 'Sig'
+  ? JWASigAlg
+  : M extends 'None'
+  ? JWANoneAlg
+  : never;
+
+function isJWAJWSAlg<M extends JWSOpeMode>(arg: unknown, m?: M): arg is JWAJWSAlg<M> {
+  switch (m) {
+    case 'Sig':
+      return isJWASigAlg(arg);
+    case 'MAC':
+      return isJWAMACAlg(arg);
+    case 'None':
+      return isJWANoneAlg(arg);
+    case undefined:
+      return isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
+    default:
+      return false;
+  }
+}
 
 /**
  * JWA で定義されている JWS の署名アルゴリズムを列挙する
@@ -42,7 +57,7 @@ const isJWANoneAlg = (arg: unknown): arg is JWANoneAlg => typeof arg === 'string
 /**
  * JWS Alg に応じた Kty を返す。
  */
-type KtyFromJWAJWSAlg<A extends JWASigAlg | JWAMACAlg | JWANoneAlg> = A extends RSAlg | PSAlg
+type KtyFromJWAJWSAlg<A extends JWAJWSAlg> = A extends RSAlg | PSAlg
   ? 'RSA'
   : A extends ESAlg
   ? 'EC'
@@ -53,9 +68,7 @@ type KtyFromJWAJWSAlg<A extends JWASigAlg | JWAMACAlg | JWANoneAlg> = A extends 
 /**
  * JWS Alg に応じた Kty を返す。
  */
-function ktyFromJWAJWSAlg<A extends JWASigAlg | JWAMACAlg | JWANoneAlg>(
-  alg: A
-): KtyFromJWAJWSAlg<A> {
+function ktyFromJWAJWSAlg<A extends JWAJWSAlg>(alg: A): KtyFromJWAJWSAlg<A> {
   if (isPSAlg(alg) || isRSAlg(alg)) return 'RSA' as KtyFromJWAJWSAlg<A>;
   if (isESAlg(alg)) return 'EC' as KtyFromJWAJWSAlg<A>;
   if (isHSAlg(alg)) return 'oct' as KtyFromJWAJWSAlg<A>;

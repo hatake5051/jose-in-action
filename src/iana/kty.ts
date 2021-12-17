@@ -1,27 +1,5 @@
-import {
-  isJWAMACAlg,
-  isJWANoneAlg,
-  isJWASigAlg,
-  JWAMACAlg,
-  JWANoneAlg,
-  JWASigAlg,
-  KtyFromJWAJWSAlg,
-  ktyFromJWAJWSAlg,
-} from 'jwa/sec3/alg';
-import {
-  isJWADEAlg,
-  isJWADKAAlg,
-  isJWAKAKWAlg,
-  isJWAKEAlg,
-  isJWAKWAlg,
-  JWADEAlg,
-  JWADKAAlg,
-  JWAKAKWAlg,
-  JWAKEAlg,
-  JWAKWAlg,
-  KtyFromJWAJWEAlg,
-  ktyFromJWAJWEAlg,
-} from 'jwa/sec4/alg';
+import { isJWAJWSAlg, JWAJWSAlg, KtyFromJWAJWSAlg, ktyFromJWAJWSAlg } from 'jwa/sec3/alg';
+import { isJWAJWEAlg, JWAJWEAlg, KtyFromJWAJWEAlg, ktyFromJWAJWEAlg } from 'jwa/sec4/alg';
 import { isJWAEncAlg, JWAEncAlg, KtyFromJWAEncAlg } from 'jwa/sec5/encalg';
 import { isJWAKty, JWAKty } from 'jwa/sec6/kty';
 import { Alg } from './alg';
@@ -35,25 +13,19 @@ export { Kty, isKty, KtyFromAlg, ktyFromAlg };
 type Kty = JWAKty;
 const isKty = (arg: unknown): arg is Kty => isJWAKty(arg);
 
-type KtyFromAlg<A extends Alg> = A extends JWASigAlg | JWAMACAlg | JWANoneAlg
+type KtyFromAlg<A extends Alg> = A extends JWAJWSAlg
   ? KtyFromJWAJWSAlg<A>
-  : A extends JWAKEAlg | JWAKWAlg | JWADKAAlg | JWAKAKWAlg | JWADEAlg
+  : A extends JWAJWEAlg
   ? KtyFromJWAJWEAlg<A>
   : A extends JWAEncAlg
   ? KtyFromJWAEncAlg
   : never;
 
 function ktyFromAlg<A extends Alg>(alg: A): KtyFromAlg<A> {
-  if (isJWASigAlg(alg) || isJWAMACAlg(alg) || isJWANoneAlg(alg)) {
+  if (isJWAJWSAlg(alg)) {
     return ktyFromJWAJWSAlg(alg) as KtyFromAlg<A>;
   }
-  if (
-    isJWAKEAlg(alg) ||
-    isJWAKWAlg(alg) ||
-    isJWADKAAlg(alg) ||
-    isJWAKAKWAlg(alg) ||
-    isJWADEAlg(alg)
-  ) {
+  if (isJWAJWEAlg(alg)) {
     return ktyFromJWAJWEAlg(alg) as KtyFromAlg<A>;
   }
   if (isJWAEncAlg(alg)) {
