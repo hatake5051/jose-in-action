@@ -5,7 +5,7 @@ import { JOSEHeaderParamName } from 'iana/header';
 import { ktyFromAlg } from 'iana/kty';
 import { identifyJWK, isJWK, JWKSet } from 'jwk';
 import { JWSPayload, JWSProtectedHeader, JWSSignature, JWSUnprotectedHeader } from 'jws/type';
-import { ASCII, BASE64URL } from 'utility';
+import { Arrayable, ASCII, BASE64URL } from 'utility';
 import { JWSOpeModeFromAlg, newMacOperator, newSigOperator } from './di';
 import { JWSHeader, JWSHeaderBuilder, JWSHeaderBuilderFromSerializedJWS } from './header';
 import {
@@ -27,9 +27,7 @@ class JWS {
     // 完全性が保護されるコンテンツ
     private m: JWSPayload,
     // 署名値と署名操作を表すヘッダーからなる。複数署名の場合は配列になる
-    private hs:
-      | { header: JWSHeader; sig: JWSSignature }
-      | { header: JWSHeader; sig: JWSSignature }[]
+    private hs: Arrayable<{ header: JWSHeader; sig: JWSSignature }>
   ) {}
 
   /**
@@ -44,29 +42,17 @@ class JWS {
      */
     m: JWSPayload,
     options?: {
-      header?:
-        | {
-            p?: {
-              initialValue?: JWSProtectedHeader;
-              paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
-              b64u?: string;
-            };
-            u?: {
-              initialValue?: JWSUnprotectedHeader;
-              paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
-            };
-          }
-        | {
-            p?: {
-              initialValue?: JWSProtectedHeader;
-              paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
-              b64u?: string;
-            };
-            u?: {
-              initialValue?: JWSUnprotectedHeader;
-              paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
-            };
-          }[];
+      header?: Arrayable<{
+        p?: {
+          initialValue?: JWSProtectedHeader;
+          paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
+          b64u?: string;
+        };
+        u?: {
+          initialValue?: JWSUnprotectedHeader;
+          paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
+        };
+      }>;
     }
   ): Promise<JWS> {
     let headerPerRcpt: JWSHeader | [JWSHeader, JWSHeader, ...JWSHeader[]];

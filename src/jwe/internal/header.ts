@@ -11,14 +11,14 @@ import {
   JWEProtectedHeader,
   JWESharedUnprotectedHeader,
 } from 'jwe/type';
-import { BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
+import { Arrayable, BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
 
 export { JWEHeader, JWEHeaderBuilder, JWEHeaderBuilderFromSerializedJWE };
 
 function JWEHeaderBuilderFromSerializedJWE(
   p_b64u?: string,
   su?: JWESharedUnprotectedHeader,
-  ru?: JWEPerRecipientUnprotectedHeader | Array<JWEPerRecipientUnprotectedHeader | undefined>
+  ru?: Arrayable<JWEPerRecipientUnprotectedHeader | undefined>
 ): JWEHeader {
   let alg: Parameters<typeof JWEHeaderBuilder>[0];
   let algOne: Alg<'JWE'> | undefined;
@@ -131,15 +131,10 @@ function JWEHeaderBuilder(
       initialValue?: JWESharedUnprotectedHeader;
       paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
     };
-    ru?:
-      | {
-          initialValue?: JWEPerRecipientUnprotectedHeader;
-          paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
-        }
-      | {
-          initialValue?: JWEPerRecipientUnprotectedHeader;
-          paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
-        }[];
+    ru?: Arrayable<{
+      initialValue?: JWEPerRecipientUnprotectedHeader;
+      paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
+    }>;
   }
 ): JWEHeader {
   if (Array.isArray(alg)) {

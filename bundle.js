@@ -187,6 +187,9 @@ function CONCAT(A, B) {
  * T のプロパティを持つかもしれないところまで。
  */
 const isObject = (value) => typeof value === 'object' && value !== null;
+const isArrayable = (arg, f) => {
+    return Array.isArray(arg) ? arg.every(f) : f(arg);
+};
 // --------------------END util functions --------------------
 
 const AGCMKWHeaderParamNames = ['iv', 'tag'];
@@ -233,9 +236,12 @@ const isKeyUse = (arg) => {
     }
     return false;
 };
-/**
- * JSON Web Key Operations を列挙する。
- */
+const isKeyOps = (arg) => {
+    if (typeof arg === 'string') {
+        return keyOpsList.some((u) => u === arg);
+    }
+    return false;
+};
 const keyOpsList = [
     'sign',
     'verify',
@@ -246,12 +252,6 @@ const keyOpsList = [
     'deriveKey',
     'deriveBits',
 ];
-const isKeyOps = (arg) => {
-    if (typeof arg === 'string') {
-        return keyOpsList.some((u) => u === arg);
-    }
-    return false;
-};
 
 // --------------------BEGIN JWK common parameters --------------------
 const commonJWKParamNameList = [
@@ -3215,9 +3215,6 @@ const isData$1 = (arg) => isObject(arg) &&
     (arg.output.compact == null || typeof arg.output.compact === 'string') &&
     JWEJSONSerializer.is(arg.output.json) &&
     (arg.output.json_flat == null || JWEFlattenedJSONSerializer.is(arg.output.json_flat));
-const isArrayable = (arg, f) => {
-    return Array.isArray(arg) ? arg.every(f) : f(arg);
-};
 
 async function test$6(path) {
     const data = await fetchData$1(path);
@@ -4510,21 +4507,13 @@ function isData(arg) {
         (arg.reproducible == null || typeof arg.reproducible === 'boolean') &&
         isObject(arg.input) &&
         typeof arg.input.payload === 'string' &&
-        (Array.isArray(arg.input.key)
-            ? arg.input.key.every((k) => isJWK(k))
-            : isJWK(arg.input.key)) &&
-        (Array.isArray(arg.input.alg)
-            ? arg.input.alg.every((a) => isAlg(a))
-            : isAlg(arg.input.alg)) &&
+        isArrayable(arg.input.key, (k) => isJWK(k)) &&
+        isArrayable(arg.input.alg, (a) => isAlg(a)) &&
         isObject(arg.signing) &&
-        (Array.isArray(arg.signing)
-            ? arg.signing.every((s) => isObject(s) &&
-                (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
-                (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
-                (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS')))
-            : (arg.signing.protected == null || isJOSEHeader(arg.signing.protected, 'JWS')) &&
-                (arg.signing.protected_b64u == null || typeof arg.signing.protected_b64u === 'string') &&
-                (arg.signing.unprotected == null || isJOSEHeader(arg.signing.unprotected, 'JWS'))) &&
+        isArrayable(arg.signing, (s) => isObject(s) &&
+            (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
+            (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
+            (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS'))) &&
         isObject(arg.output) &&
         (arg.output.compact == null || typeof arg.output.compact === 'string') &&
         JWSJSONSerializer.is(arg.output.json) &&

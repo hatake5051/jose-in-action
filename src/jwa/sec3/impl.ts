@@ -1,7 +1,7 @@
 import { MACOperator, SigOperator } from 'jws/interface';
 import { JWAMACAlg, JWASigAlg } from './alg';
 import { isESAlg } from './es/alg';
-import { ESSigOperator } from './es/ec';
+import { ESSigOperator } from './es/impl';
 import { isHSAlg } from './hmac/alg';
 import { HMACOperator } from './hmac/impl';
 import { isPSAlg, isRSAlg } from './rsa/alg';

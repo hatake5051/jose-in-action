@@ -17,6 +17,14 @@ const isKeyUse = (arg: unknown): arg is KeyUse => {
 /**
  * JSON Web Key Operations を列挙する。
  */
+
+type KeyOps = typeof keyOpsList[number];
+const isKeyOps = (arg: unknown): arg is KeyOps => {
+  if (typeof arg === 'string') {
+    return keyOpsList.some((u) => u === arg);
+  }
+  return false;
+};
 const keyOpsList = [
   'sign',
   'verify',
@@ -27,13 +35,6 @@ const keyOpsList = [
   'deriveKey',
   'deriveBits',
 ] as const;
-type KeyOps = typeof keyOpsList[number];
-const isKeyOps = (arg: unknown): arg is KeyOps => {
-  if (typeof arg === 'string') {
-    return keyOpsList.some((u) => u === arg);
-  }
-  return false;
-};
 
 /**
  * JSON Web Key Elliptic Curve を列挙する。

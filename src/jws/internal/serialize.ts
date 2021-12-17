@@ -9,7 +9,7 @@ import {
   JWSSignature,
   JWSUnprotectedHeader,
 } from 'jws/type';
-import { BASE64URL, BASE64URL_DECODE, isObject } from 'utility';
+import { Arrayable, BASE64URL, BASE64URL_DECODE, isObject } from 'utility';
 
 /**
  * JWS には2つのシリアライぜーションがあり、
@@ -121,9 +121,7 @@ function isJWSJSONSerialization(arg: unknown): arg is JWSJSONSerialization {
 
 function serializeJSON(
   m: JWSPayload,
-  hs:
-    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }
-    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }[]
+  hs: Arrayable<{ p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }>
 ): JWSJSONSerialization {
   const hsList = Array.isArray(hs) ? hs : [hs];
   return {
@@ -140,9 +138,7 @@ function serializeJSON(
 
 function deserializeJSON(json: JWSJSONSerialization): {
   m: JWSPayload;
-  hs:
-    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }
-    | { p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }[];
+  hs: Arrayable<{ p_b64u?: string; u?: JWSUnprotectedHeader; sig: JWSSignature }>;
 } {
   const m = BASE64URL_DECODE(json.payload) as JWSPayload;
   const hslist = json.signatures.map((sig) => ({

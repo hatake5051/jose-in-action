@@ -11,7 +11,7 @@ import {
   JWSProtectedHeader,
   JWSUnprotectedHeader,
 } from 'jws/type';
-import { isObject } from 'utility';
+import { Arrayable, Flatten, isArrayable, isObject } from 'utility';
 
 export { fetchData, paths };
 
@@ -40,20 +40,15 @@ type Data = {
   reproducible?: boolean;
   input: {
     payload: string;
-    key: JWK | JWK[];
-    alg: Alg<'JWS'> | Alg<'JWS'>[];
+    key: Arrayable<JWK>;
+    alg: Arrayable<Alg<'JWS'>>;
   };
-  signing:
-    | {
-        protected?: JWSProtectedHeader;
-        protected_b64u?: string;
-        unprotected?: JWSUnprotectedHeader;
-      }
-    | {
-        protected?: JWSProtectedHeader;
-        protected_b64u?: string;
-        unprotected?: JWSUnprotectedHeader;
-      }[];
+  signing: Arrayable<{
+    protected?: JWSProtectedHeader;
+    protected_b64u?: string;
+    unprotected?: JWSUnprotectedHeader;
+  }>;
+
   output: {
     compact?: JWSCompactSerialization;
     json: JWSJSONSerialization;
@@ -68,28 +63,17 @@ function isData(arg: unknown): arg is Data {
     (arg.reproducible == null || typeof arg.reproducible === 'boolean') &&
     isObject<Data['input']>(arg.input) &&
     typeof arg.input.payload === 'string' &&
-    (Array.isArray(arg.input.key)
-      ? arg.input.key.every((k: unknown) => isJWK(k))
-      : isJWK(arg.input.key)) &&
-    (Array.isArray(arg.input.alg)
-      ? arg.input.alg.every((a: unknown) => isAlg(a))
-      : isAlg(arg.input.alg)) &&
+    isArrayable<JWK>(arg.input.key, (k: unknown): k is JWK => isJWK(k)) &&
+    isArrayable<Alg<'JWS'>>(arg.input.alg, (a: unknown): a is Alg<'JWS'> => isAlg(a)) &&
     isObject<Data['signing']>(arg.signing) &&
-    (Array.isArray(arg.signing)
-      ? arg.signing.every(
-          (s) =>
-            isObject<{
-              protected?: JWSProtectedHeader;
-              protected_b64u?: string;
-              unprotected?: JWSUnprotectedHeader;
-            }>(s) &&
-            (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
-            (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
-            (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS'))
-        )
-      : (arg.signing.protected == null || isJOSEHeader(arg.signing.protected, 'JWS')) &&
-        (arg.signing.protected_b64u == null || typeof arg.signing.protected_b64u === 'string') &&
-        (arg.signing.unprotected == null || isJOSEHeader(arg.signing.unprotected, 'JWS'))) &&
+    isArrayable<Flatten<Data['signing']>>(
+      arg.signing,
+      (s: unknown): s is Flatten<Data['signing']> =>
+        isObject<Flatten<Data['signing']>>(s) &&
+        (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
+        (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
+        (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS'))
+    ) &&
     isObject<Data['output']>(arg.output) &&
     (arg.output.compact == null || typeof arg.output.compact === 'string') &&
     JWSJSONSerializer.is(arg.output.json) &&

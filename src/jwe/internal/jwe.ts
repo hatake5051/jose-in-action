@@ -12,7 +12,7 @@ import {
   JWETag,
 } from 'jwe/type';
 import { equalsJWK, exportPublicKey, identifyJWK, isJWK, JWK, JWKSet } from 'jwk';
-import { ASCII, BASE64URL } from 'utility';
+import { Arrayable, ASCII, BASE64URL } from 'utility';
 import {
   generateCEK,
   keyMgmtModeFromAlg,
@@ -39,7 +39,7 @@ export class JWE {
     private iv: JWEIV,
     private c: JWECiphertext,
     private tag: JWETag,
-    private encryptedKey?: JWEEncryptedKey | Array<JWEEncryptedKey | undefined>,
+    private encryptedKey?: Arrayable<JWEEncryptedKey | undefined>,
     private aad?: JWEAAD
   ) {}
 
@@ -53,7 +53,7 @@ export class JWE {
    * @returns
    */
   static async enc(
-    alg: Alg<'JWE'> | Alg<'JWE'>[],
+    alg: Arrayable<Alg<'JWE'>>,
     keys: JWKSet,
     encalg: EncAlg,
     plaintext: Uint8Array,
@@ -68,19 +68,14 @@ export class JWE {
           initialValue?: JWESharedUnprotectedHeader;
           paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
         };
-        ru?:
-          | {
-              initialValue?: JWEPerRecipientUnprotectedHeader;
-              paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
-            }
-          | {
-              initialValue?: JWEPerRecipientUnprotectedHeader;
-              paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
-            }[];
+        ru?: Arrayable<{
+          initialValue?: JWEPerRecipientUnprotectedHeader;
+          paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
+        }>;
       };
       keyMgmt?: {
         cek?: JWECEK;
-        eprivk?: JWK<'EC', 'Priv'> | JWK<'EC', 'Priv'>[];
+        eprivk?: Arrayable<JWK<'EC', 'Priv'>>;
       };
       iv?: JWEIV;
       aad?: JWEAAD;
@@ -98,7 +93,7 @@ export class JWE {
     const header = JWEHeaderBuilder(algPerRcpt, encalg, options?.header);
 
     // Key Management を行う(Encrypted Key の生成と CEK の用意)
-    let keyMgmt: { cek: JWECEK; ek?: JWEEncryptedKey | Array<JWEEncryptedKey | undefined> };
+    let keyMgmt: { cek: JWECEK; ek?: Arrayable<JWEEncryptedKey | undefined> };
     let keyMgmtOpt = options?.keyMgmt;
     if (!keyMgmtOpt?.cek) {
       const cek = generateCEK(encalg);
@@ -310,7 +305,7 @@ async function dec(
 async function sendCEK(
   keys: JWKSet,
   h: JOSEHeader<'JWE'>,
-  options?: { cek?: JWECEK; eprivk?: JWK<'EC', 'Priv'> | JWK<'EC', 'Priv'>[] }
+  options?: { cek?: JWECEK; eprivk?: Arrayable<JWK<'EC', 'Priv'>> }
 ): Promise<{ cek: JWECEK; ek?: JWEEncryptedKey; h?: JOSEHeader<'JWE'> }> {
   if (!h.alg) {
     throw new TypeError('alg が選択されていない');

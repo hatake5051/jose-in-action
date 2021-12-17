@@ -10,7 +10,7 @@ import {
   JWESharedUnprotectedHeader,
 } from 'jwe/type';
 import { isJWK, JWK } from 'jwk';
-import { isObject } from 'utility';
+import { Arrayable, Flatten, isArrayable, isObject } from 'utility';
 
 export { fetchData, paths };
 
@@ -119,10 +119,3 @@ const isData = (arg: unknown): arg is Data =>
   (arg.output.compact == null || typeof arg.output.compact === 'string') &&
   JWEJSONSerializer.is(arg.output.json) &&
   (arg.output.json_flat == null || JWEFlattenedJSONSerializer.is(arg.output.json_flat));
-
-type Arrayable<T> = T | Array<T>;
-type Flatten<T> = T extends Array<infer E> ? E : T;
-
-const isArrayable = <T>(arg: unknown, f: (u: unknown) => u is T): arg is Arrayable<T> => {
-  return Array.isArray(arg) ? arg.every(f) : f(arg);
-};

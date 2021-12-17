@@ -11,7 +11,7 @@ import {
   JWESharedUnprotectedHeader,
   JWETag,
 } from 'jwe/type';
-import { BASE64URL, BASE64URL_DECODE, isObject } from 'utility';
+import { Arrayable, BASE64URL, BASE64URL_DECODE, isObject } from 'utility';
 
 export type JWESerializationFormat = 'compact' | 'json' | 'json_flat';
 
@@ -147,9 +147,7 @@ function equalsRecipientInJWEJSONSerialization(
 
 function serializeJSON(
   c: JWECiphertext,
-  rcpt:
-    | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }
-    | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }[],
+  rcpt: Arrayable<{ h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }>,
   p_b64u?: string,
   hsu?: JWESharedUnprotectedHeader,
   iv?: JWEIV,
@@ -174,9 +172,7 @@ function serializeJSON(
 
 function deserializeJSON(json: JWEJSONSerialization): {
   c: JWECiphertext;
-  rcpt:
-    | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }
-    | { h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }[];
+  rcpt: Arrayable<{ h?: JWEPerRecipientUnprotectedHeader; ek?: JWEEncryptedKey }>;
   p_b64u?: string;
   hsu?: JWESharedUnprotectedHeader;
   iv: JWEIV;

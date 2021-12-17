@@ -92,4 +92,11 @@ export type WouldBe<T> = { [P in keyof T]?: unknown };
 export const isObject = <T extends object>(value: unknown): value is WouldBe<T> =>
   typeof value === 'object' && value !== null;
 
+export type Arrayable<T> = T | Array<T>;
+export type Flatten<T> = T extends Array<infer E> ? E : T;
+
+export const isArrayable = <T>(arg: unknown, f: (u: unknown) => u is T): arg is Arrayable<T> => {
+  return Array.isArray(arg) ? arg.every(f) : f(arg);
+};
+
 // --------------------END util functions --------------------
