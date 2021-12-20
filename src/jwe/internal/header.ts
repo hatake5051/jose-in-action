@@ -1,10 +1,10 @@
 import { Alg, EncAlg } from 'iana/alg';
 import {
-  equalsJOSEHeader,
-  isJOSEHeader,
+  equalsJOSEHeaderParams,
   isJOSEHeaderParamName,
-  JOSEHeader,
+  isJOSEHeaderParams,
   JOSEHeaderParamName,
+  JOSEHeaderParams,
 } from 'iana/header';
 import {
   JWEPerRecipientUnprotectedHeader,
@@ -27,7 +27,7 @@ function JWEHeaderBuilderFromSerializedJWE(
   let options: Parameters<typeof JWEHeaderBuilder>[2] | undefined;
   if (p_b64u) {
     const initialValue: unknown = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(p_b64u)));
-    if (!isJOSEHeader(initialValue, 'JWE')) {
+    if (!isJOSEHeaderParams(initialValue, 'JWE')) {
       throw new TypeError('JWE Protected Header の b64u 表現ではなかった');
     }
     if (initialValue.alg) {
@@ -156,12 +156,12 @@ interface JWEHeader {
   Protected_b64u(): string | undefined;
   SharedUnprotected(): JWESharedUnprotectedHeader | undefined;
   PerRecipient(recipientIndex?: number): JWEPerRecipientUnprotectedHeader | undefined;
-  JOSE(recipientIndex?: number): JOSEHeader<'JWE'>;
-  update(v: JOSEHeader<'JWE'>, recipientIndex?: number): void;
+  JOSE(recipientIndex?: number): JOSEHeaderParams<'JWE'>;
+  update(v: JOSEHeaderParams<'JWE'>, recipientIndex?: number): void;
 }
 
 class JWESharedHeader {
-  protected shared: JOSEHeader<'JWE'>;
+  protected shared: JOSEHeaderParams<'JWE'>;
   protected readonly protected_b64u?: string;
   protected paramNames: {
     p: Set<JOSEHeaderParamName<'JWE'>>;
@@ -170,12 +170,12 @@ class JWESharedHeader {
 
   constructor(options?: {
     p?: {
-      initialValue?: JOSEHeader<'JWE'>;
+      initialValue?: JOSEHeaderParams<'JWE'>;
       paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
       b64u?: string;
     };
     su?: {
-      initialValue?: JOSEHeader<'JWE'>;
+      initialValue?: JOSEHeaderParams<'JWE'>;
       paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
     };
   }) {
@@ -185,7 +185,7 @@ class JWESharedHeader {
       return;
     }
 
-    let shared: JOSEHeader<'JWE'> | undefined;
+    let shared: JOSEHeaderParams<'JWE'> | undefined;
     const paramNames = {
       p: new Set<JOSEHeaderParamName<'JWE'>>(),
       su: new Set<JOSEHeaderParamName<'JWE'>>(),
@@ -220,7 +220,7 @@ class JWESharedHeader {
     // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
     if (options.p?.b64u) {
       const p: unknown = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
-      if (!isJOSEHeader(p, 'JWE')) {
+      if (!isJOSEHeaderParams(p, 'JWE')) {
         throw new TypeError(
           'オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった'
         );
@@ -256,12 +256,12 @@ class JWESharedHeader {
   Protected_b64u(): string | undefined {
     if (this.protected_b64u) {
       const p: unknown = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(this.protected_b64u)));
-      if (!isJOSEHeader(p, 'JWE')) {
+      if (!isJOSEHeaderParams(p, 'JWE')) {
         throw new TypeError(
           'オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった'
         );
       }
-      if (!equalsJOSEHeader(p, this.Protected())) {
+      if (!equalsJOSEHeaderParams(p, this.Protected())) {
         throw new TypeError(
           'オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
             `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected()}`
@@ -284,7 +284,7 @@ class JWESharedHeader {
     return Object.fromEntries(entries) as JWESharedUnprotectedHeader;
   }
 
-  update(v: JOSEHeader<'JWE'>) {
+  update(v: JOSEHeaderParams<'JWE'>) {
     Object.entries(v).forEach(([n, vv]) => {
       if (!isJOSEHeaderParamName(n)) return;
       if (this.paramNames.p.has(n) || this.paramNames.su.has(n)) {
@@ -306,7 +306,7 @@ class JWESharedHeader {
 
 class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
   private perRcpt: Array<{
-    params: JOSEHeader<'JWE'>;
+    params: JOSEHeaderParams<'JWE'>;
     paramNames: Set<JOSEHeaderParamName<'JWE'>>;
   }>;
 
@@ -315,16 +315,16 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
     enc: EncAlg,
     options?: {
       p?: {
-        initialValue?: JOSEHeader<'JWE'>;
+        initialValue?: JOSEHeaderParams<'JWE'>;
         paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
         b64u?: string;
       };
       su?: {
-        initialValue?: JOSEHeader<'JWE'>;
+        initialValue?: JOSEHeaderParams<'JWE'>;
         paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
       };
       ru?: {
-        initialValue?: JOSEHeader<'JWE'>;
+        initialValue?: JOSEHeaderParams<'JWE'>;
         paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
       }[];
     }
@@ -482,7 +482,7 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
     super(options);
 
     const perRcpt: Array<{
-      params: JOSEHeader<'JWE'>;
+      params: JOSEHeaderParams<'JWE'>;
       paramNames: Set<JOSEHeaderParamName<'JWE'>>;
     }> = alg.map(() => ({ params: {}, paramNames: new Set() }));
 
@@ -541,7 +541,7 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
     return { ...this.shared, ...this.PerRecipient(recipientIndex) };
   }
 
-  update(v: JOSEHeader<'JWE'>, recipientIndex?: number) {
+  update(v: JOSEHeaderParams<'JWE'>, recipientIndex?: number) {
     super.update(v);
     const idx = recipientIndex ?? 0;
     if (idx > this.perRcpt.length) return;
@@ -561,7 +561,7 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
 
 class JWEHeaderforOne extends JWESharedHeader implements JWEHeader {
   private perRcpt?: {
-    params: JOSEHeader<'JWE'>;
+    params: JOSEHeaderParams<'JWE'>;
     paramNames: Set<JOSEHeaderParamName<'JWE'>>;
   };
 
@@ -570,16 +570,16 @@ class JWEHeaderforOne extends JWESharedHeader implements JWEHeader {
     enc: EncAlg,
     options?: {
       p?: {
-        initialValue?: JOSEHeader<'JWE'>;
+        initialValue?: JOSEHeaderParams<'JWE'>;
         paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
         b64u?: string;
       };
       su?: {
-        initialValue?: JOSEHeader<'JWE'>;
+        initialValue?: JOSEHeaderParams<'JWE'>;
         paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
       };
       ru?: {
-        initialValue?: JOSEHeader<'JWE'>;
+        initialValue?: JOSEHeaderParams<'JWE'>;
         paramNames?: Set<JOSEHeaderParamName<'JWE'>>;
       };
     }
@@ -628,7 +628,7 @@ class JWEHeaderforOne extends JWESharedHeader implements JWEHeader {
     // Protected Header と Shared Unprotected Header を保持する JWESharedHeader をインスタンス化
     super(options);
 
-    let perRcptParams: JOSEHeader<'JWE'> | undefined;
+    let perRcptParams: JOSEHeaderParams<'JWE'> | undefined;
     const perRcptParamNames: Set<JOSEHeaderParamName<'JWE'>> = new Set();
 
     if (options.ru) {
@@ -683,11 +683,11 @@ class JWEHeaderforOne extends JWESharedHeader implements JWEHeader {
     return Object.fromEntries(entries) as JWEPerRecipientUnprotectedHeader;
   }
 
-  JOSE(): JOSEHeader<'JWE'> {
+  JOSE(): JOSEHeaderParams<'JWE'> {
     return { ...this.shared, ...this.PerRecipient() };
   }
 
-  update(v: JOSEHeader<'JWE'>) {
+  update(v: JOSEHeaderParams<'JWE'>) {
     super.update(v);
     Object.entries(v).forEach(([n, vv]) => {
       if (!isJOSEHeaderParamName(n)) return;

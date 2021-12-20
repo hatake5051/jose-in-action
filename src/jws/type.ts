@@ -1,5 +1,5 @@
 import { Alg, isAlg } from 'iana/alg';
-import { JOSEHeader } from 'iana/header';
+import { JOSEHeaderParams } from 'iana/header';
 import { equalsJWK, isJWK, JWK } from 'jwk';
 import { isObject } from 'utility';
 
@@ -17,19 +17,19 @@ export type JWSSignature = Uint8Array & { _brand: 'JWSSignature' };
 /**
  * JWS Signature によって完全性を保護されるヘッダーパラメータを含む JSON オブジェクト。
  */
-export type JWSProtectedHeader = JOSEHeader<'JWS'> & { _brand: 'JWSProtectedHeader' };
+export type JWSProtectedHeader = JOSEHeaderParams<'JWS'> & { _brand: 'JWSProtectedHeader' };
 
 /**
  * 完全性を保護されないヘッダーパラメータを含む JSON オブジェクト。
  */
-export type JWSUnprotectedHeader = JOSEHeader<'JWS'> & { _brand: 'JWSUnprotectedHeader' };
+export type JWSUnprotectedHeader = JOSEHeaderParams<'JWS'> & { _brand: 'JWSUnprotectedHeader' };
 
 /**
  * RFC7515#4
  * JWS において JOSE Header のプロパティは、JWS Protected Header と JWS Payload に適用される
  * デジタル署名や MAC やオプションで JWS の追加プロパティを記述する。
  */
-export type JWSJOSEHeader = {
+export type JWSJOSEHeaderParams = {
   /**
    * RFC7515#4.1.1 Algorithm Header Parameter
    * JWS を保護するために使う暗号アルゴリズムを識別する。
@@ -101,8 +101,8 @@ export type JWSJOSEHeader = {
  * 引数が JWSJOSEHeader か確認する。
  * JWS で定義されている JWSJOSEHeader パラメータをもち、 alg を持っているか確認する。
  */
-export const isJWSJOSEHeader = (arg: unknown): arg is JWSJOSEHeader =>
-  isPartialJWSJOSEHeader(arg) && arg.alg != null;
+export const isJWSJOSEHeaderParams = (arg: unknown): arg is JWSJOSEHeaderParams =>
+  isPartialJWSJOSEHeaderParams(arg) && arg.alg != null;
 
 export const JWSJOSEHeaderParamNames = [
   'alg',
@@ -122,8 +122,8 @@ export const JWSJOSEHeaderParamNames = [
  * 引数が Partial<JWSJOSEHeader> か確認する。
  * isJWSJOSEHeader は alg が値を持っているか確認するが、これでは undefined でも良いとしている。
  */
-export const isPartialJWSJOSEHeader = (arg: unknown): arg is Partial<JWSJOSEHeader> =>
-  isObject<Partial<JWSJOSEHeader>>(arg) &&
+export const isPartialJWSJOSEHeaderParams = (arg: unknown): arg is Partial<JWSJOSEHeaderParams> =>
+  isObject<Partial<JWSJOSEHeaderParams>>(arg) &&
   JWSJOSEHeaderParamNames.every(
     (n) =>
       arg[n] == null ||
@@ -139,9 +139,9 @@ export const isPartialJWSJOSEHeader = (arg: unknown): arg is Partial<JWSJOSEHead
 /**
  * ２つの JWSJOSEHEader が同じか判定する
  */
-export function equalsJWSJOSEHeader(
-  l?: Partial<JWSJOSEHeader>,
-  r?: Partial<JWSJOSEHeader>
+export function equalsJWSJOSEHeaderParams(
+  l?: Partial<JWSJOSEHeaderParams>,
+  r?: Partial<JWSJOSEHeaderParams>
 ): boolean {
   if (l == null && r == null) return true;
   if (l == null || r == null) return false;

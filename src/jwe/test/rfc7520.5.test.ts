@@ -1,5 +1,5 @@
 import { Alg, EncAlg, isAlg, isEncAlg } from 'iana/alg';
-import { isJOSEHeader } from 'iana/header';
+import { isJOSEHeaderParams } from 'iana/header';
 import { JWEFlattenedJSONSerializer, JWEJSONSerializer } from 'jwe';
 import {
   JWECompactSerialization,
@@ -105,16 +105,16 @@ const isData = (arg: unknown): arg is Data =>
       arg.encrypting_key,
       (u): u is Flatten<NonNullable<Data['encrypting_key']>> =>
         isObject<Flatten<NonNullable<Data['encrypting_key']>>>(u) &&
-        (u.header == null || isJOSEHeader(u.header, 'JWE')) &&
+        (u.header == null || isJOSEHeaderParams(u.header, 'JWE')) &&
         (u.epk == null || isJWK(u.epk, 'EC', 'Priv'))
     )) &&
   isObject<Data['encrypting_content']>(arg.encrypting_content) &&
   (arg.encrypting_content.protected == null ||
-    isJOSEHeader(arg.encrypting_content.protected, 'JWE')) &&
+    isJOSEHeaderParams(arg.encrypting_content.protected, 'JWE')) &&
   (arg.encrypting_content.protected_b64u == null ||
     typeof arg.encrypting_content.protected_b64u === 'string') &&
   (arg.encrypting_content.unprotected == null ||
-    isJOSEHeader(arg.encrypting_content.unprotected, 'JWE')) &&
+    isJOSEHeaderParams(arg.encrypting_content.unprotected, 'JWE')) &&
   isObject<Data['output']>(arg.output) &&
   (arg.output.compact == null || typeof arg.output.compact === 'string') &&
   JWEJSONSerializer.is(arg.output.json) &&

@@ -1,7 +1,7 @@
 // --------------------BEGIN JWK definition --------------------
 
 import { Alg } from 'iana/alg';
-import { JOSEHeader } from 'iana/header';
+import { JOSEHeaderParams } from 'iana/header';
 import { KeyUse } from 'iana/jwk';
 import { Kty, KtyFromAlg, ktyFromAlg } from 'iana/kty';
 import { equalsJWAJWK, exportJWAPublicKey, isJWAJWK, JWAJWK } from 'jwa/sec6/jwk';
@@ -81,7 +81,7 @@ type AsymKty = 'Pub' | 'Priv';
  * RFC7515(JWS)#6 Key Identification
  *
  */
-function identifyJWK<A extends Alg>(h: JOSEHeader, set?: JWKSet): JWK<KtyFromAlg<A>> {
+function identifyJWK<A extends Alg>(h: JOSEHeaderParams, set?: JWKSet): JWK<KtyFromAlg<A>> {
   // JWKSet が JOSE Header 外の情報で取得できていれば、そこから必要な鍵を選ぶ
   if (set) {
     const filteredByAlg = set.keys.filter((key) => !h.alg || key.kty === ktyFromAlg(h.alg));

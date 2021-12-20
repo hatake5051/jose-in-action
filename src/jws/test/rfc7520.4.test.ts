@@ -1,7 +1,7 @@
 // --------------------BEGIN RFC7520 Section 4 test data definition --------------------
 
 import { Alg, isAlg } from 'iana/alg';
-import { isJOSEHeader } from 'iana/header';
+import { isJOSEHeaderParams } from 'iana/header';
 import { isJWK, JWK } from 'jwk';
 import { JWSFlattenedJSONSerializer, JWSJSONSerializer } from 'jws';
 import {
@@ -70,9 +70,9 @@ function isData(arg: unknown): arg is Data {
       arg.signing,
       (s: unknown): s is Flatten<Data['signing']> =>
         isObject<Flatten<Data['signing']>>(s) &&
-        (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
+        (s.protected == null || isJOSEHeaderParams(s.protected, 'JWS')) &&
         (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
-        (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS'))
+        (s.unprotected == null || isJOSEHeaderParams(s.unprotected, 'JWS'))
     ) &&
     isObject<Data['output']>(arg.output) &&
     (arg.output.compact == null || typeof arg.output.compact === 'string') &&

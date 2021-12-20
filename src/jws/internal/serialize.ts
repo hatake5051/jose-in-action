@@ -1,6 +1,6 @@
 // --------------------BEGIN JWS Serialization definition --------------------
 
-import { equalsJOSEHeader, isJOSEHeader } from 'iana/header';
+import { equalsJOSEHeaderParams, isJOSEHeaderParams } from 'iana/header';
 import {
   JWSCompactSerialization,
   JWSFlattenedJSONSerialization,
@@ -113,7 +113,7 @@ function isJWSJSONSerialization(arg: unknown): arg is JWSJSONSerialization {
           protected?: string;
         }>(s) &&
         typeof s.signature === 'string' &&
-        (s.header == null || isJOSEHeader(s.header, 'JWS')) &&
+        (s.header == null || isJOSEHeaderParams(s.header, 'JWS')) &&
         (s.protected == null || typeof s.protected === 'string')
     )
   );
@@ -205,7 +205,7 @@ function equalsSignatureInJWSJSONSerialization(
       case 'header': {
         const ll = ln as JWSUnprotectedHeader;
         const rr = rn as JWSUnprotectedHeader;
-        if (equalsJOSEHeader(ll, rr)) continue;
+        if (equalsJOSEHeaderParams(ll, rr)) continue;
         return false;
       }
       case 'protected':
@@ -259,7 +259,7 @@ function isJWSFlattenedJSONSerialization(arg: unknown): arg is JWSFlattenedJSONS
     typeof arg.payload === 'string' &&
     (arg.protected == null || typeof arg.protected === 'string') &&
     typeof arg.signature === 'string' &&
-    (arg.header == null || isJOSEHeader(arg.header, 'JWS'))
+    (arg.header == null || isJOSEHeaderParams(arg.header, 'JWS'))
   );
 }
 

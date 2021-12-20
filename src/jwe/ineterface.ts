@@ -1,5 +1,5 @@
 import { Alg, EncAlg } from 'iana/alg';
-import { JOSEHeader } from 'iana/header';
+import { JOSEHeaderParams } from 'iana/header';
 import { KtyFromAlg } from 'iana/kty';
 import { JWK } from 'jwk';
 import { JWEAAD, JWECEK, JWECiphertext, JWEEncryptedKey, JWEIV, JWETag } from './type';
@@ -25,31 +25,35 @@ interface KeyWrapper<A extends Alg<'JWE'>> {
   wrap: (
     key: JWK<KtyFromAlg<A>>,
     cek: JWECEK,
-    h?: JOSEHeader<'JWE'>
-  ) => Promise<{ ek: JWEEncryptedKey; h?: JOSEHeader<'JWE'> }>;
-  unwrap: (key: JWK<KtyFromAlg<A>>, ek: JWEEncryptedKey, h?: JOSEHeader<'JWE'>) => Promise<JWECEK>;
+    h?: JOSEHeaderParams<'JWE'>
+  ) => Promise<{ ek: JWEEncryptedKey; h?: JOSEHeaderParams<'JWE'> }>;
+  unwrap: (
+    key: JWK<KtyFromAlg<A>>,
+    ek: JWEEncryptedKey,
+    h?: JOSEHeaderParams<'JWE'>
+  ) => Promise<JWECEK>;
 }
 
 interface DirectKeyAgreementer<A extends Alg<'JWE'>> {
   partyU: (
     key: JWK<KtyFromAlg<A>, 'Pub'>,
-    h: JOSEHeader<'JWE'>,
+    h: JOSEHeaderParams<'JWE'>,
     eprivk?: JWK<KtyFromAlg<A>, 'Priv'>
-  ) => Promise<{ cek: JWECEK; h?: JOSEHeader<'JWE'> }>;
-  partyV: (key: JWK<KtyFromAlg<A>, 'Priv'>, h: JOSEHeader<'JWE'>) => Promise<JWECEK>;
+  ) => Promise<{ cek: JWECEK; h?: JOSEHeaderParams<'JWE'> }>;
+  partyV: (key: JWK<KtyFromAlg<A>, 'Priv'>, h: JOSEHeaderParams<'JWE'>) => Promise<JWECEK>;
 }
 
 interface KeyAgreementerWithKeyWrapping<A extends Alg<'JWE'>> {
   wrap: (
     key: JWK<KtyFromAlg<A>, 'Pub'>,
     cek: JWECEK,
-    h: JOSEHeader<'JWE'>,
+    h: JOSEHeaderParams<'JWE'>,
     eprivk?: JWK<KtyFromAlg<A>, 'Priv'>
-  ) => Promise<{ ek: JWEEncryptedKey; h?: JOSEHeader<'JWE'> }>;
+  ) => Promise<{ ek: JWEEncryptedKey; h?: JOSEHeaderParams<'JWE'> }>;
   unwrap: (
     key: JWK<KtyFromAlg<A>, 'Priv'>,
     ek: JWEEncryptedKey,
-    h: JOSEHeader<'JWE'>
+    h: JOSEHeaderParams<'JWE'>
   ) => Promise<JWECEK>;
 }
 

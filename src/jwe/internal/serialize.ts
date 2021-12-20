@@ -1,4 +1,4 @@
-import { equalsJOSEHeader, isJOSEHeader } from 'iana/header';
+import { equalsJOSEHeaderParams, isJOSEHeaderParams } from 'iana/header';
 import {
   JWEAAD,
   JWECiphertext,
@@ -91,7 +91,7 @@ function isJWEJSONSerialization(arg: unknown): arg is JWEJSONSerialization {
   return (
     isObject<JWEJSONSerialization>(arg) &&
     (arg.protected == null || typeof arg.protected === 'string') &&
-    (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
+    (arg.unprotected == null || isJOSEHeaderParams(arg.unprotected, 'JWE')) &&
     (arg.iv == null || typeof arg.iv === 'string') &&
     (arg.aad == null || typeof arg.aad === 'string') &&
     typeof arg.ciphertext === 'string' &&
@@ -103,7 +103,7 @@ function isJWEJSONSerialization(arg: unknown): arg is JWEJSONSerialization {
           header?: JWEPerRecipientUnprotectedHeader;
           encrypted_key?: string;
         }>(u) &&
-        (u.header == null || isJOSEHeader(u.header, 'JWE')) &&
+        (u.header == null || isJOSEHeaderParams(u.header, 'JWE')) &&
         (u.encrypted_key == null || typeof u.encrypted_key === 'string')
     )
   );
@@ -117,7 +117,7 @@ function equalsJWEJSONSerialization(l?: JWEJSONSerialization, r?: JWEJSONSeriali
     if (l[n] == null || r[n] == null) return false;
     if (l[n] === r[n]) continue;
   }
-  if (!equalsJOSEHeader(l.unprotected, r.unprotected)) return false;
+  if (!equalsJOSEHeaderParams(l.unprotected, r.unprotected)) return false;
   return (
     l.recipients.every((ll) =>
       r.recipients.some((rr) => equalsRecipientInJWEJSONSerialization(rr, ll))
@@ -141,7 +141,7 @@ function equalsRecipientInJWEJSONSerialization(
   if (l == null && r == null) return true;
   if (l == null || r == null) return false;
   if (l.encrypted_key !== r.encrypted_key) return false;
-  if (!equalsJOSEHeader(l.header, r.header)) return false;
+  if (!equalsJOSEHeaderParams(l.header, r.header)) return false;
   return true;
 }
 
@@ -207,12 +207,12 @@ function isJWEFlattenedJSONSerialization(arg: unknown): arg is JWEFlattenedJSONS
   return (
     isObject<JWEFlattenedJSONSerialization>(arg) &&
     (arg.protected == null || typeof arg.protected === 'string') &&
-    (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
+    (arg.unprotected == null || isJOSEHeaderParams(arg.unprotected, 'JWE')) &&
     (arg.iv == null || typeof arg.iv === 'string') &&
     (arg.aad == null || typeof arg.aad === 'string') &&
     typeof arg.ciphertext === 'string' &&
     (arg.tag == null || typeof arg.tag === 'string') &&
-    (arg.header == null || isJOSEHeader(arg.header, 'JWE')) &&
+    (arg.header == null || isJOSEHeaderParams(arg.header, 'JWE')) &&
     (arg.encrypted_key == null || typeof arg.encrypted_key === 'string')
   );
 }
@@ -228,7 +228,7 @@ function equalsJWEFlattenedJSONSerialization(
     if (l[n] == null || r[n] == null) return false;
     if (l[n] === r[n]) continue;
   }
-  if (!equalsJOSEHeader(l.unprotected, r.unprotected)) return false;
+  if (!equalsJOSEHeaderParams(l.unprotected, r.unprotected)) return false;
   return equalsRecipientInJWEJSONSerialization(l, r);
 }
 

@@ -2,11 +2,11 @@
 
 import { Alg } from 'iana/alg';
 import {
-  equalsJOSEHeader,
-  isJOSEHeader,
+  equalsJOSEHeaderParams,
   isJOSEHeaderParamName,
-  JOSEHeader,
+  isJOSEHeaderParams,
   JOSEHeaderParamName,
+  JOSEHeaderParams,
 } from 'iana/header';
 import { JWSProtectedHeader, JWSUnprotectedHeader } from 'jws/type';
 import { BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
@@ -19,7 +19,7 @@ function JWSHeaderBuilderFromSerializedJWS(p_b64u?: string, u?: JWSUnprotectedHe
 
   if (p_b64u) {
     const initialValue: unknown = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(p_b64u)));
-    if (!isJOSEHeader(initialValue, 'JWS')) {
+    if (!isJOSEHeaderParams(initialValue, 'JWS')) {
       throw new TypeError('JWS Protected Header の b64u 表現ではなかった');
     }
     if (initialValue.alg) {
@@ -73,7 +73,7 @@ function JWSHeaderBuilder(
  * p と u のいずれか一方は存在することが必要で、どちらかには alg パラメータが含まれている
  */
 class JWSHeader {
-  private h: JOSEHeader<'JWS'>;
+  private h: JOSEHeaderParams<'JWS'>;
   private readonly p_b64u?: string;
   private paramNames: {
     p: Set<JOSEHeaderParamName<'JWS'>>;
@@ -84,12 +84,12 @@ class JWSHeader {
     alg: Alg<'JWS'>,
     options?: {
       p?: {
-        initialValue?: JOSEHeader<'JWS'>;
+        initialValue?: JOSEHeaderParams<'JWS'>;
         paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
         b64u?: string;
       };
       u?: {
-        initialValue?: JOSEHeader<'JWS'>;
+        initialValue?: JOSEHeaderParams<'JWS'>;
         paramNames?: Set<JOSEHeaderParamName<'JWS'>>;
       };
     }
@@ -136,7 +136,7 @@ class JWSHeader {
       }
     }
 
-    let value: JOSEHeader<'JWS'> = {};
+    let value: JOSEHeaderParams<'JWS'> = {};
     const paramNames = {
       p: new Set<JOSEHeaderParamName<'JWS'>>(),
       u: new Set<JOSEHeaderParamName<'JWS'>>(),
@@ -171,7 +171,7 @@ class JWSHeader {
     // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
     if (options.p?.b64u) {
       const p: unknown = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
-      if (!isJOSEHeader(p, 'JWS')) {
+      if (!isJOSEHeaderParams(p, 'JWS')) {
         throw new TypeError(
           'オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった'
         );
@@ -199,7 +199,7 @@ class JWSHeader {
   /**
    * JWS Protected Header と JWS Unprotected Header の Union を返す
    */
-  JOSE(): JOSEHeader<'JWS'> {
+  JOSE(): JOSEHeaderParams<'JWS'> {
     return this.h;
   }
 
@@ -217,12 +217,12 @@ class JWSHeader {
   Protected_b64u(): string | undefined {
     if (this.p_b64u) {
       const p: unknown = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(this.p_b64u)));
-      if (!isJOSEHeader(p, 'JWS')) {
+      if (!isJOSEHeaderParams(p, 'JWS')) {
         throw new TypeError(
           'オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった'
         );
       }
-      if (!equalsJOSEHeader(p, this.Protected())) {
+      if (!equalsJOSEHeaderParams(p, this.Protected())) {
         throw new TypeError(
           'オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
             `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected()}`
@@ -248,7 +248,7 @@ class JWSHeader {
     return Object.fromEntries(entries) as JWSUnprotectedHeader;
   }
 
-  update(v: JOSEHeader<'JWS'>) {
+  update(v: JOSEHeaderParams<'JWS'>) {
     Object.entries(v).forEach(([n, vv]) => {
       if (!isJOSEHeaderParamName(n)) return;
       this.h = { ...this.h, [n]: vv };

@@ -1164,78 +1164,12 @@ const JWAAlgSpecificJOSEHeaderParamNames = [
     ...ECDH_ESHeaderParamNames,
     ...PBES2HeaderParamNames,
 ];
-const isPartialJWAAlgSpecificJOSEHeader = (arg) => isPartialAGCMKWHeaderParams(arg) ||
+const isPartialJWAAlgSpecificJOSEHeaderParams = (arg) => isPartialAGCMKWHeaderParams(arg) ||
     isPartialECDH_ESHeaderParams(arg) ||
     isPartialPBES2HeaderParams(arg);
-const equalsJWAAlgSpecificJOSEHeader = (l, r) => equalsAGCMKWHeaderParams(l, r) ||
+const equalsJWAAlgSpecificJOSEHeaderParams = (l, r) => equalsAGCMKWHeaderParams(l, r) ||
     equalsECDH_ESHeaderParams(l, r) ||
     equalsPBES2HeaderParams(l, r);
-
-const JWEJOSEHeaderParamNames = [
-    'alg',
-    'enc',
-    'zip',
-    'jku',
-    'jwk',
-    'kid',
-    'x5u',
-    'x5c',
-    'x5t',
-    'x5t#S256',
-    'typ',
-    'cty',
-    'crit',
-];
-const isPartialJWEJOSEHeader = (arg) => isObject(arg) &&
-    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
-        (n === 'alg'
-            ? isAlg(arg[n], 'JWE')
-            : n === 'enc'
-                ? isEncAlg(arg[n])
-                : n === 'jwk'
-                    ? isJWK(arg[n])
-                    : n === 'x5c' || n === 'crit'
-                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
-                        : typeof arg[n] === 'string'));
-function equalsJWEJOSEHeader(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    for (const n of JWEJOSEHeaderParamNames) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        switch (n) {
-            case 'jwk': {
-                const ll = ln;
-                const rr = rn;
-                if (equalsJWK(ll, rr))
-                    continue;
-                return false;
-            }
-            case 'x5t':
-            case 'crit': {
-                const ll = ln;
-                const rr = rn;
-                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
-                    continue;
-                return false;
-            }
-            default: {
-                const ll = ln;
-                const rr = rn;
-                if (ll === rr)
-                    continue;
-                return false;
-            }
-        }
-    }
-    return true;
-}
 
 const JWSJOSEHeaderParamNames = [
     'alg',
@@ -1254,7 +1188,7 @@ const JWSJOSEHeaderParamNames = [
  * 引数が Partial<JWSJOSEHeader> か確認する。
  * isJWSJOSEHeader は alg が値を持っているか確認するが、これでは undefined でも良いとしている。
  */
-const isPartialJWSJOSEHeader = (arg) => isObject(arg) &&
+const isPartialJWSJOSEHeaderParams = (arg) => isObject(arg) &&
     JWSJOSEHeaderParamNames.every((n) => arg[n] == null ||
         (n === 'alg'
             ? isAlg(arg[n], 'JWS')
@@ -1266,7 +1200,7 @@ const isPartialJWSJOSEHeader = (arg) => isObject(arg) &&
 /**
  * ２つの JWSJOSEHEader が同じか判定する
  */
-function equalsJWSJOSEHeader(l, r) {
+function equalsJWSJOSEHeaderParams(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
@@ -1306,46 +1240,93 @@ function equalsJWSJOSEHeader(l, r) {
     return true;
 }
 
-const equalsJOSEHeader = (l, r) => {
+const JWEJOSEHeaderParamNames = [
+    'alg',
+    'enc',
+    'zip',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
+const isPartialJWEJOSEHeaderParams = (arg) => isObject(arg) &&
+    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isAlg(arg[n], 'JWE')
+            : n === 'enc'
+                ? isEncAlg(arg[n])
+                : n === 'jwk'
+                    ? isJWK(arg[n])
+                    : n === 'x5c' || n === 'crit'
+                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                        : typeof arg[n] === 'string'));
+function equalsJWEJOSEHeaderParams(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
         return false;
-    if (isJOSEHeader(l, 'JWS')) {
-        if (!isJOSEHeader(r, 'JWS'))
+    return JWSJOSEHeaderParamNames.every((n) => {
+        if (l[n] == null && r[n] == null)
+            return true;
+        if (l[n] == null || r[n] == null)
             return false;
-        return equalsJWSJOSEHeader(l, r);
+        switch (n) {
+            case 'jwk':
+                return equalsJWK(l[n], r[n]);
+            case 'x5c':
+            case 'crit':
+                return (new Set(l[n]).size === new Set(r[n]).size &&
+                    l[n]?.every((l) => r[n]?.some((r) => r === l)));
+            default:
+                return l[n] === r[n];
+        }
+    });
+}
+
+const equalsJOSEHeaderParams = (l, r) => {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    if (isJOSEHeaderParams(l, 'JWS')) {
+        if (!isJOSEHeaderParams(r, 'JWS'))
+            return false;
+        return equalsJWSJOSEHeaderParams(l, r);
     }
-    else if (isJOSEHeader(l, 'JWE')) {
-        if (!isJOSEHeader(r, 'JWE'))
+    else if (isJOSEHeaderParams(l, 'JWE')) {
+        if (!isJOSEHeaderParams(r, 'JWE'))
             return false;
-        return equalsJWEJOSEHeader(l, r) && equalsJWAAlgSpecificJOSEHeader(l, r);
+        return equalsJWEJOSEHeaderParams(l, r) && equalsJWAAlgSpecificJOSEHeaderParams(l, r);
     }
     return false;
 };
-function isJOSEHeader(arg, t) {
+function isJOSEHeaderParams(arg, t) {
+    const isJWE = (arg) => isPartialJWEJOSEHeaderParams(arg) && isPartialJWAAlgSpecificJOSEHeaderParams(arg);
+    const isJWS = (arg) => isPartialJWSJOSEHeaderParams(arg);
     if (t === 'JWE') {
-        return isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg);
+        return isJWE(arg);
     }
-    // TODO;
     if (t === 'JWS') {
-        return isPartialJWSJOSEHeader(arg);
+        return isJWS(arg);
     }
-    return (isPartialJWSJOSEHeader(arg) ||
-        (isPartialJWEJOSEHeader(arg) && isPartialJWAAlgSpecificJOSEHeader(arg)));
+    return isJWE(arg) || isJWS(arg);
 }
 function isJOSEHeaderParamName(arg, t) {
+    const jwe = [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames];
+    const jws = [...JWSJOSEHeaderParamNames];
     if (t === 'JWE') {
-        return [...JWEJOSEHeaderParamNames, ...JWAAlgSpecificJOSEHeaderParamNames].some((n) => n === arg);
+        return jwe.some((n) => n === arg);
     }
     if (t === 'JWS') {
-        return [...JWSJOSEHeaderParamNames].some((n) => n === arg);
+        return jws.some((n) => n === arg);
     }
-    return [
-        ...JWEJOSEHeaderParamNames,
-        ...JWAAlgSpecificJOSEHeaderParamNames,
-        ...JWSJOSEHeaderParamNames,
-    ].some((n) => n === arg);
+    return [...jws, ...jwe].some((n) => n === arg);
 }
 
 const AGCMKeyWrapper = {
@@ -2184,7 +2165,7 @@ function JWEHeaderBuilderFromSerializedJWE(p_b64u, su, ru) {
     let options;
     if (p_b64u) {
         const initialValue = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(p_b64u)));
-        if (!isJOSEHeader(initialValue, 'JWE')) {
+        if (!isJOSEHeaderParams(initialValue, 'JWE')) {
             throw new TypeError('JWE Protected Header の b64u 表現ではなかった');
         }
         if (initialValue.alg) {
@@ -2339,7 +2320,7 @@ class JWESharedHeader {
         // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
         if (options.p?.b64u) {
             const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
-            if (!isJOSEHeader(p, 'JWE')) {
+            if (!isJOSEHeaderParams(p, 'JWE')) {
                 throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
             }
         }
@@ -2366,10 +2347,10 @@ class JWESharedHeader {
     Protected_b64u() {
         if (this.protected_b64u) {
             const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(this.protected_b64u)));
-            if (!isJOSEHeader(p, 'JWE')) {
+            if (!isJOSEHeaderParams(p, 'JWE')) {
                 throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
             }
-            if (!equalsJOSEHeader(p, this.Protected())) {
+            if (!equalsJOSEHeaderParams(p, this.Protected())) {
                 throw new TypeError('オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
                     `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected()}`);
             }
@@ -2780,14 +2761,14 @@ function deserializeCompact$1(compact) {
 function isJWEJSONSerialization(arg) {
     return (isObject(arg) &&
         (arg.protected == null || typeof arg.protected === 'string') &&
-        (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
+        (arg.unprotected == null || isJOSEHeaderParams(arg.unprotected, 'JWE')) &&
         (arg.iv == null || typeof arg.iv === 'string') &&
         (arg.aad == null || typeof arg.aad === 'string') &&
         typeof arg.ciphertext === 'string' &&
         (arg.tag == null || typeof arg.tag === 'string') &&
         Array.isArray(arg.recipients) &&
         arg.recipients.every((u) => isObject(u) &&
-            (u.header == null || isJOSEHeader(u.header, 'JWE')) &&
+            (u.header == null || isJOSEHeaderParams(u.header, 'JWE')) &&
             (u.encrypted_key == null || typeof u.encrypted_key === 'string')));
 }
 function equalsJWEJSONSerialization(l, r) {
@@ -2803,7 +2784,7 @@ function equalsJWEJSONSerialization(l, r) {
         if (l[n] === r[n])
             continue;
     }
-    if (!equalsJOSEHeader(l.unprotected, r.unprotected))
+    if (!equalsJOSEHeaderParams(l.unprotected, r.unprotected))
         return false;
     return (l.recipients.every((ll) => r.recipients.some((rr) => equalsRecipientInJWEJSONSerialization(rr, ll))) &&
         r.recipients.every((rr) => l.recipients.some((ll) => equalsRecipientInJWEJSONSerialization(ll, rr))));
@@ -2815,7 +2796,7 @@ function equalsRecipientInJWEJSONSerialization(l, r) {
         return false;
     if (l.encrypted_key !== r.encrypted_key)
         return false;
-    if (!equalsJOSEHeader(l.header, r.header))
+    if (!equalsJOSEHeaderParams(l.header, r.header))
         return false;
     return true;
 }
@@ -2861,12 +2842,12 @@ function deserializeJSON$1(json) {
 function isJWEFlattenedJSONSerialization(arg) {
     return (isObject(arg) &&
         (arg.protected == null || typeof arg.protected === 'string') &&
-        (arg.unprotected == null || isJOSEHeader(arg.unprotected, 'JWE')) &&
+        (arg.unprotected == null || isJOSEHeaderParams(arg.unprotected, 'JWE')) &&
         (arg.iv == null || typeof arg.iv === 'string') &&
         (arg.aad == null || typeof arg.aad === 'string') &&
         typeof arg.ciphertext === 'string' &&
         (arg.tag == null || typeof arg.tag === 'string') &&
-        (arg.header == null || isJOSEHeader(arg.header, 'JWE')) &&
+        (arg.header == null || isJOSEHeaderParams(arg.header, 'JWE')) &&
         (arg.encrypted_key == null || typeof arg.encrypted_key === 'string'));
 }
 function equalsJWEFlattenedJSONSerialization(l, r) {
@@ -2882,7 +2863,7 @@ function equalsJWEFlattenedJSONSerialization(l, r) {
         if (l[n] === r[n])
             continue;
     }
-    if (!equalsJOSEHeader(l.unprotected, r.unprotected))
+    if (!equalsJOSEHeaderParams(l.unprotected, r.unprotected))
         return false;
     return equalsRecipientInJWEJSONSerialization(l, r);
 }
@@ -3227,15 +3208,15 @@ const isData$1 = (arg) => isObject(arg) &&
     typeof arg.generated.iv === 'string' &&
     (arg.encrypting_key == null ||
         isArrayable(arg.encrypting_key, (u) => isObject(u) &&
-            (u.header == null || isJOSEHeader(u.header, 'JWE')) &&
+            (u.header == null || isJOSEHeaderParams(u.header, 'JWE')) &&
             (u.epk == null || isJWK(u.epk, 'EC', 'Priv')))) &&
     isObject(arg.encrypting_content) &&
     (arg.encrypting_content.protected == null ||
-        isJOSEHeader(arg.encrypting_content.protected, 'JWE')) &&
+        isJOSEHeaderParams(arg.encrypting_content.protected, 'JWE')) &&
     (arg.encrypting_content.protected_b64u == null ||
         typeof arg.encrypting_content.protected_b64u === 'string') &&
     (arg.encrypting_content.unprotected == null ||
-        isJOSEHeader(arg.encrypting_content.unprotected, 'JWE')) &&
+        isJOSEHeaderParams(arg.encrypting_content.unprotected, 'JWE')) &&
     isObject(arg.output) &&
     (arg.output.compact == null || typeof arg.output.compact === 'string') &&
     JWEJSONSerializer.is(arg.output.json) &&
@@ -3940,7 +3921,7 @@ function JWSHeaderBuilderFromSerializedJWS(p_b64u, u) {
     let options;
     if (p_b64u) {
         const initialValue = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(p_b64u)));
-        if (!isJOSEHeader(initialValue, 'JWS')) {
+        if (!isJOSEHeaderParams(initialValue, 'JWS')) {
             throw new TypeError('JWS Protected Header の b64u 表現ではなかった');
         }
         if (initialValue.alg) {
@@ -4057,7 +4038,7 @@ class JWSHeader {
         // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
         if (options.p?.b64u) {
             const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
-            if (!isJOSEHeader(p, 'JWS')) {
+            if (!isJOSEHeaderParams(p, 'JWS')) {
                 throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
             }
         }
@@ -4093,10 +4074,10 @@ class JWSHeader {
     Protected_b64u() {
         if (this.p_b64u) {
             const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(this.p_b64u)));
-            if (!isJOSEHeader(p, 'JWS')) {
+            if (!isJOSEHeaderParams(p, 'JWS')) {
                 throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
             }
-            if (!equalsJOSEHeader(p, this.Protected())) {
+            if (!equalsJOSEHeaderParams(p, this.Protected())) {
                 throw new TypeError('オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
                     `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected()}`);
             }
@@ -4199,7 +4180,7 @@ function isJWSJSONSerialization(arg) {
         Array.isArray(arg.signatures) &&
         arg.signatures.every((s) => isObject(s) &&
             typeof s.signature === 'string' &&
-            (s.header == null || isJOSEHeader(s.header, 'JWS')) &&
+            (s.header == null || isJOSEHeaderParams(s.header, 'JWS')) &&
             (s.protected == null || typeof s.protected === 'string')));
 }
 function serializeJSON(m, hs) {
@@ -4268,7 +4249,7 @@ function equalsSignatureInJWSJSONSerialization(l, r) {
             case 'header': {
                 const ll = ln;
                 const rr = rn;
-                if (equalsJOSEHeader(ll, rr))
+                if (equalsJOSEHeaderParams(ll, rr))
                     continue;
                 return false;
             }
@@ -4311,7 +4292,7 @@ function isJWSFlattenedJSONSerialization(arg) {
         typeof arg.payload === 'string' &&
         (arg.protected == null || typeof arg.protected === 'string') &&
         typeof arg.signature === 'string' &&
-        (arg.header == null || isJOSEHeader(arg.header, 'JWS')));
+        (arg.header == null || isJOSEHeaderParams(arg.header, 'JWS')));
 }
 // --------------------END JWS Serialization definition --------------------
 
@@ -4534,9 +4515,9 @@ function isData(arg) {
         isArrayable(arg.input.alg, (a) => isAlg(a)) &&
         isObject(arg.signing) &&
         isArrayable(arg.signing, (s) => isObject(s) &&
-            (s.protected == null || isJOSEHeader(s.protected, 'JWS')) &&
+            (s.protected == null || isJOSEHeaderParams(s.protected, 'JWS')) &&
             (s.protected_b64u == null || typeof s.protected_b64u === 'string') &&
-            (s.unprotected == null || isJOSEHeader(s.unprotected, 'JWS'))) &&
+            (s.unprotected == null || isJOSEHeaderParams(s.unprotected, 'JWS'))) &&
         isObject(arg.output) &&
         (arg.output.compact == null || typeof arg.output.compact === 'string') &&
         JWSJSONSerializer.is(arg.output.json) &&

@@ -21,14 +21,14 @@ import {
 } from './pbes2/header';
 
 export {
-  JWAAlgSpecificJOSEHeader,
+  JWAAlgSpecificJOSEHeaderParams,
   JWAAlgSpecificJOSEHeaderParamNames,
-  isPartialJWAAlgSpecificJOSEHeader,
-  isJWAAlgSpecificJOSEHeader,
-  equalsJWAAlgSpecificJOSEHeader,
+  isPartialJWAAlgSpecificJOSEHeaderParams,
+  isJWAAlgSpecificJOSEHeaderParams,
+  equalsJWAAlgSpecificJOSEHeaderParams,
 };
 
-type JWAAlgSpecificJOSEHeader = AGCMKWHeaderParams & ECDH_ESHeaderParams & PBES2HeaderParams;
+type JWAAlgSpecificJOSEHeaderParams = AGCMKWHeaderParams & ECDH_ESHeaderParams & PBES2HeaderParams;
 
 const JWAAlgSpecificJOSEHeaderParamNames = [
   ...AGCMKWHeaderParamNames,
@@ -36,19 +36,19 @@ const JWAAlgSpecificJOSEHeaderParamNames = [
   ...PBES2HeaderParamNames,
 ] as const;
 
-const isPartialJWAAlgSpecificJOSEHeader = (
+const isPartialJWAAlgSpecificJOSEHeaderParams = (
   arg: unknown
-): arg is Partial<JWAAlgSpecificJOSEHeader> =>
+): arg is Partial<JWAAlgSpecificJOSEHeaderParams> =>
   isPartialAGCMKWHeaderParams(arg) ||
   isPartialECDH_ESHeaderParams(arg) ||
   isPartialPBES2HeaderParams(arg);
 
-const isJWAAlgSpecificJOSEHeader = (arg: unknown): arg is JWAAlgSpecificJOSEHeader =>
+const isJWAAlgSpecificJOSEHeaderParams = (arg: unknown): arg is JWAAlgSpecificJOSEHeaderParams =>
   isAGCMKWHeaderParams(arg) || isECDH_ESHeaderParams(arg) || isPBES2HeaderParams(arg);
 
-const equalsJWAAlgSpecificJOSEHeader = (
-  l?: Partial<JWAAlgSpecificJOSEHeader>,
-  r?: Partial<JWAAlgSpecificJOSEHeader>
+const equalsJWAAlgSpecificJOSEHeaderParams = (
+  l?: Partial<JWAAlgSpecificJOSEHeaderParams>,
+  r?: Partial<JWAAlgSpecificJOSEHeaderParams>
 ): boolean =>
   equalsAGCMKWHeaderParams(l, r) ||
   equalsECDH_ESHeaderParams(l, r) ||

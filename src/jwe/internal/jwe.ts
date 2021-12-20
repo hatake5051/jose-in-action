@@ -1,5 +1,5 @@
 import { Alg, EncAlg } from 'iana/alg';
-import { JOSEHeader, JOSEHeaderParamName } from 'iana/header';
+import { JOSEHeaderParamName, JOSEHeaderParams } from 'iana/header';
 import {
   JWEAAD,
   JWECEK,
@@ -304,9 +304,9 @@ async function dec(
 
 async function sendCEK(
   keys: JWKSet,
-  h: JOSEHeader<'JWE'>,
+  h: JOSEHeaderParams<'JWE'>,
   options?: { cek?: JWECEK; eprivk?: Arrayable<JWK<'EC', 'Priv'>> }
-): Promise<{ cek: JWECEK; ek?: JWEEncryptedKey; h?: JOSEHeader<'JWE'> }> {
+): Promise<{ cek: JWECEK; ek?: JWEEncryptedKey; h?: JOSEHeaderParams<'JWE'> }> {
   if (!h.alg) {
     throw new TypeError('alg が選択されていない');
   }
@@ -358,7 +358,11 @@ async function sendCEK(
   }
 }
 
-async function recvCEK(keys: JWKSet, h: JOSEHeader<'JWE'>, ek?: JWEEncryptedKey): Promise<JWECEK> {
+async function recvCEK(
+  keys: JWKSet,
+  h: JOSEHeaderParams<'JWE'>,
+  ek?: JWEEncryptedKey
+): Promise<JWECEK> {
   if (!h.alg) {
     throw new TypeError('alg が選択されていない');
   }

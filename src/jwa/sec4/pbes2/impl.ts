@@ -1,4 +1,4 @@
-import { JOSEHeader } from 'iana/header';
+import { JOSEHeaderParams } from 'iana/header';
 import { KeyWrapper } from 'jwe/ineterface';
 import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { JWK } from 'jwk';
@@ -10,13 +10,13 @@ import { isPBES2HeaderParams, PBES2HeaderParams } from './header';
 export { PBES2KeyWrapper };
 
 const PBES2KeyWrapper: KeyWrapper<PBES2Alg> = {
-  wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: JOSEHeader<'JWE'>) => {
+  wrap: async (key: JWK<'oct'>, cek: JWECEK, h?: JOSEHeaderParams<'JWE'>) => {
     if (!h || !isPBES2Alg(h.alg)) {
       throw new TypeError('PBES2 algorithm identifier ではなかった');
     }
     return wrap(key, cek, { ...h, alg: h.alg });
   },
-  unwrap: async (key: JWK<'oct'>, ek: JWEEncryptedKey, h?: JOSEHeader<'JWE'>) => {
+  unwrap: async (key: JWK<'oct'>, ek: JWEEncryptedKey, h?: JOSEHeaderParams<'JWE'>) => {
     if (!h || !isPBES2Alg(h.alg)) {
       throw new TypeError('PBES2 algorithm identifier ではなかった');
     }

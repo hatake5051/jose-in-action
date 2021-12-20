@@ -1,5 +1,5 @@
 import { EncAlg, isEncAlg } from 'iana/alg';
-import { JOSEHeader } from 'iana/header';
+import { JOSEHeaderParams } from 'iana/header';
 import { DirectKeyAgreementer, KeyAgreementerWithKeyWrapping } from 'jwe/ineterface';
 import { JWECEK, JWEEncryptedKey } from 'jwe/type';
 import { exportPublicKey, isJWK, JWK } from 'jwk';
@@ -11,7 +11,7 @@ import { ECDH_ESHeaderParams, isECDH_ESHeaderParams } from './header';
 export { ECDHDirectKeyAgreementer, ECDHKeyAgreementerWithKeyWrapping };
 
 const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
-  partyU: async (key: JWK<'EC', 'Pub'>, h: JOSEHeader<'JWE'>, eprivk?: JWK<'EC', 'Priv'>) => {
+  partyU: async (key: JWK<'EC', 'Pub'>, h: JOSEHeaderParams<'JWE'>, eprivk?: JWK<'EC', 'Priv'>) => {
     if (!isEncAlg(h.enc)) {
       throw new TypeError('JWE に必須のヘッダパラメータがない');
     }
@@ -43,7 +43,7 @@ const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
       h: { epk: exportPublicKey<'EC'>(epk) },
     };
   },
-  partyV: async (key: JWK<'EC', 'Priv'>, h: JOSEHeader<'JWE'>): Promise<JWECEK> => {
+  partyV: async (key: JWK<'EC', 'Priv'>, h: JOSEHeaderParams<'JWE'>): Promise<JWECEK> => {
     if (!isECDH_ESAlg(h.alg)) {
       throw new TypeError('ECDH Direct Key Agreement Algorithm Identifier ではない');
     }
@@ -63,7 +63,7 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
   wrap: async (
     key: JWK<'EC', 'Pub'>,
     cek: JWECEK,
-    h: JOSEHeader<'JWE'>,
+    h: JOSEHeaderParams<'JWE'>,
     eprivk?: JWK<'EC', 'Priv'>
   ): Promise<{ ek: JWEEncryptedKey; h?: ECDH_ESHeaderParams }> => {
     if (!isEncAlg(h.enc)) {
@@ -97,7 +97,7 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
       h: { epk: exportPublicKey<'EC'>(epk) },
     };
   },
-  unwrap: async (key: JWK<'EC', 'Priv'>, ek: JWEEncryptedKey, h: JOSEHeader<'JWE'>) => {
+  unwrap: async (key: JWK<'EC', 'Priv'>, ek: JWEEncryptedKey, h: JOSEHeaderParams<'JWE'>) => {
     if (!isEncAlg(h.enc)) {
       throw new TypeError('JWE に必須のヘッダパラメータがない');
     }
