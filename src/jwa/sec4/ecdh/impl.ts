@@ -2,7 +2,7 @@ import { EncAlg, isEncAlg } from 'iana/alg';
 import { JOSEHeaderParams } from 'iana/header';
 import { DirectKeyAgreementer, KeyAgreementerWithKeyWrapping } from 'jwe/ineterface';
 import { JWECEK, JWEEncryptedKey } from 'jwe/type';
-import { exportPublicKey, isJWK, JWK } from 'jwk';
+import { exportPubJWK, isJWK, JWK } from 'jwk';
 import { ASCII, BASE64URL, BASE64URL_DECODE, CONCAT } from 'utility';
 import { AKWKeyWrapper } from '../aeskw/impl';
 import { ECDH_ESAlg, ECDH_ESKWAlg, isECDH_ESAlg, isECDH_ESKWAlg } from './alg';
@@ -23,7 +23,7 @@ const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
     if (eprivk) {
       return {
         cek: await agree(key, eprivk, { ...h, alg, enc }),
-        h: h.epk ? undefined : { epk: exportPublicKey<'EC'>(eprivk) },
+        h: h.epk ? undefined : { epk: exportPubJWK(eprivk) },
       };
     }
     const eprivk_api = await window.crypto.subtle.generateKey(
@@ -40,7 +40,7 @@ const ECDHDirectKeyAgreementer: DirectKeyAgreementer<ECDH_ESAlg> = {
     }
     return {
       cek: await agree(key, epk, { ...h, alg, enc }),
-      h: { epk: exportPublicKey<'EC'>(epk) },
+      h: { epk: exportPubJWK(epk) },
     };
   },
   partyV: async (key: JWK<'EC', 'Priv'>, h: JOSEHeaderParams<'JWE'>): Promise<JWECEK> => {
@@ -77,7 +77,7 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
     if (eprivk) {
       return {
         ek: await wrap(key, cek, { ...h, alg, enc }, eprivk),
-        h: h.epk ? undefined : { epk: exportPublicKey<'EC'>(eprivk) },
+        h: h.epk ? undefined : { epk: exportPubJWK(eprivk) },
       };
     }
     const eprivk_api = await window.crypto.subtle.generateKey(
@@ -94,7 +94,7 @@ const ECDHKeyAgreementerWithKeyWrapping: KeyAgreementerWithKeyWrapping<ECDH_ESKW
     }
     return {
       ek: await wrap(key, cek, { ...h, alg, enc }, epk),
-      h: { epk: exportPublicKey<'EC'>(epk) },
+      h: { epk: exportPubJWK(epk) },
     };
   },
   unwrap: async (key: JWK<'EC', 'Priv'>, ek: JWEEncryptedKey, h: JOSEHeaderParams<'JWE'>) => {

@@ -1,6 +1,6 @@
 // --------------------BEGIN JWA EC algorithms --------------------
 
-import { JWACrv } from 'jwa/sec6/kty';
+import { JWACrv } from 'jwa/sec6/ec/crv';
 import { JWK } from 'jwk';
 import { SigOperator } from 'jws/interface';
 import { JWSSignature } from 'jws/type';

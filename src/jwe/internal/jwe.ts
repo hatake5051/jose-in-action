@@ -1,5 +1,6 @@
 import { Alg, EncAlg } from 'iana/alg';
 import { JOSEHeaderParamName, JOSEHeaderParams } from 'iana/header';
+import { ktyFromAlg } from 'iana/kty';
 import {
   JWEAAD,
   JWECEK,
@@ -11,7 +12,7 @@ import {
   JWESharedUnprotectedHeader,
   JWETag,
 } from 'jwe/type';
-import { equalsJWK, exportPublicKey, identifyJWK, isJWK, JWK, JWKSet } from 'jwk';
+import { equalsJWK, exportPubJWK, identifyJWK, isJWK, JWK, JWKSet } from 'jwk';
 import { Arrayable, ASCII, BASE64URL } from 'utility';
 import {
   generateCEK,
@@ -310,16 +311,15 @@ async function sendCEK(
   if (!h.alg) {
     throw new TypeError('alg が選択されていない');
   }
+  const key = identifyJWK(keys, { ...h, kty: ktyFromAlg(h.alg) });
   switch (keyMgmtModeFromAlg(h.alg)) {
     case 'KE': {
       if (!options?.cek) throw new EvalError(`Key Encryption では CEK を与えてください`);
-      const key = identifyJWK(h, keys);
       const ek = await newKeyEncryptor(h.alg).enc(h.alg, key, options.cek);
       return { ek, cek: options.cek };
     }
     case 'KW': {
       if (!options?.cek) throw new EvalError(`Key Wrapping では CEK を与えてください`);
-      const key = identifyJWK(h, keys);
       const { ek, h: updatedH } = await newKeyWrappaer(h.alg).wrap(key, options.cek, h);
       return { ek, cek: options.cek, h: updatedH };
     }
@@ -327,9 +327,8 @@ async function sendCEK(
       const eprivk = !options?.eprivk
         ? undefined
         : Array.isArray(options.eprivk)
-        ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.epk))
+        ? options.eprivk.find((k) => equalsJWK(exportPubJWK(k), h.epk))
         : options.eprivk;
-      const key = identifyJWK(h, keys);
       const { cek, h: updatedH } = await newDirectKeyAgreementer(h.alg).partyU(key, h, eprivk);
       return { cek, h: updatedH };
     }
@@ -337,11 +336,10 @@ async function sendCEK(
       const eprivk = !options?.eprivk
         ? undefined
         : Array.isArray(options.eprivk)
-        ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.epk))
+        ? options.eprivk.find((k) => equalsJWK(exportPubJWK(k), h.epk))
         : options.eprivk;
       if (!options?.cek)
         throw new EvalError(`Key Agreement with Key Wrapping では CEK を与えてください`);
-      const key = identifyJWK(h, keys);
       const { ek, h: updatedH } = await newKeyAgreementerWithKeyWrapping(h.alg).wrap(
         key,
         options.cek,
@@ -351,7 +349,6 @@ async function sendCEK(
       return { ek, cek: options.cek, h: updatedH };
     }
     case 'DE': {
-      const key = identifyJWK(h, keys);
       const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
       return { cek };
     }
@@ -366,47 +363,31 @@ async function recvCEK(
   if (!h.alg) {
     throw new TypeError('alg が選択されていない');
   }
+  const key = identifyJWK(keys, { ...h, kty: ktyFromAlg(h.alg) });
+  if (!isJWK(key, 'Priv')) {
+    throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
+  }
   switch (keyMgmtModeFromAlg(h.alg)) {
     case 'KE': {
       if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
-      const key = identifyJWK(h, keys);
-      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-      }
       const cek = await newKeyEncryptor(h.alg).dec(h.alg, key, ek);
       return cek;
     }
     case 'KW': {
       if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
-      const key = identifyJWK(h, keys);
-      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-      }
       const cek = await newKeyWrappaer(h.alg).unwrap(key, ek, h);
       return cek;
     }
     case 'DKA': {
-      const key = identifyJWK(h, keys);
-      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-      }
       const cek = await newDirectKeyAgreementer(h.alg).partyV(key, h);
       return cek;
     }
     case 'KAKW': {
       if (!ek) throw new EvalError(`Encrypted Key を与えてください`);
-      const key = identifyJWK(h, keys);
-      if (!isJWK(key, 'EC', 'Priv')) {
-        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-      }
       const cek = await newKeyAgreementerWithKeyWrapping(h.alg).unwrap(key, ek, h);
       return cek;
     }
     case 'DE': {
-      const key = identifyJWK(h, keys);
-      if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-      }
       const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
       return cek;
     }

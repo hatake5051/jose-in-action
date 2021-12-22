@@ -1,6 +1,6 @@
 // --------------------BEGIN RFC7520 Section 4 test --------------------
 
-import { exportPublicKey, isJWK, JWKSet } from 'jwk';
+import { exportPubJWK, isJWK, JWKSet } from 'jwk';
 import { JWS, JWSFlattenedJSONSerializer, JWSJSONSerializer } from 'jws';
 import { JWSPayload } from 'jws/type';
 import { UTF8 } from 'utility';
@@ -58,9 +58,9 @@ async function test(path: string): Promise<{
   // 検証の準備
   const verifyKeys: JWKSet = {
     keys: keys.keys.map((k) => {
-      if (isJWK<'oct'>(k, 'oct')) return k;
-      if (isJWK<'EC' | 'RSA', 'Priv'>(k, k.kty)) return exportPublicKey(k);
-      throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
+      if (isJWK(k, 'Priv')) return exportPubJWK(k);
+      if (isJWK(k, 'Pub')) return k;
+      throw TypeError(`JWK ではない鍵が紛れ込んでいる ${k}`);
     }),
   };
 

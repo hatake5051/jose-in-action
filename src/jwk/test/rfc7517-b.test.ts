@@ -1,6 +1,6 @@
 // --------------------BEGIN RFC7517 appendix.B test --------------------
 
-import { isJWK, isJWKSet, validJWK } from 'jwk';
+import { isJWK, isJWKSet, verifyJWK } from 'jwk';
 import { parseX509BASE64EncodedDER, validateSelfSignedCert } from '../internal/x509';
 
 export { test };
@@ -32,7 +32,7 @@ async function test(): Promise<{
 
   log += 'TEST NAME: Validate JWK.x5c\n';
   if (isJWK(b, 'RSA', 'Pub')) {
-    if (await validJWK(b, { x5c: { selfSigned: true } })) {
+    if (await verifyJWK(b, { x5c: { selfSigned: true } })) {
       log += 'JWK.x5c (RSA) の検証と整合性の確認に成功\n';
     } else {
       log += 'JWK.x5c (RSA) の検証に失敗\n';
@@ -43,7 +43,7 @@ async function test(): Promise<{
     allGreen = false;
   }
   if (isJWK(amazon_root_ca_3, 'EC', 'Pub')) {
-    if (await validJWK(amazon_root_ca_3, { x5c: { selfSigned: true } })) {
+    if (await verifyJWK(amazon_root_ca_3, { x5c: { selfSigned: true } })) {
       log += 'JWK.x5c (EC) の検証と整合性の確認に成功\n';
     } else {
       log += 'JWK.x5c (EC) の検証に失敗\n';
@@ -63,7 +63,7 @@ async function test(): Promise<{
   } else {
     for (const key of data.keys) {
       if (isJWK(key, 'RSA', 'Pub')) {
-        if (await validJWK(key, { x5c: { selfSigned: true } })) {
+        if (await verifyJWK(key, { x5c: { selfSigned: true } })) {
           log += 'JWK.x5c の検証と整合性の確認に成功\n';
         } else {
           log += 'JWK.x5c の検証に失敗\n';

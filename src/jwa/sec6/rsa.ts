@@ -1,61 +1,22 @@
 // --------------------BEGIN JWA RSA keys --------------------
 
-import { CommomJWKParams, equalsCommonJWKParams, isCommonJWKParams } from 'jwk/common';
 import { isObject } from 'utility';
 
 export {
-  RSAPublicKey,
-  isRSAPublicKey,
-  equalsRSAPublicKey,
-  RSAPrivateKey,
-  isRSAPrivateKey,
-  equalsRSAPrivateKey,
-  exportRSAPublicKey,
-};
-
-/**
- * RSA 公開鍵は JWK 共通パラメータと RSA 公開鍵パラメータからなる。
- */
-type RSAPublicKey = CommomJWKParams<'RSA'> & RSAPublicKeyParams;
-
-/**
- * 引数が RSA 公開鍵かどうか確認する。
- * kty == RSA かどうか、 n,e をパラメータとしてもつか確認する。
- */
-const isRSAPublicKey = (arg: unknown): arg is RSAPublicKey =>
-  isCommonJWKParams(arg) && arg.kty === 'RSA' && isRSAPublicKeyParams(arg);
-
-function equalsRSAPublicKey(l?: RSAPublicKey, r?: RSAPublicKey): boolean {
-  return equalsCommonJWKParams(l, r) && equalsRSAPublicKeyParams(l, r);
-}
-
-/**
- * RSA 秘密鍵は RSA 公開鍵に RSA 秘密鍵パラメータを加えたもの
- */
-type RSAPrivateKey = RSAPublicKey & RSAPrivateKeyParams;
-
-/**
- * 引数が RSA 秘密鍵かどうか確認する。
- * RSA 公開鍵であるか、また d をパラメータとして持つか確認する。
- */
-const isRSAPrivateKey = (arg: unknown): arg is RSAPrivateKey =>
-  isRSAPublicKey(arg) && isRSAPrivateKeyParams(arg);
-
-function equalsRSAPrivateKey(l?: RSAPrivateKey, r?: RSAPrivateKey): boolean {
-  return equalsRSAPublicKey(l, r) && equalsRSAPrivateKeyParams(l, r);
-}
-
-const exportRSAPublicKey = (priv: RSAPrivateKey): RSAPublicKey => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { d, p, q, dp, dq, qi, ...pub } = priv;
-  return pub;
+  JWARSAPubKeyParams,
+  isJWARSAPubKeyParams,
+  equalsJWARSAPubKeyParams,
+  JWARSAPrivKeyParams,
+  isJWARSAPrivKeyParams,
+  equalsJWARSAPrivKeyParams,
+  exportJWARSAPubKeyParams,
 };
 
 /**
  * RFC7518#6.3.1
  * RSA 公開鍵が持つパラメータを定義する。
  */
-type RSAPublicKeyParams = {
+type JWARSAPubKeyParams = {
   /**
    * RFC7518#6.3.1.1
    * n parameter は RSA 公開鍵の modulus値が BASE64URLUint エンコードされている。
@@ -67,23 +28,22 @@ type RSAPublicKeyParams = {
    */
   e: string;
 };
-const rsaPublicKeyParams = ['n', 'e'] as const;
+const JWARSAPubKeyParamNames = ['n', 'e'] as const;
 
-const isRSAPublicKeyParams = (arg: unknown): arg is RSAPublicKeyParams =>
-  isObject<RSAPublicKeyParams>(arg) && typeof arg.n === 'string' && typeof arg.e === 'string';
+const isPartialJWARSAPubKeyParams = (arg: unknown): arg is Partial<JWARSAPubKeyParams> =>
+  isObject<JWARSAPubKeyParams>(arg) &&
+  JWARSAPubKeyParamNames.every((n) => arg[n] == null || typeof arg[n] === 'string');
 
-function equalsRSAPublicKeyParams(l?: RSAPublicKeyParams, r?: RSAPublicKeyParams): boolean {
+const isJWARSAPubKeyParams = (arg: unknown): arg is JWARSAPubKeyParams =>
+  isPartialJWARSAPubKeyParams(arg) && JWARSAPubKeyParamNames.every((n) => arg[n] != null);
+
+function equalsJWARSAPubKeyParams(
+  l?: Partial<JWARSAPubKeyParams>,
+  r?: Partial<JWARSAPubKeyParams>
+): boolean {
   if (l == null && r == null) return true;
   if (l == null || r == null) return false;
-  for (const n of rsaPublicKeyParams) {
-    const ln = l[n];
-    const rn = r[n];
-    if (ln == null && rn == null) continue;
-    if (ln == null || rn == null) return false;
-    if (ln === rn) continue;
-    return false;
-  }
-  return true;
+  return JWARSAPubKeyParamNames.every((n) => l[n] === r[n]);
 }
 
 /**
@@ -91,7 +51,7 @@ function equalsRSAPublicKeyParams(l?: RSAPublicKeyParams, r?: RSAPublicKeyParams
  * RSA 秘密鍵を表すために用いられる。
  * 面倒なので 6.3.2.7 は実装を省いた
  */
-type RSAPrivateKeyParams = {
+type JWARSAPrivKeyParams = {
   /**
    * RFC7518#6.3.2.1
    * d parameter は RSA 秘密鍵の private exponent 値を持つ。
@@ -128,28 +88,41 @@ type RSAPrivateKeyParams = {
    * 値は BASE64URLUint エンコードされている
    */
   qi?: string;
-};
+} & JWARSAPubKeyParams;
 
-const rsaPrivateParams = ['d', 'p', 'q', 'dp', 'dq', 'qi'] as const;
+const JWARSAPrivKeyParamNames = [
+  'd',
+  'p',
+  'q',
+  'dp',
+  'dq',
+  'qi',
+  ...JWARSAPubKeyParamNames,
+] as const;
 
-const isRSAPrivateKeyParams = (arg: unknown): arg is RSAPrivateKeyParams =>
-  isObject<RSAPrivateKeyParams>(arg) &&
-  rsaPrivateParams.every((n) =>
-    n === 'd' ? typeof arg[n] === 'string' : arg[n] == null || typeof arg[n] === 'string'
-  );
+const isPartialJWARSAPrivKeyParams = (arg: unknown): arg is Partial<JWARSAPrivKeyParams> =>
+  isObject<JWARSAPrivKeyParams>(arg) &&
+  JWARSAPrivKeyParamNames.every((n) => arg[n] == null || typeof arg[n] === 'string');
 
-function equalsRSAPrivateKeyParams(l?: RSAPrivateKeyParams, r?: RSAPrivateKeyParams): boolean {
+const isJWARSAPrivKeyParams = (arg: unknown): arg is JWARSAPrivKeyParams =>
+  isPartialJWARSAPrivKeyParams(arg) && arg.d != null;
+
+function equalsJWARSAPrivKeyParams(
+  l?: Partial<JWARSAPrivKeyParams>,
+  r?: Partial<JWARSAPrivKeyParams>
+): boolean {
   if (l == null && r == null) return true;
   if (l == null || r == null) return false;
-  for (const n of rsaPrivateParams) {
-    const ln = l[n];
-    const rn = r[n];
-    if (ln == null && rn == null) continue;
-    if (ln == null || rn == null) return false;
-    if (ln === rn) continue;
-    return false;
-  }
-  return true;
+  return JWARSAPrivKeyParamNames.every((n) => l[n] === r[n]);
+}
+
+function exportJWARSAPubKeyParams(priv: JWARSAPrivKeyParams): JWARSAPubKeyParams {
+  let pub: Partial<JWARSAPubKeyParams> = {};
+  JWARSAPubKeyParamNames.forEach((n) => {
+    pub = { ...pub, [n]: priv[n] };
+  });
+  if (isJWARSAPubKeyParams(pub)) return pub;
+  throw new TypeError('JWARSAPrivKeyParams から公開鍵情報を取り出せませんでした');
 }
 
 // --------------------END JWA RSA keys --------------------

@@ -1,6 +1,5 @@
 import { Alg, EncAlg, isAlg, isEncAlg } from 'iana/alg';
 import { equalsJWK, isJWK, JWK } from 'jwk';
-import { JWSJOSEHeaderParamNames } from 'jws/type';
 import { isObject } from 'utility';
 
 export type JWEJOSEHeaderParams = {
@@ -121,7 +120,7 @@ export function equalsJWEJOSEHeaderParams(
 ): boolean {
   if (l == null && r == null) return true;
   if (l == null || r == null) return false;
-  return JWSJOSEHeaderParamNames.every((n) => {
+  return JWEJOSEHeaderParamNames.every((n) => {
     if (l[n] == null && r[n] == null) return true;
     if (l[n] == null || r[n] == null) return false;
     switch (n) {

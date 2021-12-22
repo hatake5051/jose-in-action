@@ -43,7 +43,7 @@ const isECDH_ESHeaderParams = (arg: unknown): arg is ECDH_ESHeaderParams =>
 const isPartialECDH_ESHeaderParams = (arg: unknown): arg is Partial<ECDH_ESHeaderParams> =>
   isObject<Partial<ECDH_ESHeaderParams>>(arg) &&
   ECDH_ESHeaderParamNames.every(
-    (n) => !arg[n] || (n === 'epk' ? isJWK<'EC', 'Pub'>(arg.epk) : typeof arg[n] === 'string')
+    (n) => !arg[n] || (n === 'epk' ? isJWK(arg.epk, 'EC', 'Pub') : typeof arg[n] === 'string')
   );
 
 const equalsECDH_ESHeaderParams = (

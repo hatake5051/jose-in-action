@@ -1,10 +1,10 @@
 import { isJWAJWSAlg, JWAJWSAlg, KtyFromJWAJWSAlg, ktyFromJWAJWSAlg } from 'jwa/sec3/alg';
 import { isJWAJWEAlg, JWAJWEAlg, KtyFromJWAJWEAlg, ktyFromJWAJWEAlg } from 'jwa/sec4/alg';
 import { isJWAEncAlg, JWAEncAlg, KtyFromJWAEncAlg } from 'jwa/sec5/encalg';
-import { isJWAKty, JWAKty } from 'jwa/sec6/kty';
+import { isJWAKty, JWAKty, JWAKtyList } from 'jwa/sec6/kty';
 import { Alg } from './alg';
 
-export { Kty, isKty, KtyFromAlg, ktyFromAlg };
+export { Kty, isKty, KtyList, KtyFromAlg, ktyFromAlg };
 
 /**
  * Kty は JSON Web Key Types を列挙する。
@@ -12,6 +12,8 @@ export { Kty, isKty, KtyFromAlg, ktyFromAlg };
  */
 type Kty = JWAKty;
 const isKty = (arg: unknown): arg is Kty => isJWAKty(arg);
+
+const KtyList = [...JWAKtyList] as const;
 
 type KtyFromAlg<A extends Alg> = A extends JWAJWSAlg
   ? KtyFromJWAJWSAlg<A>

@@ -234,10 +234,8 @@ function equalsAGCMKWHeaderParams(l, r) {
 }
 
 // --------------------BEGIN JWA Kty and Crv definition --------------------
-const isJWAKty = (arg) => typeof arg == 'string' && jwaKtyList.some((k) => k === arg);
-const jwaKtyList = ['EC', 'RSA', 'oct'];
-const isJWACrv = (arg) => typeof arg === 'string' && jwaCrvList.some((u) => u === arg);
-const jwaCrvList = ['P-256', 'P-384', 'P-521'];
+const JWAKtyList = ['EC', 'RSA', 'oct'];
+const isJWAKty = (arg) => typeof arg == 'string' && JWAKtyList.some((k) => k === arg);
 // --------------------BEGIN JWA Kty and Crv definition --------------------
 
 const isKty = (arg) => isJWAKty(arg);
@@ -255,18 +253,7 @@ function ktyFromAlg(alg) {
 }
 
 const keyUseList = ['sig', 'enc'];
-const isKeyUse = (arg) => {
-    if (typeof arg === 'string') {
-        return keyUseList.some((u) => u === arg);
-    }
-    return false;
-};
-const isKeyOps = (arg) => {
-    if (typeof arg === 'string') {
-        return keyOpsList.some((u) => u === arg);
-    }
-    return false;
-};
+const isKeyUse = (arg) => typeof arg === 'string' && keyUseList.some((u) => u === arg);
 const keyOpsList = [
     'sign',
     'verify',
@@ -277,9 +264,9 @@ const keyOpsList = [
     'deriveKey',
     'deriveBits',
 ];
+const isKeyOps = (arg) => typeof arg === 'string' && keyOpsList.some((u) => u === arg);
 
-// --------------------BEGIN JWK common parameters --------------------
-const commonJWKParamNameList = [
+const CommonJWKParamNames = [
     'kty',
     'use',
     'key_ops',
@@ -293,8 +280,8 @@ const commonJWKParamNameList = [
 /**
  * CommonJWKParams の型ガード。型で表現していない JWK の制限は validJWK でチェックする。
  */
-const isCommonJWKParams = (arg) => isObject(arg) &&
-    commonJWKParamNameList.every((n) => {
+const isPartialCommonJWKParams = (arg) => isObject(arg) &&
+    CommonJWKParamNames.every((n) => {
         if (arg[n] == null)
             return true;
         switch (n) {
@@ -312,49 +299,18 @@ const isCommonJWKParams = (arg) => isObject(arg) &&
                 return typeof arg[n] === 'string';
         }
     });
-function equalsCommonJWKParams(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
+function isCommonJWKParams(arg, kty) {
+    if (!isPartialCommonJWKParams(arg))
         return false;
-    for (const n of commonJWKParamNameList) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        switch (n) {
-            case 'key_ops':
-            case 'x5t': {
-                const ll = ln;
-                const rr = rn;
-                if (new Set(ll).size === new Set(rr).size && ll.every((l) => rr.includes(l)))
-                    continue;
-                return false;
-            }
-            default: {
-                const ll = ln;
-                const rr = rn;
-                if (ll === rr)
-                    continue;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-/**
- * CommonJWKParams が RFC7517 に準拠しているか確認する
- */
-function validCommonJWKParams(params) {
-    if (params.key_ops != null) {
+    if (!arg.kty || (kty && arg.kty !== kty))
+        return false;
+    if (arg.key_ops != null) {
         // key_ops と use は一緒に使うべきではない (SHOULD NOT)
-        if (params.use != null)
+        if (arg.use != null)
             return false;
-        const set = new Set(params.key_ops);
+        const set = new Set(arg.key_ops);
         // key_ops は高々２の配列で、重複する値を含めてはならない(MUST NOT)
-        if (params.key_ops.length > 2 || params.key_ops.length !== set.size)
+        if (arg.key_ops.length > 2 || arg.key_ops.length !== set.size)
             return false;
         if (set.size === 2) {
             // かつ、要素は["sign", "verify"], ["encrypt", "decrypt"], ["wrapKey", "unwrapKey"] のバリエーションのみ(SHOULD)
@@ -367,243 +323,265 @@ function validCommonJWKParams(params) {
     }
     return true;
 }
-// --------------------END JWK common parameters --------------------
-
-// --------------------BEGIN JWA EC keys --------------------
-/**
- * 引数が EC公開鍵の JWK 表現か確認する。
- * kty == EC かどうか、 crv に適した x,y のサイズとなっているかどうか。
- */
-const isECPublicKey = (arg) => isCommonJWKParams(arg) &&
-    arg.kty === 'EC' &&
-    isECPublicKeyParams(arg) &&
-    validECPublicKeyParams(arg);
-function equalsECPublicKey(l, r) {
-    return equalsCommonJWKParams(l, r) && equalsECPublicKeyParams(l, r);
-}
-/**
- * 引数が EC 秘密鍵の JWK 表現か確認する。
- * EC 公開鍵であり、かつ d をパラメータとして持っていれば。
- */
-const isECPrivateKey = (arg) => isECPublicKey(arg) && isECPrivateKeyParams(arg) && validECPrivateKeyParams(arg.crv, arg);
-function equalsECPrivateKey(l, r) {
-    if (!equalsECPublicKey(l, r))
-        return false;
-    return l?.d === r?.d;
-}
-const exportECPublicKey = (priv) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { d, ...pub } = priv;
-    return pub;
-};
-const ecPublicKeyParams = ['crv', 'x', 'y'];
-const isECPublicKeyParams = (arg) => isObject(arg) &&
-    isJWACrv(arg.crv) &&
-    typeof arg.x === 'string' &&
-    typeof arg.x === 'string';
-/**
- * EC 公開鍵パラメータが矛盾した値になってないか確認する
- */
-function validECPublicKeyParams(p) {
-    let key_len;
-    switch (p.crv) {
-        case 'P-256':
-            key_len = 32;
-            break;
-        case 'P-384':
-            key_len = 48;
-            break;
-        case 'P-521':
-            key_len = 66;
-            break;
-    }
-    return BASE64URL_DECODE(p.x).length === key_len && BASE64URL_DECODE(p.y).length === key_len;
-}
-function equalsECPublicKeyParams(l, r) {
+function equalsCommonJWKParams(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
         return false;
-    for (const n of ecPublicKeyParams) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
+    return CommonJWKParamNames.every((n) => {
+        if (l[n] == null && r[n] == null)
+            return true;
+        if (l[n] == null || r[n] == null)
             return false;
-        if (ln === rn)
-            continue;
-        return false;
-    }
-    return true;
+        switch (n) {
+            case 'key_ops':
+            case 'x5c': {
+                return (new Set(l[n]).size === new Set(r[n]).size &&
+                    l[n]?.every((l) => r[n]?.some((r) => r === l)));
+            }
+            default: {
+                return l[n] === r[n];
+            }
+        }
+    });
 }
-const isECPrivateKeyParams = (arg) => isObject(arg) && typeof arg.d === 'string';
-/**
- * EC 秘密鍵パラメータが引数で与えた crv のものか確認する。
- */
-function validECPrivateKeyParams(crv, p) {
-    let key_len;
+function exportCommonJWKParams(jwk) {
+    let ans = {};
+    CommonJWKParamNames.forEach((n) => {
+        ans = { ...ans, [n]: jwk[n] };
+    });
+    if (isCommonJWKParams(ans))
+        return ans;
+    throw new TypeError('CommonJWKParams を抽出できなかった');
+}
+
+const isJWACrv = (arg) => typeof arg === 'string' && jwaCrvList.some((u) => u === arg);
+const jwaCrvList = ['P-256', 'P-384', 'P-521'];
+function keylenOfJWACrv(crv) {
     switch (crv) {
         case 'P-256':
-            key_len = 32;
-            break;
+            return 32;
         case 'P-384':
-            key_len = 48;
-            break;
+            return 48;
         case 'P-521':
-            key_len = 66;
-            break;
+            return 66;
     }
-    return BASE64URL_DECODE(p.d).length === key_len;
 }
-// --------------------END JWA EC keys --------------------
+
+const isCrv = (arg) => isJWACrv(arg);
+function keylenOfCrv(crv) {
+    if (isJWACrv(crv))
+        return keylenOfJWACrv(crv);
+    throw new TypeError(`this crv name(${crv}) is not implemented`);
+}
+
+const JWAECPubKeyParamNames = ['crv', 'x', 'y'];
+function isPartialJWAECPubKeyParams(arg) {
+    if (!isObject(arg))
+        return false;
+    if (arg.crv) {
+        if (!isCrv(arg.crv))
+            return false;
+        return ['x', 'y'].every((n) => {
+            const x = arg[n];
+            try {
+                return typeof x === 'string' && BASE64URL_DECODE(x).length === keylenOfCrv(arg.crv);
+            }
+            catch {
+                return false;
+            }
+        });
+    }
+    return ['x', 'y'].every((n) => arg[n] == null || typeof arg[n] === 'string');
+}
+const isJWAECPubKeyParams = (arg) => isPartialJWAECPubKeyParams(arg) && JWAECPubKeyParamNames.every((n) => arg[n] != null);
+const JWAECPrivKeyParamNames = ['d', ...JWAECPubKeyParamNames];
+function isPartialJWAECPrivKeyParams(arg) {
+    if (!isObject(arg))
+        return false;
+    const d = arg.d;
+    if (!isPartialJWAECPubKeyParams(arg))
+        return false;
+    if (arg.crv) {
+        try {
+            return typeof d === 'string' && BASE64URL_DECODE(d).length === keylenOfCrv(arg.crv);
+        }
+        catch {
+            return false;
+        }
+    }
+    return d == null || typeof d === 'string';
+}
+const isJWAECPrivKeyParams = (arg) => isPartialJWAECPrivKeyParams(arg) && JWAECPrivKeyParamNames.every((n) => arg[n] != null);
+function equalsJWAECPrivKeyParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    return JWAECPrivKeyParamNames.every((n) => l[n] === r[n]);
+}
+function exportJWAECPubKeyParams(priv) {
+    let pub = {};
+    JWAECPubKeyParamNames.forEach((n) => {
+        pub = { ...pub, [n]: priv[n] };
+    });
+    if (isJWAECPubKeyParams(pub))
+        return pub;
+    throw new TypeError('JWAECPrivKeyParams から公開鍵情報を取り出せませんでした');
+}
 
 // --------------------BEGIN JWA symmetric keys --------------------
-/**
- * 引数が対称鍵か確認する。
- * kty == oct で k をパラメータとして持つか確認する。
- */
-const isOctKey = (arg) => isCommonJWKParams(arg) && arg.kty === 'oct' && isoctKeyParams(arg);
-function equalsOctKey(l, r) {
-    if (!equalsCommonJWKParams(l, r))
+const isPartialJWAOctKeyParams = (arg) => isObject(arg) && (arg.k == null || typeof arg.k === 'string');
+const isJWAOctKeyParams = (arg) => isPartialJWAOctKeyParams(arg) && arg.k != null;
+function equalsJWAOctKeyParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
         return false;
-    return l?.k === r?.k;
+    return l.k === r.k;
 }
-const isoctKeyParams = (arg) => isObject(arg) && typeof arg.k === 'string';
 // --------------------END JWA symmetric keys --------------------
 
 // --------------------BEGIN JWA RSA keys --------------------
-/**
- * 引数が RSA 公開鍵かどうか確認する。
- * kty == RSA かどうか、 n,e をパラメータとしてもつか確認する。
- */
-const isRSAPublicKey = (arg) => isCommonJWKParams(arg) && arg.kty === 'RSA' && isRSAPublicKeyParams(arg);
-function equalsRSAPublicKey(l, r) {
-    return equalsCommonJWKParams(l, r) && equalsRSAPublicKeyParams(l, r);
-}
-/**
- * 引数が RSA 秘密鍵かどうか確認する。
- * RSA 公開鍵であるか、また d をパラメータとして持つか確認する。
- */
-const isRSAPrivateKey = (arg) => isRSAPublicKey(arg) && isRSAPrivateKeyParams(arg);
-function equalsRSAPrivateKey(l, r) {
-    return equalsRSAPublicKey(l, r) && equalsRSAPrivateKeyParams(l, r);
-}
-const exportRSAPublicKey = (priv) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { d, p, q, dp, dq, qi, ...pub } = priv;
-    return pub;
-};
-const rsaPublicKeyParams = ['n', 'e'];
-const isRSAPublicKeyParams = (arg) => isObject(arg) && typeof arg.n === 'string' && typeof arg.e === 'string';
-function equalsRSAPublicKeyParams(l, r) {
+const JWARSAPubKeyParamNames = ['n', 'e'];
+const isPartialJWARSAPubKeyParams = (arg) => isObject(arg) &&
+    JWARSAPubKeyParamNames.every((n) => arg[n] == null || typeof arg[n] === 'string');
+const isJWARSAPubKeyParams = (arg) => isPartialJWARSAPubKeyParams(arg) && JWARSAPubKeyParamNames.every((n) => arg[n] != null);
+function equalsJWARSAPubKeyParams(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
         return false;
-    for (const n of rsaPublicKeyParams) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        if (ln === rn)
-            continue;
-        return false;
-    }
-    return true;
+    return JWARSAPubKeyParamNames.every((n) => l[n] === r[n]);
 }
-const rsaPrivateParams = ['d', 'p', 'q', 'dp', 'dq', 'qi'];
-const isRSAPrivateKeyParams = (arg) => isObject(arg) &&
-    rsaPrivateParams.every((n) => n === 'd' ? typeof arg[n] === 'string' : arg[n] == null || typeof arg[n] === 'string');
-function equalsRSAPrivateKeyParams(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    for (const n of rsaPrivateParams) {
-        const ln = l[n];
-        const rn = r[n];
-        if (ln == null && rn == null)
-            continue;
-        if (ln == null || rn == null)
-            return false;
-        if (ln === rn)
-            continue;
-        return false;
-    }
-    return true;
+const JWARSAPrivKeyParamNames = [
+    'd',
+    'p',
+    'q',
+    'dp',
+    'dq',
+    'qi',
+    ...JWARSAPubKeyParamNames,
+];
+const isPartialJWARSAPrivKeyParams = (arg) => isObject(arg) &&
+    JWARSAPrivKeyParamNames.every((n) => arg[n] == null || typeof arg[n] === 'string');
+const isJWARSAPrivKeyParams = (arg) => isPartialJWARSAPrivKeyParams(arg) && arg.d != null;
+function exportJWARSAPubKeyParams(priv) {
+    let pub = {};
+    JWARSAPubKeyParamNames.forEach((n) => {
+        pub = { ...pub, [n]: priv[n] };
+    });
+    if (isJWARSAPubKeyParams(pub))
+        return pub;
+    throw new TypeError('JWARSAPrivKeyParams から公開鍵情報を取り出せませんでした');
 }
 // --------------------END JWA RSA keys --------------------
 
-// --------------------BEGIN JWA JWK definition --------------------
-function isJWAJWK(arg, kty, asym) {
-    switch (kty) {
+const isKeyClass = (arg) => arg === 'Pub' || arg === 'Priv';
+function isJWKOctParams(arg) {
+    return isJWAOctKeyParams(arg);
+}
+function equalsJWKOctParams(l, r) {
+    return equalsJWAOctKeyParams(l, r);
+}
+function isJWKRSAParams(arg, c) {
+    if (c === 'Pub') {
+        return isJWARSAPubKeyParams(arg);
+    }
+    if (c === 'Priv') {
+        return isJWARSAPrivKeyParams(arg);
+    }
+    return isJWARSAPubKeyParams(arg) || isJWARSAPrivKeyParams(arg);
+}
+function equalsJWKRSAParams(l, r) {
+    return equalsJWARSAPubKeyParams(l, r);
+}
+function exportJWKRSAPubParams(priv) {
+    return exportJWARSAPubKeyParams(priv);
+}
+function isJWKECParams(arg, c) {
+    if (c === 'Pub') {
+        return isJWAECPubKeyParams(arg);
+    }
+    if (c === 'Priv') {
+        return isJWAECPrivKeyParams(arg);
+    }
+    return isJWAECPubKeyParams(arg) || isJWAECPrivKeyParams(arg);
+}
+function equalsJWKECParams(l, r) {
+    return equalsJWAECPrivKeyParams(l, r);
+}
+function exportJWKECPubParams(priv) {
+    return exportJWAECPubKeyParams(priv);
+}
+
+function isJWK(arg, opt1, opt2) {
+    // options を整理
+    let k;
+    let c;
+    if (isKty(opt1))
+        k = opt1;
+    if (isKeyClass(opt1))
+        c = opt1;
+    if (isKeyClass(opt2)) {
+        if (c)
+            throw new TypeError('opt1 で KeyClass を指定しています');
+        c = opt2;
+    }
+    // common jwk parameters を満たしているかチェック
+    if (!isCommonJWKParams(arg, k))
+        return false;
+    // kty specific な parameters を満たしているかチェック
+    switch (k) {
         case 'oct':
-            return isOctKey(arg);
-        case 'EC':
-            if (asym === undefined)
-                return isECPublicKey(arg) || isECPrivateKey(arg);
-            if (asym === 'Pub')
-                return isECPublicKey(arg);
-            return isECPrivateKey(arg);
+            return isJWKOctParams(arg);
         case 'RSA':
-            if (asym === undefined)
-                return isRSAPublicKey(arg) || isRSAPrivateKey(arg);
-            if (asym === 'Pub')
-                return isRSAPublicKey(arg);
-            return isRSAPrivateKey(arg);
+            return isJWKRSAParams(arg, c);
+        case 'EC':
+            return isJWKECParams(arg, c);
         default:
-            return false;
+            return isJWKOctParams(arg) || isJWKRSAParams(arg, c) || isJWKECParams(arg, c);
     }
 }
-function equalsJWAJWK(l, r) {
+function equalsJWK(l, r) {
     if (l == null && r == null)
         return true;
     if (l == null || r == null)
         return false;
-    switch (l.kty) {
-        case 'oct':
-            return r.kty === 'oct' && equalsOctKey(l, r);
-        case 'RSA': {
-            if (r.kty !== 'RSA')
-                return false;
-            if (isRSAPrivateKey(l)) {
-                if (isRSAPrivateKey(r))
-                    return equalsRSAPrivateKey(l, r);
-                return false;
-            }
-            if (isRSAPrivateKey(r))
-                return false;
-            return equalsRSAPublicKey(l, r);
-        }
-        case 'EC': {
-            if (r.kty !== 'EC')
-                return false;
-            if (isECPrivateKey(l)) {
-                if (isECPrivateKey(r))
-                    return equalsECPrivateKey(l, r);
-                return false;
-            }
-            if (isECPrivateKey(r))
-                return false;
-            return equalsECPublicKey(l, r);
-        }
+    if (!equalsCommonJWKParams(l, r))
+        return false;
+    if (isJWK(l, 'oct')) {
+        return isJWK(r, 'oct') && equalsJWKOctParams(l, r);
     }
-}
-/**
- * 秘密鍵から公開鍵情報を取り出す。
- */
-function exportJWAPublicKey(priv) {
-    switch (priv.kty) {
-        case 'RSA':
-            return exportRSAPublicKey(priv);
-        case 'EC':
-            return exportECPublicKey(priv);
+    if (isJWK(l, 'RSA')) {
+        return isJWK(r, 'RSA') && equalsJWKRSAParams(l, r);
     }
+    if (isJWK(l, 'EC')) {
+        return isJWK(r, 'EC') && equalsJWKECParams(l, r);
+    }
+    return true;
 }
-// --------------------END JWA JWK definition --------------------
+function exportPubJWK(priv) {
+    if (isJWK(priv, 'RSA', 'Priv')) {
+        const pub = {
+            ...exportCommonJWKParams(priv),
+            ...exportJWKRSAPubParams(priv),
+        };
+        if (isJWK(pub, 'Pub'))
+            return pub;
+        throw new TypeError('公開鍵の抽出に失敗');
+    }
+    if (isJWK(priv, 'EC', 'Priv')) {
+        const pub = {
+            ...exportCommonJWKParams(priv),
+            ...exportJWKECPubParams(priv),
+        };
+        if (isJWK(pub, 'Pub'))
+            return pub;
+        throw new TypeError('公開鍵の抽出に失敗');
+    }
+    return priv;
+}
 
 // --------------------BEGIN X.509 DER praser --------------------
 /**
@@ -1015,64 +993,31 @@ function BASE64_DECODE(STRING) {
 }
 // --------------------END X.509 DER parser --------------------
 
-// --------------------BEGIN JWK definition --------------------
-/**
- * 引数が JWK オブジェクトであるかどうか確認する。
- * kty を指定するとその鍵タイプの JWK 形式を満たすか確認する。
- * asym を指定すると非対称暗号鍵のうち指定した鍵（公開鍵か秘密鍵）かであるかも確認する。
- */
-function isJWK(arg, kty, asym) {
-    // kty を指定しないときは、最低限 JWK が持つべき情報を持っているか確認する
-    if (kty == null)
-        return isCommonJWKParams(arg);
-    if (isJWAKty(kty))
-        return isJWAJWK(arg, kty, asym);
-    return false;
-}
-function equalsJWK(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    if (isJWAKty(l.kty))
-        return equalsJWAJWK(l, r);
-    return false;
-}
-/**
- * 秘密鍵から公開鍵情報を取り出す。
- */
-function exportPublicKey(priv) {
-    if (isJWAKty(priv.kty))
-        return exportJWAPublicKey(priv);
-    throw new EvalError(`${priv.kty} の公開鍵を抽出できなかった`);
-}
-/**
- * 引数が JWK Set かどうか判定する.
- * keys パラメータが存在して、その値が JWK の配列なら OK
- */
-const isJWKSet = (arg) => isObject(arg) && Array.isArray(arg.keys) && arg.keys.every((k) => isJWK(k));
-/**
- * RFC7515(JWS)#6 Key Identification
- *
- */
-function identifyJWK(h, set) {
-    // JWKSet が JOSE Header 外の情報で取得できていれば、そこから必要な鍵を選ぶ
-    if (set) {
-        const filteredByAlg = set.keys.filter((key) => !h.alg || key.kty === ktyFromAlg(h.alg));
-        if (filteredByAlg.length === 1) {
-            return filteredByAlg[0];
-        }
-        for (const key of filteredByAlg) {
-            // RFC7515#4.5 kid Parameter
-            // JWK Set のなかで kid が使われつとき、異なる鍵に別々の "kid" 値が使われるべき (SHOULD)
-            // (異なる鍵で同じ "kid" 値が使われる例: 異なる "kty" で、それらを使うアプリで同等の代替鍵としてみなされる場合)
-            if (key.kid === h.kid) {
-                return key;
-            }
-        }
+function identifyJWK(jwks, policy) {
+    let filtered = jwks.keys;
+    if (policy.kty) {
+        filtered = filtered.filter((key) => policy.kty === key.kty);
+        if (filtered.length === 1)
+            return filtered[0];
     }
-    // JOSE Header のパラメータを読み取るのは未実装
-    throw new EvalError(` JOSEheader(${h}) と JWKSet(${set}) から鍵を識別できなかった`);
+    if (policy.kid) {
+        filtered = filtered.filter((key) => policy.kid === key.kid);
+        if (filtered.length === 1)
+            return filtered[0];
+    }
+    throw new EvalError(`cannot identify from JWKSet using policy ${JSON.stringify(policy)}`);
+}
+async function verifyJWK(jwk, policy) {
+    if (policy.use) {
+        if (policy.use !== jwk.use)
+            return false;
+    }
+    if (policy.x5c) {
+        const err = await verifyJWK_x5c(jwk, policy.x5c);
+        if (err)
+            return false;
+    }
+    return true;
 }
 /**
  * 型で表現しきれない JWK の条件を満たすか確認する。
@@ -1081,34 +1026,18 @@ function identifyJWK(h, set) {
  * options.x5c.selfSigned = true にすると、x5t が自己署名証明書だけを持つか確認し、
  * 署名が正しいか確認する。また jwk パラメータと同じ内容が書かれているか確認する。
  */
-async function validJWK(jwk, options) {
-    if (!validCommonJWKParams(jwk))
-        return false;
-    if (options == null)
-        return true;
-    if (options.use != null) {
-        if (options.use !== jwk.use)
-            return false;
-    }
-    if (options.x5c != null) {
-        const err = await validJWKx5c(jwk, options.x5c?.selfSigned);
-        if (err != null) {
-            throw EvalError(err);
-        }
-    }
-    return true;
-}
-async function validJWKx5c(jwk, selfSigned = false) {
-    if (jwk.x5c == null)
-        return 'JWK.x5c parameter not found';
-    if (jwk.x5c.length === 1 && !selfSigned)
+async function verifyJWK_x5c(jwk, policy) {
+    if (!jwk.x5c)
+        return 'JWK.x5c parameter is not found';
+    if (jwk.x5c.length === 1 && !policy.selfSigned)
         return 'JWK.x5c is self-signed certificate';
     // The key in the first certificate MUST match the public key represented by other members of the JWK. (RFC7517)
     // jwk.x5c[0] が表現する公開鍵はその jwk が表現する値と同じでなければならない
     const crt1 = parseX509BASE64EncodedDER(jwk.x5c[0]);
     switch (jwk.kty) {
         case 'RSA':
-            if (crt1.tbs.spki.kty === 'RSA' &&
+            if (isJWK(jwk, 'RSA') &&
+                crt1.tbs.spki.kty === 'RSA' &&
                 isX509SPKI(crt1.tbs.spki, 'RSA') &&
                 jwk.n === BASE64URL(crt1.tbs.spki.n) &&
                 jwk.e === BASE64URL(crt1.tbs.spki.e)) {
@@ -1116,7 +1045,8 @@ async function validJWKx5c(jwk, selfSigned = false) {
             }
             return 'JWK.x5c[0] does not match with JWK parameteres';
         case 'EC':
-            if (crt1.tbs.spki.kty === 'EC' &&
+            if (isJWK(jwk, 'EC') &&
+                crt1.tbs.spki.kty === 'EC' &&
                 isX509SPKI(crt1.tbs.spki, 'EC') &&
                 jwk.x === BASE64URL(crt1.tbs.spki.x) &&
                 jwk.y === BASE64URL(crt1.tbs.spki.y)) {
@@ -1133,12 +1063,13 @@ async function validJWKx5c(jwk, selfSigned = false) {
         return 'JWK.x5c Signature Verification Error';
     }
 }
-// --------------------END JWK definition --------------------
+
+const isJWKSet = (arg) => isObject(arg) && Array.isArray(arg.keys) && arg.keys.every((jwk) => isJWK(jwk));
 
 const ECDH_ESHeaderParamNames = ['epk', 'apu', 'apv'];
 const isECDH_ESHeaderParams = (arg) => isPartialECDH_ESHeaderParams(arg) && arg.epk != null;
 const isPartialECDH_ESHeaderParams = (arg) => isObject(arg) &&
-    ECDH_ESHeaderParamNames.every((n) => !arg[n] || (n === 'epk' ? isJWK(arg.epk) : typeof arg[n] === 'string'));
+    ECDH_ESHeaderParamNames.every((n) => !arg[n] || (n === 'epk' ? isJWK(arg.epk, 'EC', 'Pub') : typeof arg[n] === 'string'));
 const equalsECDH_ESHeaderParams = (l, r) => {
     if (l == null && r == null)
         return true;
@@ -1170,6 +1101,55 @@ const isPartialJWAAlgSpecificJOSEHeaderParams = (arg) => isPartialAGCMKWHeaderPa
 const equalsJWAAlgSpecificJOSEHeaderParams = (l, r) => equalsAGCMKWHeaderParams(l, r) ||
     equalsECDH_ESHeaderParams(l, r) ||
     equalsPBES2HeaderParams(l, r);
+
+const JWEJOSEHeaderParamNames = [
+    'alg',
+    'enc',
+    'zip',
+    'jku',
+    'jwk',
+    'kid',
+    'x5u',
+    'x5c',
+    'x5t',
+    'x5t#S256',
+    'typ',
+    'cty',
+    'crit',
+];
+const isPartialJWEJOSEHeaderParams = (arg) => isObject(arg) &&
+    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
+        (n === 'alg'
+            ? isAlg(arg[n], 'JWE')
+            : n === 'enc'
+                ? isEncAlg(arg[n])
+                : n === 'jwk'
+                    ? isJWK(arg[n])
+                    : n === 'x5c' || n === 'crit'
+                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
+                        : typeof arg[n] === 'string'));
+function equalsJWEJOSEHeaderParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    return JWEJOSEHeaderParamNames.every((n) => {
+        if (l[n] == null && r[n] == null)
+            return true;
+        if (l[n] == null || r[n] == null)
+            return false;
+        switch (n) {
+            case 'jwk':
+                return equalsJWK(l[n], r[n]);
+            case 'x5c':
+            case 'crit':
+                return (new Set(l[n]).size === new Set(r[n]).size &&
+                    l[n]?.every((l) => r[n]?.some((r) => r === l)));
+            default:
+                return l[n] === r[n];
+        }
+    });
+}
 
 const JWSJOSEHeaderParamNames = [
     'alg',
@@ -1238,55 +1218,6 @@ function equalsJWSJOSEHeaderParams(l, r) {
         }
     }
     return true;
-}
-
-const JWEJOSEHeaderParamNames = [
-    'alg',
-    'enc',
-    'zip',
-    'jku',
-    'jwk',
-    'kid',
-    'x5u',
-    'x5c',
-    'x5t',
-    'x5t#S256',
-    'typ',
-    'cty',
-    'crit',
-];
-const isPartialJWEJOSEHeaderParams = (arg) => isObject(arg) &&
-    JWEJOSEHeaderParamNames.every((n) => arg[n] == null ||
-        (n === 'alg'
-            ? isAlg(arg[n], 'JWE')
-            : n === 'enc'
-                ? isEncAlg(arg[n])
-                : n === 'jwk'
-                    ? isJWK(arg[n])
-                    : n === 'x5c' || n === 'crit'
-                        ? Array.isArray(arg[n]) && arg[n].every((m) => typeof m === 'string')
-                        : typeof arg[n] === 'string'));
-function equalsJWEJOSEHeaderParams(l, r) {
-    if (l == null && r == null)
-        return true;
-    if (l == null || r == null)
-        return false;
-    return JWSJOSEHeaderParamNames.every((n) => {
-        if (l[n] == null && r[n] == null)
-            return true;
-        if (l[n] == null || r[n] == null)
-            return false;
-        switch (n) {
-            case 'jwk':
-                return equalsJWK(l[n], r[n]);
-            case 'x5c':
-            case 'crit':
-                return (new Set(l[n]).size === new Set(r[n]).size &&
-                    l[n]?.every((l) => r[n]?.some((r) => r === l)));
-            default:
-                return l[n] === r[n];
-        }
-    });
 }
 
 const equalsJOSEHeaderParams = (l, r) => {
@@ -1425,7 +1356,7 @@ const ECDHDirectKeyAgreementer = {
         if (eprivk) {
             return {
                 cek: await agree(key, eprivk, { ...h, alg, enc }),
-                h: h.epk ? undefined : { epk: exportPublicKey(eprivk) },
+                h: h.epk ? undefined : { epk: exportPubJWK(eprivk) },
             };
         }
         const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDH', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
@@ -1438,7 +1369,7 @@ const ECDHDirectKeyAgreementer = {
         }
         return {
             cek: await agree(key, epk, { ...h, alg, enc }),
-            h: { epk: exportPublicKey(epk) },
+            h: { epk: exportPubJWK(epk) },
         };
     },
     partyV: async (key, h) => {
@@ -1469,7 +1400,7 @@ const ECDHKeyAgreementerWithKeyWrapping = {
         if (eprivk) {
             return {
                 ek: await wrap$1(key, cek, { ...h, alg, enc }, eprivk),
-                h: h.epk ? undefined : { epk: exportPublicKey(eprivk) },
+                h: h.epk ? undefined : { epk: exportPubJWK(eprivk) },
             };
         }
         const eprivk_api = await window.crypto.subtle.generateKey({ name: 'ECDH', namedCurve: key.crv }, true, ['deriveBits', 'deriveKey']);
@@ -1482,7 +1413,7 @@ const ECDHKeyAgreementerWithKeyWrapping = {
         }
         return {
             ek: await wrap$1(key, cek, { ...h, alg, enc }, epk),
-            h: { epk: exportPublicKey(epk) },
+            h: { epk: exportPubJWK(epk) },
         };
     },
     unwrap: async (key, ek, h) => {
@@ -3058,18 +2989,17 @@ async function sendCEK(keys, h, options) {
     if (!h.alg) {
         throw new TypeError('alg が選択されていない');
     }
+    const key = identifyJWK(keys, { ...h, kty: ktyFromAlg(h.alg) });
     switch (keyMgmtModeFromAlg(h.alg)) {
         case 'KE': {
             if (!options?.cek)
                 throw new EvalError(`Key Encryption では CEK を与えてください`);
-            const key = identifyJWK(h, keys);
             const ek = await newKeyEncryptor(h.alg).enc(h.alg, key, options.cek);
             return { ek, cek: options.cek };
         }
         case 'KW': {
             if (!options?.cek)
                 throw new EvalError(`Key Wrapping では CEK を与えてください`);
-            const key = identifyJWK(h, keys);
             const { ek, h: updatedH } = await newKeyWrappaer(h.alg).wrap(key, options.cek, h);
             return { ek, cek: options.cek, h: updatedH };
         }
@@ -3077,9 +3007,8 @@ async function sendCEK(keys, h, options) {
             const eprivk = !options?.eprivk
                 ? undefined
                 : Array.isArray(options.eprivk)
-                    ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.epk))
+                    ? options.eprivk.find((k) => equalsJWK(exportPubJWK(k), h.epk))
                     : options.eprivk;
-            const key = identifyJWK(h, keys);
             const { cek, h: updatedH } = await newDirectKeyAgreementer(h.alg).partyU(key, h, eprivk);
             return { cek, h: updatedH };
         }
@@ -3087,16 +3016,14 @@ async function sendCEK(keys, h, options) {
             const eprivk = !options?.eprivk
                 ? undefined
                 : Array.isArray(options.eprivk)
-                    ? options.eprivk.find((k) => equalsJWK(exportPublicKey(k), h.epk))
+                    ? options.eprivk.find((k) => equalsJWK(exportPubJWK(k), h.epk))
                     : options.eprivk;
             if (!options?.cek)
                 throw new EvalError(`Key Agreement with Key Wrapping では CEK を与えてください`);
-            const key = identifyJWK(h, keys);
             const { ek, h: updatedH } = await newKeyAgreementerWithKeyWrapping(h.alg).wrap(key, options.cek, h, eprivk);
             return { ek, cek: options.cek, h: updatedH };
         }
         case 'DE': {
-            const key = identifyJWK(h, keys);
             const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
             return { cek };
         }
@@ -3106,50 +3033,34 @@ async function recvCEK(keys, h, ek) {
     if (!h.alg) {
         throw new TypeError('alg が選択されていない');
     }
+    const key = identifyJWK(keys, { ...h, kty: ktyFromAlg(h.alg) });
+    if (!isJWK(key, 'Priv')) {
+        throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
+    }
     switch (keyMgmtModeFromAlg(h.alg)) {
         case 'KE': {
             if (!ek)
                 throw new EvalError(`Encrypted Key を与えてください`);
-            const key = identifyJWK(h, keys);
-            if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-                throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-            }
             const cek = await newKeyEncryptor(h.alg).dec(h.alg, key, ek);
             return cek;
         }
         case 'KW': {
             if (!ek)
                 throw new EvalError(`Encrypted Key を与えてください`);
-            const key = identifyJWK(h, keys);
-            if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-                throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-            }
             const cek = await newKeyWrappaer(h.alg).unwrap(key, ek, h);
             return cek;
         }
         case 'DKA': {
-            const key = identifyJWK(h, keys);
-            if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-                throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-            }
             const cek = await newDirectKeyAgreementer(h.alg).partyV(key, h);
             return cek;
         }
         case 'KAKW': {
             if (!ek)
                 throw new EvalError(`Encrypted Key を与えてください`);
-            const key = identifyJWK(h, keys);
-            if (!isJWK(key, 'EC', 'Priv')) {
-                throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-            }
             const cek = await newKeyAgreementerWithKeyWrapping(h.alg).unwrap(key, ek, h);
             return cek;
         }
         case 'DE': {
-            const key = identifyJWK(h, keys);
-            if (!(isJWK(key, 'EC', 'Priv') || isJWK(key, 'RSA', 'Priv') || isJWK(key, 'oct'))) {
-                throw new EvalError('Encrypted Key から CEK を決定する秘密鍵を同定できなかった');
-            }
             const cek = await newDirectEncrytor(h.alg).extract(h.alg, key);
             return cek;
         }
@@ -3273,11 +3184,11 @@ async function test$6(path) {
     // 暗号文送信者用の鍵準備
     const encKeys = {
         keys: keys.keys.map((k) => {
-            if (isJWK(k, 'oct'))
-                return k;
-            if (isJWK(k, k.kty))
-                return exportPublicKey(k);
-            throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
+            if (isJWK(k, 'Priv'))
+                return exportPubJWK(k);
+            if (isJWK(k, 'Pub'))
+                ;
+            throw TypeError(`JWK ではない鍵が紛れ込んでいる ${k}`);
         }),
     };
     // JWE 生成
@@ -3502,7 +3413,7 @@ async function test$4() {
     }
     log += 'TEST NAME: Validate JWK.x5c\n';
     if (isJWK(b, 'RSA', 'Pub')) {
-        if (await validJWK(b, { x5c: { selfSigned: true } })) {
+        if (await verifyJWK(b, { x5c: { selfSigned: true } })) {
             log += 'JWK.x5c (RSA) の検証と整合性の確認に成功\n';
         }
         else {
@@ -3515,7 +3426,7 @@ async function test$4() {
         allGreen = false;
     }
     if (isJWK(amazon_root_ca_3, 'EC', 'Pub')) {
-        if (await validJWK(amazon_root_ca_3, { x5c: { selfSigned: true } })) {
+        if (await verifyJWK(amazon_root_ca_3, { x5c: { selfSigned: true } })) {
             log += 'JWK.x5c (EC) の検証と整合性の確認に成功\n';
         }
         else {
@@ -3536,7 +3447,7 @@ async function test$4() {
     else {
         for (const key of data.keys) {
             if (isJWK(key, 'RSA', 'Pub')) {
-                if (await validJWK(key, { x5c: { selfSigned: true } })) {
+                if (await verifyJWK(key, { x5c: { selfSigned: true } })) {
                     log += 'JWK.x5c の検証と整合性の確認に成功\n';
                 }
                 else {
@@ -4433,21 +4344,20 @@ async function sign(keys, m, h) {
     if (!alg) {
         throw new EvalError('alg が指定されていない');
     }
+    const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
     switch (JWSOpeModeFromAlg(alg)) {
         case 'None':
             // Unsecured JWS の場合は、署名値がない。
             return new Uint8Array();
         case 'Sig': {
             // JOSE Header の alg がデジタル署名の場合
-            const key = identifyJWK(jh, keys);
             // key が秘密鍵かどうか、型ガードを行う
-            if (!isJWK(key, ktyFromAlg(alg), 'Priv'))
+            if (!isJWK(key, 'Priv'))
                 throw new TypeError('公開鍵で署名しようとしている');
             return newSigOperator(alg).sign(alg, key, input);
         }
         case 'MAC': {
             // JOSE Header の alg が MAC の場合
-            const key = identifyJWK(jh, keys);
             return newMacOperator(alg).mac(alg, key, input);
         }
     }
@@ -4458,23 +4368,19 @@ async function verify(keys, m, h, s) {
     if (!alg) {
         throw new EvalError('alg が指定されていない');
     }
+    const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
+    const input = jwsinput(m, h.Protected_b64u());
     switch (JWSOpeModeFromAlg(alg)) {
         case 'None':
             return true;
         case 'Sig': {
             if (!s)
                 return false;
-            const input = jwsinput(m, h.Protected_b64u());
-            const key = identifyJWK(jh, keys);
-            if (!isJWK(key, ktyFromAlg(alg), 'Pub'))
-                throw new TypeError('秘密鍵で検証しようとしている');
             return newSigOperator(alg).verify(alg, key, input, s);
         }
         case 'MAC': {
             if (!s)
                 return false;
-            const input = jwsinput(m, h.Protected_b64u());
-            const key = identifyJWK(jh, keys);
             return newMacOperator(alg).verify(alg, key, input, s);
         }
     }
@@ -4570,11 +4476,11 @@ async function test(path) {
     // 検証の準備
     const verifyKeys = {
         keys: keys.keys.map((k) => {
-            if (isJWK(k, 'oct'))
+            if (isJWK(k, 'Priv'))
+                return exportPubJWK(k);
+            if (isJWK(k, 'Pub'))
                 return k;
-            if (isJWK(k, k.kty))
-                return exportPublicKey(k);
-            throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
+            throw TypeError(`JWK ではない鍵が紛れ込んでいる ${k}`);
         }),
     };
     if (data.reproducible) {

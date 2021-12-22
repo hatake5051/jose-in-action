@@ -1,6 +1,6 @@
 import { JWE, JWEFlattenedJSONSerializer, JWEJSONSerializer } from 'jwe';
 import { JWEAAD, JWECEK, JWEIV } from 'jwe/type';
-import { exportPublicKey, isJWK, JWK, JWKSet } from 'jwk';
+import { exportPubJWK, isJWK, JWK, JWKSet } from 'jwk';
 import { BASE64URL, BASE64URL_DECODE, UTF8, UTF8_DECODE } from 'utility';
 import { fetchData } from './rfc7520.5.test';
 
@@ -62,9 +62,9 @@ async function test(path: string): Promise<{
   // 暗号文送信者用の鍵準備
   const encKeys: JWKSet = {
     keys: keys.keys.map((k) => {
-      if (isJWK<'oct'>(k, 'oct')) return k;
-      if (isJWK<'EC' | 'RSA', 'Priv'>(k, k.kty)) return exportPublicKey(k);
-      throw TypeError(`JWK ではない鍵が紛れ込んでいる $key`);
+      if (isJWK(k, 'Priv')) return exportPubJWK(k);
+      if (isJWK(k, 'Pub')) k;
+      throw TypeError(`JWK ではない鍵が紛れ込んでいる ${k}`);
     }),
   };
   // JWE 生成
