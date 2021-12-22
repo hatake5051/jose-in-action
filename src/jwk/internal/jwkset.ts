@@ -1,6 +1,5 @@
-import { isJWK } from 'jwk';
 import { isObject } from 'utility';
-import { JWK } from './jwk';
+import { isJWK, JWK } from './jwk';
 
 export { JWKSet, isJWKSet };
 
