@@ -193,6 +193,7 @@ class JWSHeader {
 
     this.h = value;
     this.paramNames = paramNames;
+    this.p_b64u = options.p?.b64u;
     return;
   }
 

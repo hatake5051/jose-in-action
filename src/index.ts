@@ -7,6 +7,7 @@ import { test as x5ctest } from 'jwk/test/rfc7517-b.test';
 import { test as ectest } from 'jwk/test/rfc7520-ec.test';
 import { test as octtest } from 'jwk/test/rfc7520-oct.test';
 import { test as rsatest } from 'jwk/test/rfc7520-rsa.test';
+import { test as jwsAtest } from 'jws/test/rfc7515.A.test';
 import { paths as jwspaths } from 'jws/test/rfc7520.4.test';
 import { test as jwstest } from 'jws/test/rfc7520.test';
 
@@ -40,6 +41,14 @@ async function test_jws() {
     console.log(log);
     console.groupEnd();
   });
+  {
+    console.group('RFC7515 Appendix の例');
+    const { title, allGreen, log } = await jwsAtest();
+    allAllGreen &&= allGreen;
+    console.group(title, allGreen);
+    console.log(log);
+    console.groupEnd();
+  }
   console.log('JWS のテスト終了', allAllGreen);
   console.groupEnd();
 }

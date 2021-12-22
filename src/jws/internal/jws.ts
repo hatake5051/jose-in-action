@@ -191,7 +191,7 @@ async function sign(keys: JWKSet, m: JWSPayload, h: JWSHeader): Promise<JWSSigna
   if (!alg) {
     throw new EvalError('alg が指定されていない');
   }
-  const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
+
   switch (JWSOpeModeFromAlg(alg)) {
     case 'None':
       // Unsecured JWS の場合は、署名値がない。
@@ -199,11 +199,13 @@ async function sign(keys: JWKSet, m: JWSPayload, h: JWSHeader): Promise<JWSSigna
     case 'Sig': {
       // JOSE Header の alg がデジタル署名の場合
       // key が秘密鍵かどうか、型ガードを行う
+      const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
       if (!isJWK(key, 'Priv')) throw new TypeError('公開鍵で署名しようとしている');
       return newSigOperator<typeof alg>(alg).sign(alg, key, input);
     }
     case 'MAC': {
       // JOSE Header の alg が MAC の場合
+      const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
       return newMacOperator<typeof alg>(alg).mac(alg, key, input);
     }
   }
@@ -220,17 +222,20 @@ async function verify(
   if (!alg) {
     throw new EvalError('alg が指定されていない');
   }
-  const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
-  const input = jwsinput(m, h.Protected_b64u());
+
   switch (JWSOpeModeFromAlg(alg)) {
     case 'None':
       return true;
     case 'Sig': {
       if (!s) return false;
+      const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
+      const input = jwsinput(m, h.Protected_b64u());
       return newSigOperator<typeof alg>(alg).verify(alg, key, input, s);
     }
     case 'MAC': {
       if (!s) return false;
+      const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
+      const input = jwsinput(m, h.Protected_b64u());
       return newMacOperator<typeof alg>(alg).verify(alg, key, input, s);
     }
   }
