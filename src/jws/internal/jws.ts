@@ -7,7 +7,7 @@ import { identifyJWK, isJWK, JWKSet } from 'jwk';
 import { JWSPayload, JWSProtectedHeader, JWSSignature, JWSUnprotectedHeader } from 'jws/type';
 import { Arrayable, ASCII, BASE64URL } from 'utility';
 import { JWSOpeModeFromAlg, newMacOperator, newSigOperator } from './di';
-import { JWSHeader, JWSHeaderBuilder, JWSHeaderBuilderFromSerializedJWS } from './header';
+import { JWSHeader } from './header';
 import {
   JWSCompactSerializer,
   JWSFlattenedJSONSerializer,
@@ -32,14 +32,22 @@ class JWS {
 
   /**
    * RFC7515#5.1 Message Signature or MAC Computation
-   *
+   * @param alg JWS Signature を計算するためのアルゴリズム識別子。複数署名する場合は配列として与える。
+   * @param keys JWS Signature を計算するために使う署名鍵を含む JWK Set
+   * @param m JWS Payload として使うコンテンツ
+   * @param options JOSE Header を構成するための情報をオプションとして与えることができる。
+   * `header` パラメータに引数 `alg` で与えたのと同じ順番でヘッダに関する情報を与える。
+   * 各ヘッダに関する情報は Protected Header に関するものを`p` パラメータへ、 Unprotected Header に関するものを `u` パラメータで与える。
+   * それぞれは、 `initialValue` に初期値を与えることができる。 `paramNames` を指定すると、各ヘッダに組み込む値を制限できる。
+   * Protected Header にかぎり、 `b64u` パラメータにより Protected Header の base64url 表現を与えることもできる。
+   * これら情報の無矛盾性は Header 構築時に検証される。
+   * これらを指定しない場合は次の通り。
+   * `alg` は Protected Header に組み込まれる。 Signature 計算時に生成したヘッダパラメータは `alg` と同じ方のヘッダへ組み込まれる。
+   * @returns JWS を返す。 `JWS.serialize` によってシリアライゼーションした値を得ることができる。
    */
   static async produce(
-    alg: Alg<'JWS'> | Alg<'JWS'>[],
+    alg: Arrayable<Alg<'JWS'>>,
     keys: JWKSet,
-    /**
-     * JWS Payload として使用するコンテンツ。
-     */
     m: JWSPayload,
     options?: {
       header?: Arrayable<{
@@ -61,7 +69,7 @@ class JWS {
         throw new TypeError('alg を配列として渡す場合は長さが2以上にしてください');
       }
       if (!options?.header) {
-        const h = alg.map((a) => JWSHeaderBuilder(a));
+        const h = alg.map((a) => JWSHeader.build(a));
         headerPerRcpt = [h[0], h[1], ...h.slice(2)];
       } else {
         const oh = options.header;
@@ -70,7 +78,7 @@ class JWS {
             'alg を配列としてわたし、オプションを指定する場合は同じ長さの配列にしてください。さらに、インデックスが同じ受信者を表すようにしてください'
           );
         }
-        const h = alg.map((a, i) => JWSHeaderBuilder(a, oh[i]));
+        const h = alg.map((a, i) => JWSHeader.build(a, oh[i]));
         headerPerRcpt = [h[0], h[1], ...h.slice(2)];
       }
     } else {
@@ -78,7 +86,7 @@ class JWS {
       if (oh && Array.isArray(oh)) {
         throw new TypeError('alg が一つの時は、オプションを複数指定しないでください');
       }
-      headerPerRcpt = JWSHeaderBuilder(alg, oh);
+      headerPerRcpt = JWSHeader.build(alg, oh);
     }
 
     // ヘッダーごとにコンテンツに対して署名や MAC 計算を行う。
@@ -107,24 +115,24 @@ class JWS {
         const { p_b64u, m, s } = JWSCompactSerializer.deserialize(
           data as JWSSerialization<'compact'>
         );
-        const header = JWSHeaderBuilderFromSerializedJWS(p_b64u);
+        const header = JWSHeader.buildFromJWSSerialization(p_b64u);
         return new JWS(m, { header, sig: s });
       }
       case 'json': {
         const { m, hs } = JWSJSONSerializer.deserialize(data as JWSSerialization<'json'>);
         const h = Array.isArray(hs)
           ? hs.map((h) => ({
-              header: JWSHeaderBuilderFromSerializedJWS(h.p_b64u, h.u),
+              header: JWSHeader.buildFromJWSSerialization(h.p_b64u, h.u),
               sig: h.sig,
             }))
-          : { header: JWSHeaderBuilderFromSerializedJWS(hs.p_b64u, hs.u), sig: hs.sig };
+          : { header: JWSHeader.buildFromJWSSerialization(hs.p_b64u, hs.u), sig: hs.sig };
         return new JWS(m, h);
       }
       case 'json_flat': {
         const { m, h, s } = JWSFlattenedJSONSerializer.deserialize(
           data as JWSSerialization<'json_flat'>
         );
-        return new JWS(m, { header: JWSHeaderBuilderFromSerializedJWS(h.p_b64u, h.u), sig: s });
+        return new JWS(m, { header: JWSHeader.buildFromJWSSerialization(h.p_b64u, h.u), sig: s });
       }
     }
   }

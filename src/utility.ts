@@ -51,21 +51,25 @@ export function BASE64URL(OCTETS: Uint8Array): string {
  * バイト列に BASE64URL デコードする (string to Uint8Array)
  */
 export function BASE64URL_DECODE(STRING: string) {
-  const url_decode = STRING
-    // URL-safe にするために変換した文字たちを戻す
-    .replaceAll('-', '+')
-    .replaceAll('_', '/')
-    // 文字列長が4の倍数になるように padding文字で埋める
-    .padEnd(Math.ceil(STRING.length / 4) * 4, '=');
-  // window 組み込みの base64 decode 関数
-  // この関数はデコードの結果をバイナリ文字列として出力する
-  const b_str = window.atob(url_decode);
-  // バイナリ文字列を Uint8Array に変換する
-  const b = new Uint8Array(b_str.length);
-  for (let i = 0; i < b_str.length; i++) {
-    b[i] = b_str.charCodeAt(i);
+  try {
+    const url_decode = STRING
+      // URL-safe にするために変換した文字たちを戻す
+      .replaceAll('-', '+')
+      .replaceAll('_', '/')
+      // 文字列長が4の倍数になるように padding文字で埋める
+      .padEnd(Math.ceil(STRING.length / 4) * 4, '=');
+    // window 組み込みの base64 decode 関数
+    // この関数はデコードの結果をバイナリ文字列として出力する
+    const b_str = window.atob(url_decode);
+    // バイナリ文字列を Uint8Array に変換する
+    const b = new Uint8Array(b_str.length);
+    for (let i = 0; i < b_str.length; i++) {
+      b[i] = b_str.charCodeAt(i);
+    }
+    return b;
+  } catch (e: unknown) {
+    throw new TypeError(`与えられた文字列 ${STRING} は base64 encoded string ではない`);
   }
-  return b;
 }
 
 /**

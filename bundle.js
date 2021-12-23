@@ -186,21 +186,26 @@ function BASE64URL(OCTETS) {
  * バイト列に BASE64URL デコードする (string to Uint8Array)
  */
 function BASE64URL_DECODE(STRING) {
-    const url_decode = STRING
-        // URL-safe にするために変換した文字たちを戻す
-        .replaceAll('-', '+')
-        .replaceAll('_', '/')
-        // 文字列長が4の倍数になるように padding文字で埋める
-        .padEnd(Math.ceil(STRING.length / 4) * 4, '=');
-    // window 組み込みの base64 decode 関数
-    // この関数はデコードの結果をバイナリ文字列として出力する
-    const b_str = window.atob(url_decode);
-    // バイナリ文字列を Uint8Array に変換する
-    const b = new Uint8Array(b_str.length);
-    for (let i = 0; i < b_str.length; i++) {
-        b[i] = b_str.charCodeAt(i);
+    try {
+        const url_decode = STRING
+            // URL-safe にするために変換した文字たちを戻す
+            .replaceAll('-', '+')
+            .replaceAll('_', '/')
+            // 文字列長が4の倍数になるように padding文字で埋める
+            .padEnd(Math.ceil(STRING.length / 4) * 4, '=');
+        // window 組み込みの base64 decode 関数
+        // この関数はデコードの結果をバイナリ文字列として出力する
+        const b_str = window.atob(url_decode);
+        // バイナリ文字列を Uint8Array に変換する
+        const b = new Uint8Array(b_str.length);
+        for (let i = 0; i < b_str.length; i++) {
+            b[i] = b_str.charCodeAt(i);
+        }
+        return b;
     }
-    return b;
+    catch (e) {
+        throw new TypeError(`与えられた文字列 ${STRING} は base64 encoded string ではない`);
+    }
 }
 /**
  * ２つのバイト列を結合する
@@ -3801,12 +3806,14 @@ function newJWAMACOperator(alg) {
 
 const JWSOpeModeList = ['MAC', 'Sig', 'None'];
 
-// --------------------BEGIN JWS dependency injection --------------------
+/**
+ * @file interface.ts の実装を集約して jws.ts へ提供する。
+ */
 function JWSOpeModeFromAlg(alg) {
     const m = JWSOpeModeList.find((m) => isJWAJWSAlg(alg, m));
     if (m)
         return m;
-    throw new TypeError(`${alg} は JWS のものではない`);
+    throw new TypeError(`${alg} の実装がない`);
 }
 /**
  * 署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
@@ -3824,56 +3831,16 @@ function newMacOperator(alg) {
         return newJWAMACOperator(alg);
     throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }
-// --------------------END JWS dependency injection --------------------
 
 // --------------------BEGIN JWS Header definition --------------------
-function JWSHeaderBuilderFromSerializedJWS(p_b64u, u) {
-    let alg;
-    let options;
-    if (p_b64u) {
-        const initialValue = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(p_b64u)));
-        if (!isJOSEHeaderParams(initialValue, 'JWS')) {
-            throw new TypeError('JWS Protected Header の b64u 表現ではなかった');
-        }
-        if (initialValue.alg) {
-            alg = initialValue.alg;
-        }
-        if (options) {
-            options.p = { initialValue: initialValue, b64u: p_b64u };
-        }
-        else {
-            options = {
-                p: { initialValue: initialValue, b64u: p_b64u },
-            };
-        }
-    }
-    if (u) {
-        const initialValue = u;
-        if (initialValue.alg) {
-            alg = initialValue.alg;
-        }
-        if (options) {
-            options.u = { initialValue };
-        }
-        else {
-            options = { u: { initialValue } };
-        }
-    }
-    if (!alg) {
-        throw new TypeError('JOSEHeder.alg がなかった');
-    }
-    return JWSHeaderBuilder(alg, options);
-}
-function JWSHeaderBuilder(alg, options) {
-    return new JWSHeader(alg, options);
-}
 /**
- * JWS では JOSE Header は JWS Protected Header と JWS Unprotected Header の union で表現されるが、
- * 内部構造としてヘッダーパラメータが Protected かどうかという情報を保持し続けるためにクラスで定義している。
- * p と u のいずれか一方は存在することが必要で、どちらかには alg パラメータが含まれている
+ * JWS において JOSE Header は 一連の Header Parameters からなるが、これらパラメータは JWS Protected Header と
+ * JWS Unprotected Header のいずれかに分類される。
+ * JWS が複数署名に対応している場合は、 署名操作ごとに一つの JWS Header を用意する必要がある。
  */
 class JWSHeader {
     constructor(alg, options) {
+        // options の指定がない時は、 protected header に alg を組み込む
         if (!options) {
             this.h = { alg };
             this.paramNames = { p: new Set(['alg']), u: new Set() };
@@ -3886,7 +3853,7 @@ class JWSHeader {
                 const opt = options[i];
                 if (opt?.initialValue?.alg) {
                     if (opt.initialValue.alg !== alg) {
-                        throw new TypeError(`オプションで指定する ${i}.InitialValue Header と alg の値が一致していない`);
+                        throw new TypeError(`options.${i}.initialValue.alg: ${opt.initialValue.alg} と ${alg} の値が一致していない`);
                     }
                     isConfigured = true;
                     continue;
@@ -3899,12 +3866,7 @@ class JWSHeader {
             }
             if (!isConfigured) {
                 if (options.p) {
-                    if (options.p.initialValue) {
-                        options.p.initialValue = { ...options.p.initialValue, alg };
-                    }
-                    else {
-                        options.p.initialValue = { alg };
-                    }
+                    options.p.initialValue = { ...options.p.initialValue, alg };
                     if (options.p.paramNames) {
                         options.p.paramNames.add('alg');
                     }
@@ -3914,68 +3876,147 @@ class JWSHeader {
                 }
             }
         }
+        // コンストラクタでプロパティに与える情報たち
         let value = {};
         const paramNames = {
             p: new Set(),
             u: new Set(),
         };
         for (const i of ['p', 'u']) {
-            const h = options[i];
-            if (!h)
+            const opt = options[i];
+            if (!opt)
                 continue;
+            if (!opt.initialValue) {
+                opt.paramNames?.forEach((n) => paramNames[i].add(n));
+                continue;
+            }
             // 初期値として与えるヘッダー情報とヘッダー名情報が矛盾していないかチェック
-            if (h.initialValue) {
-                if (h.paramNames) {
-                    for (const n of Object.keys(h.initialValue)) {
-                        if (isJOSEHeaderParamName(n) && !h.paramNames.has(n)) {
-                            throw new TypeError(`オプションで指定する ${i}.Header の初期値と Header Parameter Names が一致していない` +
-                                ` because: initValue にあるパラメータ名 ${n} は paramNames ${h.paramNames} に含まれていません`);
-                        }
+            if (opt.paramNames) {
+                for (const n of Object.keys(opt.initialValue)) {
+                    if (isJOSEHeaderParamName(n) && !opt.paramNames.has(n)) {
+                        throw new TypeError(`options.${i}.initialValue.${n} に値(${opt.initialValue[n]})があるが options.${i}.paramNames には含まれていない`);
                     }
-                    h.paramNames.forEach((n) => paramNames[i].add(n));
                 }
-                else {
-                    Object.keys(h.initialValue).forEach((n) => {
-                        if (isJOSEHeaderParamName(n))
-                            paramNames[i].add(n);
-                    });
-                }
-                value = { ...value, ...h.initialValue };
+                opt.paramNames.forEach((n) => paramNames[i].add(n));
             }
             else {
-                h.paramNames?.forEach((n) => paramNames[i].add(n));
+                Object.keys(opt.initialValue).forEach((n) => {
+                    if (isJOSEHeaderParamName(n))
+                        paramNames[i].add(n);
+                });
             }
+            value = { ...value, ...opt.initialValue };
         }
         // オプションで渡される Protected Header の Base64url 表現が JOSE Header のものかチェック
         if (options.p?.b64u) {
-            const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
-            if (!isJOSEHeaderParams(p, 'JWS')) {
-                throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
+            let p;
+            try {
+                p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(options.p.b64u)));
             }
+            catch (e) {
+                throw new TypeError(`options.p.b64u: ${options.p.b64u} は JSON の base64url encoding ではない`);
+            }
+            if (!isJOSEHeaderParams(p, 'JWS')) {
+                throw new TypeError(`options.p.b64u: ${options.p.b64u} は JOSE Header for JWS の base64url encoding ではない`);
+            }
+            this.p_b64u = {
+                raw: options.p?.b64u,
+                json: p,
+            };
         }
         // params の整合性チェック。重複していないかどうか判断する
-        const params = new Set();
-        let paramsDesiredSize = 0;
-        paramNames.p.forEach((n) => params.add(n));
-        paramsDesiredSize += paramNames.p.size;
-        paramNames.u.forEach((n) => params.add(n));
-        paramsDesiredSize += paramNames.u.size;
-        if (paramsDesiredSize !== params.size) {
-            throw new TypeError('オプションで指定する Header Parameter Names が衝突しています。同じパラメータを異なるヘッダーに組み込むことはできません');
+        {
+            const params = new Set();
+            let paramsDesiredSize = 0;
+            for (const n of ['p', 'u']) {
+                paramNames[n].forEach((name) => params.add(name));
+                paramsDesiredSize += paramNames[n].size;
+            }
+            if (paramsDesiredSize !== params.size) {
+                throw new TypeError('オプションで指定する Header Parameter Names が衝突しています。同じパラメータを異なるヘッダーに組み込むことはできません');
+            }
         }
+        // インスタンスの作成
         this.h = value;
         this.paramNames = paramNames;
-        this.p_b64u = options.p?.b64u;
         return;
     }
     /**
+     * JWS Header を構築する。オプションを指定しない場合は、 `alg` は Protected Header として扱われ、 JWS Signature 時に生成された Heade Parameters
+     * は `alg` と同じヘッダとして扱う。
+     * @param alg JWS Signature 生成アルゴリズムの識別子。
+     * @param options ヘッダを構築する上でのオプションを指定する。`p` では Protected Header に関する指定を、
+     * `u` では Unprotected Header に関する指定を行う。
+     * それぞれは `initialValue` によって初期値を与えることができる。`paramNames` を指定することで、各ヘッダに格納される
+     * パラメータを制限できる。`paramNames` を使用する場合は、 `initialValue` に書いたパラメータも含めること。
+     * Protected Header に限っては、 `b64u` によって Base64URL 表現を指定することができる。
+     * これは JWS Protected Header を base64 url エンコーディングする際に、このインスタンスが持つパラメータと一致するか検証される。
+     * @returns JWS Header
+     * @throws options が alg や自身で矛盾している場合に TypeError を吐く
+     */
+    static build(alg, options) {
+        return new JWSHeader(alg, options);
+    }
+    /**
+     * JWS Header を JWS Serialization からの情報をもとに構築する。
+     * @param p_b64u JWS Protected Header の base64url encoding 表現
+     * @param u JWS Unprotected Header の JSON 表現
+     * @returns JWS Header
+     * @throws options が alg や自身で矛盾している場合に TypeError を吐く
+     */
+    static buildFromJWSSerialization(p_b64u, u) {
+        let alg;
+        let options;
+        if (p_b64u) {
+            let initialValue;
+            try {
+                initialValue = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(p_b64u)));
+            }
+            catch (e) {
+                throw new TypeError(`p_b64u: ${p_b64u} は JSON の base64url encoding ではない`);
+            }
+            if (!isJOSEHeaderParams(initialValue, 'JWS')) {
+                throw new TypeError(`p_b64u: ${p_b64u} は JOSE Header for JWS の base64url encoding ではない`);
+            }
+            if (initialValue.alg) {
+                alg = initialValue.alg;
+            }
+            if (options) {
+                options.p = { initialValue: initialValue, b64u: p_b64u };
+            }
+            else {
+                options = {
+                    p: { initialValue: initialValue, b64u: p_b64u },
+                };
+            }
+        }
+        if (u) {
+            const initialValue = u;
+            if (initialValue.alg) {
+                alg = initialValue.alg;
+            }
+            if (options) {
+                options.u = { initialValue };
+            }
+            else {
+                options = { u: { initialValue } };
+            }
+        }
+        if (!alg) {
+            throw new TypeError('p_b64u と u を合わせても alg が存在しなかった');
+        }
+        return new JWSHeader(alg, options);
+    }
+    /**
      * JWS Protected Header と JWS Unprotected Header の Union を返す
+     * @returns JOSE Header
      */
     JOSE() {
         return this.h;
     }
     /**
      * JWS Protected Header があれば返す。
+     * @returns undefined or JWS Protected Header
      */
     Protected() {
         const entries = Object.entries(this.h).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.p.has(n));
@@ -3983,17 +4024,19 @@ class JWSHeader {
             return undefined;
         return Object.fromEntries(entries);
     }
+    /**
+     * JWS Protected Header の base64url 表現があれば返す。
+     * ヘッダ構成時に base64url 情報を与えていればそれを使う。ただし、このメソッド実行時にこのインスタンスが保有する
+     * this.Protected() と内容が一致しない場合は TypeError を吐く
+     * @returns undefined or BASE64URL(UTF8(JWS Protected Header))
+     * @throws options と矛盾したら TypeError
+     */
     Protected_b64u() {
         if (this.p_b64u) {
-            const p = JSON.parse(UTF8_DECODE(BASE64URL_DECODE(this.p_b64u)));
-            if (!isJOSEHeaderParams(p, 'JWS')) {
-                throw new TypeError('オプションで指定された Protected Header の b64u のデコード結果が JOSE Header for JWE ではなかった');
+            if (!equalsJOSEHeaderParams(this.p_b64u.json, this.Protected())) {
+                throw new TypeError(`オプションで指定された Protected Header(${this.p_b64u.raw}) と生成した Protected Header(${JSON.stringify(this.Protected())}) が一致しなかった`);
             }
-            if (!equalsJOSEHeaderParams(p, this.Protected())) {
-                throw new TypeError('オプションで指定された Protected Header と生成した Protected Header が一致しなかった' +
-                    `becasuse: decoded options.b64u: ${p} but generated protected header: ${this.Protected()}`);
-            }
-            return this.p_b64u;
+            return this.p_b64u.raw;
         }
         const p = this.Protected();
         if (p) {
@@ -4003,6 +4046,7 @@ class JWSHeader {
     }
     /**
      * JWS Unprotected Header があれば返す。
+     * @returns undefined or JWS Unprotected Header
      */
     Unprotected() {
         const entries = Object.entries(this.h).filter(([n]) => isJOSEHeaderParamName(n) && this.paramNames.u.has(n));
@@ -4010,6 +4054,10 @@ class JWSHeader {
             return undefined;
         return Object.fromEntries(entries);
     }
+    /**
+     * JWS Header の内容を更新する。（署名生成時生成した検証時に必要なパラメータなど)
+     * @param v 更新内容の JOSE Header Parameteres
+     */
     update(v) {
         Object.entries(v).forEach(([n, vv]) => {
             if (!isJOSEHeaderParamName(n))
@@ -4223,20 +4271,27 @@ class JWS {
     }
     /**
      * RFC7515#5.1 Message Signature or MAC Computation
-     *
+     * @param alg JWS Signature を計算するためのアルゴリズム識別子。複数署名する場合は配列として与える。
+     * @param keys JWS Signature を計算するために使う署名鍵を含む JWK Set
+     * @param m JWS Payload として使うコンテンツ
+     * @param options JOSE Header を構成するための情報をオプションとして与えることができる。
+     * `header` パラメータに引数 `alg` で与えたのと同じ順番でヘッダに関する情報を与える。
+     * 各ヘッダに関する情報は Protected Header に関するものを`p` パラメータへ、 Unprotected Header に関するものを `u` パラメータで与える。
+     * それぞれは、 `initialValue` に初期値を与えることができる。 `paramNames` を指定すると、各ヘッダに組み込む値を制限できる。
+     * Protected Header にかぎり、 `b64u` パラメータにより Protected Header の base64url 表現を与えることもできる。
+     * これら情報の無矛盾性は Header 構築時に検証される。
+     * これらを指定しない場合は次の通り。
+     * `alg` は Protected Header に組み込まれる。 Signature 計算時に生成したヘッダパラメータは `alg` と同じ方のヘッダへ組み込まれる。
+     * @returns JWS を返す。 `JWS.serialize` によってシリアライゼーションした値を得ることができる。
      */
-    static async produce(alg, keys, 
-    /**
-     * JWS Payload として使用するコンテンツ。
-     */
-    m, options) {
+    static async produce(alg, keys, m, options) {
         let headerPerRcpt;
         if (Array.isArray(alg)) {
             if (alg.length < 2) {
                 throw new TypeError('alg を配列として渡す場合は長さが2以上にしてください');
             }
             if (!options?.header) {
-                const h = alg.map((a) => JWSHeaderBuilder(a));
+                const h = alg.map((a) => JWSHeader.build(a));
                 headerPerRcpt = [h[0], h[1], ...h.slice(2)];
             }
             else {
@@ -4244,7 +4299,7 @@ class JWS {
                 if (!Array.isArray(oh) || oh.length !== alg.length) {
                     throw new TypeError('alg を配列としてわたし、オプションを指定する場合は同じ長さの配列にしてください。さらに、インデックスが同じ受信者を表すようにしてください');
                 }
-                const h = alg.map((a, i) => JWSHeaderBuilder(a, oh[i]));
+                const h = alg.map((a, i) => JWSHeader.build(a, oh[i]));
                 headerPerRcpt = [h[0], h[1], ...h.slice(2)];
             }
         }
@@ -4253,7 +4308,7 @@ class JWS {
             if (oh && Array.isArray(oh)) {
                 throw new TypeError('alg が一つの時は、オプションを複数指定しないでください');
             }
-            headerPerRcpt = JWSHeaderBuilder(alg, oh);
+            headerPerRcpt = JWSHeader.build(alg, oh);
         }
         // ヘッダーごとにコンテンツに対して署名や MAC 計算を行う。
         // 計算の実体は sign で実装。
@@ -4273,22 +4328,22 @@ class JWS {
         switch (jwsSerializationFormat(data)) {
             case 'compact': {
                 const { p_b64u, m, s } = JWSCompactSerializer.deserialize(data);
-                const header = JWSHeaderBuilderFromSerializedJWS(p_b64u);
+                const header = JWSHeader.buildFromJWSSerialization(p_b64u);
                 return new JWS(m, { header, sig: s });
             }
             case 'json': {
                 const { m, hs } = JWSJSONSerializer.deserialize(data);
                 const h = Array.isArray(hs)
                     ? hs.map((h) => ({
-                        header: JWSHeaderBuilderFromSerializedJWS(h.p_b64u, h.u),
+                        header: JWSHeader.buildFromJWSSerialization(h.p_b64u, h.u),
                         sig: h.sig,
                     }))
-                    : { header: JWSHeaderBuilderFromSerializedJWS(hs.p_b64u, hs.u), sig: hs.sig };
+                    : { header: JWSHeader.buildFromJWSSerialization(hs.p_b64u, hs.u), sig: hs.sig };
                 return new JWS(m, h);
             }
             case 'json_flat': {
                 const { m, h, s } = JWSFlattenedJSONSerializer.deserialize(data);
-                return new JWS(m, { header: JWSHeaderBuilderFromSerializedJWS(h.p_b64u, h.u), sig: s });
+                return new JWS(m, { header: JWSHeader.buildFromJWSSerialization(h.p_b64u, h.u), sig: s });
             }
         }
     }

@@ -1,16 +1,18 @@
-// --------------------BEGIN JWS dependency injection --------------------
+/**
+ * @file interface.ts の実装を集約して jws.ts へ提供する。
+ */
 
 import { Alg } from 'iana/alg';
 import { isJWAJWSAlg } from 'jwa/sec3/alg';
 import { newJWAMACOperator, newJWASigOperator } from 'jwa/sec3/impl';
 import { JWSOpeMode, JWSOpeModeList, MACOperator, SigOperator } from 'jws/interface';
 
-export { newSigOperator, newMacOperator };
+export { JWSOpeModeFromAlg, newSigOperator, newMacOperator };
 
-export function JWSOpeModeFromAlg(alg: Alg<'JWS'>): JWSOpeMode {
+function JWSOpeModeFromAlg(alg: Alg<'JWS'>): JWSOpeMode {
   const m = JWSOpeModeList.find((m) => isJWAJWSAlg(alg, m));
   if (m) return m;
-  throw new TypeError(`${alg} は JWS のものではない`);
+  throw new TypeError(`${alg} の実装がない`);
 }
 
 /**
@@ -28,5 +30,3 @@ function newMacOperator<A extends Alg<'JWS'>>(alg: A): MACOperator<A> {
   if (isJWAJWSAlg(alg, 'MAC')) return newJWAMACOperator(alg) as MACOperator<A>;
   throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }
-
-// --------------------END JWS dependency injection --------------------

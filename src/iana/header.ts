@@ -15,7 +15,7 @@ import {
   isPartialJWSJOSEHeaderParams,
   JWSJOSEHeaderParamNames,
   JWSJOSEHeaderParams,
-} from 'jws/type';
+} from 'jws/header';
 
 export {
   JOSEHeaderParams,
