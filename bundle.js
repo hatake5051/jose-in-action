@@ -23,43 +23,6 @@ const rsAlgList = ['RS256', 'RS384', 'RS512'];
 const isPSAlg = (arg) => typeof arg === 'string' && psAlgList.some((a) => a === arg);
 const psAlgList = ['PS256', 'PS384', 'PS512'];
 
-// --------------------BEGIN JWA JWS algorithms --------------------
-function isJWAJWSAlg(arg, m) {
-    switch (m) {
-        case 'Sig':
-            return isJWASigAlg(arg);
-        case 'MAC':
-            return isJWAMACAlg(arg);
-        case 'None':
-            return isJWANoneAlg(arg);
-        case undefined:
-            return isJWASigAlg(arg) || isJWAMACAlg(arg) || isJWANoneAlg(arg);
-        default:
-            return false;
-    }
-}
-const isJWASigAlg = (arg) => isRSAlg(arg) || isPSAlg(arg) || isESAlg(arg);
-/**
- * 引数が JWS の MAC アルゴリズムか確認する
- */
-const isJWAMACAlg = (arg) => isHSAlg(arg);
-const isJWANoneAlg = (arg) => typeof arg === 'string' && arg === 'none';
-/**
- * JWS Alg に応じた Kty を返す。
- */
-function ktyFromJWAJWSAlg(alg) {
-    if (isPSAlg(alg) || isRSAlg(alg))
-        return 'RSA';
-    if (isESAlg(alg))
-        return 'EC';
-    if (isHSAlg(alg))
-        return 'oct';
-    if (isJWANoneAlg(alg))
-        throw new EvalError('none alg で鍵は使わない');
-    throw new TypeError(`${alg} は JWA で定義された JWS の Alg ではない`);
-}
-// --------------------END JWA JWS algorithms --------------------
-
 const isAGCMKWAlg = (arg) => typeof arg === 'string' && agcmAlgList.some((a) => a === arg);
 const agcmAlgList = ['A128GCMKW', 'A192GCMKW', 'A256GCMKW'];
 
@@ -133,12 +96,39 @@ const isJWAEncAlg = (arg) => isACBCEnc(arg) || isAGCMEnc(arg);
 
 function isAlg(arg, t) {
     if (t === 'JWS')
-        return isJWAJWSAlg(arg);
+        return isJWSAlg(arg);
     if (t === 'JWE')
         return isJWAJWEAlg(arg);
-    return isJWAJWSAlg(arg) || isJWAJWEAlg(arg);
+    return isJWSAlg(arg) || isJWAJWEAlg(arg);
 }
 const isEncAlg = (arg) => isJWAEncAlg(arg);
+function ktyFromAlg(alg) {
+    if (isJWSAlg(alg)) {
+        return ktyFromJWSAlg(alg);
+    }
+    if (isJWAJWEAlg(alg)) {
+        return ktyFromJWAJWEAlg(alg);
+    }
+    if (isJWAEncAlg(alg)) {
+        return 'oct';
+    }
+    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
+}
+function isJWSAlg(arg) {
+    const list = [isRSAlg, isPSAlg, isESAlg, isHSAlg, (x) => x === 'none'];
+    return list.some((f) => f(arg));
+}
+function ktyFromJWSAlg(alg) {
+    if (isPSAlg(alg) || isRSAlg(alg))
+        return 'RSA';
+    if (isESAlg(alg))
+        return 'EC';
+    if (isHSAlg(alg))
+        return 'oct';
+    if (alg === 'none')
+        throw new TypeError('none alg で鍵は使わない');
+    throw new TypeError(`${alg} は JWA で定義された JWS の Alg ではない`);
+}
 
 // --------------------BEGIN util functions --------------------
 /**
@@ -244,18 +234,6 @@ const isJWAKty = (arg) => typeof arg == 'string' && JWAKtyList.some((k) => k ===
 // --------------------BEGIN JWA Kty and Crv definition --------------------
 
 const isKty = (arg) => isJWAKty(arg);
-function ktyFromAlg(alg) {
-    if (isJWAJWSAlg(alg)) {
-        return ktyFromJWAJWSAlg(alg);
-    }
-    if (isJWAJWEAlg(alg)) {
-        return ktyFromJWAJWEAlg(alg);
-    }
-    if (isJWAEncAlg(alg)) {
-        return 'oct';
-    }
-    throw new TypeError(`${alg} に対応する鍵の kty がわからなかった`);
-}
 
 const keyUseList = ['sig', 'enc'];
 const isKeyUse = (arg) => typeof arg === 'string' && keyUseList.some((u) => u === arg);
@@ -3786,9 +3764,23 @@ function params(alg) {
 // --------------------END JWA RSA algorithms --------------------
 
 /**
- * JWA で定義されている署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ * @file interface.ts の実装を集約して jws.ts へ提供する。
  */
-function newJWASigOperator(alg) {
+function JWSOpeModeFromAlg(alg) {
+    const isSigAlg = [isRSAlg, isPSAlg, isESAlg];
+    const isMACAlg = [isHSAlg];
+    if (isSigAlg.some((f) => f(alg)))
+        return 'Sig';
+    if (isMACAlg.some((f) => f(alg)))
+        return 'MAC';
+    if (alg === 'none')
+        return 'None';
+    throw new TypeError(`${alg} の実装がない`);
+}
+/**
+ * 署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
+ */
+function newSigOperator(alg) {
     if (isRSAlg(alg) || isPSAlg(alg))
         return RSASigOperator;
     if (isESAlg(alg))
@@ -3798,37 +3790,9 @@ function newJWASigOperator(alg) {
 /**
  * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
  */
-function newJWAMACOperator(alg) {
+function newMacOperator(alg) {
     if (isHSAlg(alg))
         return HMACOperator;
-    throw TypeError(`MacOperator<${alg}> は実装されていない`);
-}
-
-const JWSOpeModeList = ['MAC', 'Sig', 'None'];
-
-/**
- * @file interface.ts の実装を集約して jws.ts へ提供する。
- */
-function JWSOpeModeFromAlg(alg) {
-    const m = JWSOpeModeList.find((m) => isJWAJWSAlg(alg, m));
-    if (m)
-        return m;
-    throw new TypeError(`${alg} の実装がない`);
-}
-/**
- * 署名アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newSigOperator(alg) {
-    if (isJWAJWSAlg(alg, 'Sig'))
-        return newJWASigOperator(alg);
-    throw new TypeError(`SigOperator<${alg}> は実装されていない`);
-}
-/**
- * MAC アルゴリズム識別子(alg) に応じたアルゴリズムの実装を返す関数
- */
-function newMacOperator(alg) {
-    if (isJWAJWSAlg(alg, 'MAC'))
-        return newJWAMACOperator(alg);
     throw TypeError(`MacOperator<${alg}> は実装されていない`);
 }
 

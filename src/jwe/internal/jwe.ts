@@ -1,6 +1,5 @@
-import { Alg, EncAlg } from 'iana/alg';
+import { Alg, EncAlg, ktyFromAlg } from 'iana/alg';
 import { JOSEHeaderParamName, JOSEHeaderParams } from 'iana/header';
-import { ktyFromAlg } from 'iana/kty';
 import {
   JWEAAD,
   JWECEK,

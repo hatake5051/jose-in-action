@@ -1,6 +1,5 @@
-import { Alg, EncAlg } from 'iana/alg';
+import { Alg, EncAlg, KtyFromAlg } from 'iana/alg';
 import { JOSEHeaderParams } from 'iana/header';
-import { KtyFromAlg } from 'iana/kty';
 import { JWK } from 'jwk';
 import { JWEAAD, JWECEK, JWECiphertext, JWEEncryptedKey, JWEIV, JWETag } from './type';
 
