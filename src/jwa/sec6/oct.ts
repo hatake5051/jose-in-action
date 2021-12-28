@@ -2,7 +2,7 @@
 
 import { isObject } from 'utility';
 
-export { JWAOctKeyParams, isJWAOctKeyParams, equalsJWAOctKeyParams };
+export { JWAOctKeyParams, isJWAOctKeyParams, isPartialJWAOctKeyParams, equalsJWAOctKeyParams };
 
 /**
  * RFC7518#6.4
@@ -16,7 +16,6 @@ type JWAOctKeyParams = {
    */
   k: string;
 };
-const JWAOctKeyParamNames = ['k'] as const;
 
 const isPartialJWAOctKeyParams = (arg: unknown): arg is Partial<JWAOctKeyParams> =>
   isObject<JWAOctKeyParams>(arg) && (arg.k == null || typeof arg.k === 'string');

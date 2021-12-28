@@ -102,5 +102,8 @@ function exportPubJWK<K extends Kty>(priv: JWK<K, 'Priv'>): JWK<K, 'Pub'> {
     if (isJWK<K, 'Pub'>(pub, 'Pub')) return pub;
     throw new TypeError('公開鍵の抽出に失敗');
   }
-  return priv;
+  if (isJWK(priv, 'oct')) {
+    return priv as unknown as JWK<K, 'Pub'>;
+  }
+  throw new TypeError('priv の JWK Kty が知らないもの');
 }

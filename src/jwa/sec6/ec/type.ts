@@ -4,8 +4,11 @@ import { BASE64URL_DECODE, isObject } from 'utility';
 export {
   JWAECPubKeyParams,
   isJWAECPubKeyParams,
+  isPartialJWAECPubKeyParams,
+  equalsJWAECPubKeyParams,
   JWAECPrivKeyParams,
   isJWAECPrivKeyParams,
+  isPartialJWAECPrivKeyParams,
   equalsJWAECPrivKeyParams,
   exportJWAECPubKeyParams,
 };
@@ -35,7 +38,8 @@ type JWAECPubKeyParams = {
    * crv によって座標のオクテット表現の長さは固定である。
    */
   y: string;
-};
+} & { _brand: 'JWAECPubKeyParams' };
+
 const JWAECPubKeyParamNames = ['crv', 'x', 'y'] as const;
 
 function isPartialJWAECPubKeyParams(arg: unknown): arg is Partial<JWAECPubKeyParams> {
@@ -78,7 +82,8 @@ type JWAECPrivKeyParams = {
    * crv によってオクテット表現の長さは固定である。
    */
   d: string;
-} & JWAECPubKeyParams;
+} & Omit<JWAECPubKeyParams, '_brand'> & { _brand: 'JWAECPrivKeyParams' };
+
 const JWAECPrivKeyParamNames = ['d', ...JWAECPubKeyParamNames] as const;
 
 function isPartialJWAECPrivKeyParams(arg: unknown): arg is Partial<JWAECPrivKeyParams> {

@@ -314,6 +314,8 @@ async function sendCEK(
   switch (keyMgmtModeFromAlg(h.alg)) {
     case 'KE': {
       if (!options?.cek) throw new EvalError(`Key Encryption では CEK を与えてください`);
+      if (!isJWK(key, 'Pub'))
+        throw new TypeError(`JWE 生成時の Key Encryption では秘密鍵を使いません`);
       const ek = await newKeyEncryptor(h.alg).enc(h.alg, key, options.cek);
       return { ek, cek: options.cek };
     }
@@ -328,6 +330,8 @@ async function sendCEK(
         : Array.isArray(options.eprivk)
         ? options.eprivk.find((k) => equalsJWK(exportPubJWK(k), h.epk))
         : options.eprivk;
+      if (!isJWK(key, 'Pub'))
+        throw new TypeError(`JWE 生成時の Direct Key Agreement では秘密鍵を使いません`);
       const { cek, h: updatedH } = await newDirectKeyAgreementer(h.alg).partyU(key, h, eprivk);
       return { cek, h: updatedH };
     }
@@ -339,6 +343,8 @@ async function sendCEK(
         : options.eprivk;
       if (!options?.cek)
         throw new EvalError(`Key Agreement with Key Wrapping では CEK を与えてください`);
+      if (!isJWK(key, 'Pub'))
+        throw new TypeError(`JWE 生成時の Key Agreement with Key Wrappingn では秘密鍵を使いません`);
       const { ek, h: updatedH } = await newKeyAgreementerWithKeyWrapping(h.alg).wrap(
         key,
         options.cek,

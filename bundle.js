@@ -378,6 +378,13 @@ function isPartialJWAECPubKeyParams(arg) {
     return ['x', 'y'].every((n) => arg[n] == null || typeof arg[n] === 'string');
 }
 const isJWAECPubKeyParams = (arg) => isPartialJWAECPubKeyParams(arg) && JWAECPubKeyParamNames.every((n) => arg[n] != null);
+function equalsJWAECPubKeyParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    return JWAECPubKeyParamNames.every((n) => l[n] === r[n]);
+}
 const JWAECPrivKeyParamNames = ['d', ...JWAECPubKeyParamNames];
 function isPartialJWAECPrivKeyParams(arg) {
     if (!isObject(arg))
@@ -449,6 +456,13 @@ const JWARSAPrivKeyParamNames = [
 const isPartialJWARSAPrivKeyParams = (arg) => isObject(arg) &&
     JWARSAPrivKeyParamNames.every((n) => arg[n] == null || typeof arg[n] === 'string');
 const isJWARSAPrivKeyParams = (arg) => isPartialJWARSAPrivKeyParams(arg) && arg.d != null;
+function equalsJWARSAPrivKeyParams(l, r) {
+    if (l == null && r == null)
+        return true;
+    if (l == null || r == null)
+        return false;
+    return JWARSAPrivKeyParamNames.every((n) => l[n] === r[n]);
+}
 function exportJWARSAPubKeyParams(priv) {
     let pub = {};
     JWARSAPubKeyParamNames.forEach((n) => {
@@ -476,11 +490,35 @@ function isJWKRSAParams(arg, c) {
     }
     return isJWARSAPubKeyParams(arg) || isJWARSAPrivKeyParams(arg);
 }
+function isPartialJWKRSAParams(arg, c) {
+    if (c === 'Pub') {
+        return isPartialJWARSAPubKeyParams(arg);
+    }
+    if (c === 'Priv') {
+        return isPartialJWARSAPrivKeyParams(arg);
+    }
+    return isPartialJWARSAPubKeyParams(arg) || isPartialJWARSAPrivKeyParams(arg);
+}
 function equalsJWKRSAParams(l, r) {
-    return equalsJWARSAPubKeyParams(l, r);
+    if (isPartialJWKRSAParams(l, 'Priv')) {
+        return isPartialJWKRSAParams(r, 'Priv') && equalsJWARSAPrivKeyParams(l, r);
+    }
+    if (isPartialJWKRSAParams(l, 'Pub')) {
+        return isPartialJWKRSAParams(r, 'Pub') && equalsJWARSAPubKeyParams(l, r);
+    }
+    return false;
 }
 function exportJWKRSAPubParams(priv) {
     return exportJWARSAPubKeyParams(priv);
+}
+function isPartialJWKECParams(arg, c) {
+    if (c === 'Pub') {
+        return isPartialJWAECPubKeyParams(arg);
+    }
+    if (c === 'Priv') {
+        return isPartialJWAECPrivKeyParams(arg);
+    }
+    return isPartialJWAECPubKeyParams(arg) || isPartialJWAECPrivKeyParams(arg);
 }
 function isJWKECParams(arg, c) {
     if (c === 'Pub') {
@@ -492,7 +530,13 @@ function isJWKECParams(arg, c) {
     return isJWAECPubKeyParams(arg) || isJWAECPrivKeyParams(arg);
 }
 function equalsJWKECParams(l, r) {
-    return equalsJWAECPrivKeyParams(l, r);
+    if (isPartialJWKECParams(l, 'Priv')) {
+        return isPartialJWKECParams(r, 'Priv') && equalsJWAECPrivKeyParams(l, r);
+    }
+    if (isPartialJWKECParams(l, 'Pub')) {
+        return isPartialJWKECParams(r, 'Pub') && equalsJWAECPubKeyParams(l, r);
+    }
+    return false;
 }
 function exportJWKECPubParams(priv) {
     return exportJWAECPubKeyParams(priv);
@@ -563,7 +607,10 @@ function exportPubJWK(priv) {
             return pub;
         throw new TypeError('公開鍵の抽出に失敗');
     }
-    return priv;
+    if (isJWK(priv, 'oct')) {
+        return priv;
+    }
+    throw new TypeError('priv の JWK Kty が知らないもの');
 }
 
 // --------------------BEGIN X.509 DER praser --------------------
@@ -2977,6 +3024,8 @@ async function sendCEK(keys, h, options) {
         case 'KE': {
             if (!options?.cek)
                 throw new EvalError(`Key Encryption では CEK を与えてください`);
+            if (!isJWK(key, 'Pub'))
+                throw new TypeError(`JWE 生成時の Key Encryption では秘密鍵を使いません`);
             const ek = await newKeyEncryptor(h.alg).enc(h.alg, key, options.cek);
             return { ek, cek: options.cek };
         }
@@ -2992,6 +3041,8 @@ async function sendCEK(keys, h, options) {
                 : Array.isArray(options.eprivk)
                     ? options.eprivk.find((k) => equalsJWK(exportPubJWK(k), h.epk))
                     : options.eprivk;
+            if (!isJWK(key, 'Pub'))
+                throw new TypeError(`JWE 生成時の Direct Key Agreement では秘密鍵を使いません`);
             const { cek, h: updatedH } = await newDirectKeyAgreementer(h.alg).partyU(key, h, eprivk);
             return { cek, h: updatedH };
         }
@@ -3003,6 +3054,8 @@ async function sendCEK(keys, h, options) {
                     : options.eprivk;
             if (!options?.cek)
                 throw new EvalError(`Key Agreement with Key Wrapping では CEK を与えてください`);
+            if (!isJWK(key, 'Pub'))
+                throw new TypeError(`JWE 生成時の Key Agreement with Key Wrappingn では秘密鍵を使いません`);
             const { ek, h: updatedH } = await newKeyAgreementerWithKeyWrapping(h.alg).wrap(key, options.cek, h, eprivk);
             return { ek, cek: options.cek, h: updatedH };
         }
@@ -3766,9 +3819,9 @@ function params(alg) {
 /**
  * @file interface.ts の実装を集約して jws.ts へ提供する。
  */
+const isSigAlg = [isRSAlg, isPSAlg, isESAlg];
+const isMACAlg = [isHSAlg];
 function JWSOpeModeFromAlg(alg) {
-    const isSigAlg = [isRSAlg, isPSAlg, isESAlg];
-    const isMACAlg = [isHSAlg];
     if (isSigAlg.some((f) => f(alg)))
         return 'Sig';
     if (isMACAlg.some((f) => f(alg)))
@@ -4369,15 +4422,12 @@ async function sign(keys, m, h) {
             // Unsecured JWS の場合は、署名値がない。
             return new Uint8Array();
         case 'Sig': {
-            // JOSE Header の alg がデジタル署名の場合
-            // key が秘密鍵かどうか、型ガードを行う
             const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
             if (!isJWK(key, 'Priv'))
                 throw new TypeError('公開鍵で署名しようとしている');
             return newSigOperator(alg).sign(alg, key, input);
         }
         case 'MAC': {
-            // JOSE Header の alg が MAC の場合
             const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
             return newMacOperator(alg).mac(alg, key, input);
         }
@@ -4396,6 +4446,8 @@ async function verify(keys, m, h, s) {
             if (!s)
                 return false;
             const key = identifyJWK(keys, { ...jh, kty: ktyFromAlg(alg) });
+            if (!isJWK(key, 'Pub'))
+                throw new TypeError(`Sig Operator の検証では公開鍵を与えてください`);
             const input = jwsinput(m, h.Protected_b64u());
             return newSigOperator(alg).verify(alg, key, input, s);
         }

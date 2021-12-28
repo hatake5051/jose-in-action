@@ -5,9 +5,11 @@ import { isObject } from 'utility';
 export {
   JWARSAPubKeyParams,
   isJWARSAPubKeyParams,
+  isPartialJWARSAPubKeyParams,
   equalsJWARSAPubKeyParams,
   JWARSAPrivKeyParams,
   isJWARSAPrivKeyParams,
+  isPartialJWARSAPrivKeyParams,
   equalsJWARSAPrivKeyParams,
   exportJWARSAPubKeyParams,
 };
@@ -27,7 +29,8 @@ type JWARSAPubKeyParams = {
    * e parameter は RSA 公開鍵の exponent 値が BASE64URLUint エンコードされている
    */
   e: string;
-};
+} & { _brand: 'JWARSAPubKeyParams' };
+
 const JWARSAPubKeyParamNames = ['n', 'e'] as const;
 
 const isPartialJWARSAPubKeyParams = (arg: unknown): arg is Partial<JWARSAPubKeyParams> =>
@@ -88,7 +91,7 @@ type JWARSAPrivKeyParams = {
    * 値は BASE64URLUint エンコードされている
    */
   qi?: string;
-} & JWARSAPubKeyParams;
+} & Omit<JWARSAPubKeyParams, '_brand'> & { _brand: 'JWARSAPrivKeyParams' };
 
 const JWARSAPrivKeyParamNames = [
   'd',
