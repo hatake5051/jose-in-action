@@ -68,7 +68,7 @@ export function BASE64URL_DECODE(STRING: string) {
     }
     return b;
   } catch (e: unknown) {
-    throw new TypeError(`与えられた文字列 ${STRING} は base64 encoded string ではない`);
+    throw new TypeError(`与えられた文字列 ${STRING} は base64url encoded string ではない`);
   }
 }
 

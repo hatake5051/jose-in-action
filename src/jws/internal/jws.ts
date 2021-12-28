@@ -64,12 +64,13 @@ class JWS {
   ): Promise<JWS> {
     let headerPerRcpt: JWSHeader | [JWSHeader, JWSHeader, ...JWSHeader[]];
     if (Array.isArray(alg)) {
-      if (alg.length < 2) {
+      if (!alg[0] || !alg[1]) {
         throw new TypeError('alg を配列として渡す場合は長さが2以上にしてください');
       }
       if (!options?.header) {
         const h = alg.map((a) => JWSHeader.build(a));
-        headerPerRcpt = [h[0], h[1], ...h.slice(2)];
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        headerPerRcpt = [h[0]!, h[1]!, ...h.slice(2)];
       } else {
         const oh = options.header;
         if (!Array.isArray(oh) || oh.length !== alg.length) {
@@ -78,7 +79,8 @@ class JWS {
           );
         }
         const h = alg.map((a, i) => JWSHeader.build(a, oh[i]));
-        headerPerRcpt = [h[0], h[1], ...h.slice(2)];
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        headerPerRcpt = [h[0]!, h[1]!, ...h.slice(2)];
       }
     } else {
       const oh = options?.header;
@@ -163,10 +165,10 @@ class JWS {
         return JWSJSONSerializer.serialize(this.m, hs) as JWSSerialization<S>;
       }
       case 'json_flat': {
-        if (Array.isArray(this.hs) && this.hs.length > 1) {
-          throw 'Flattened JWS JSON Serialization は複数署名を表現できない';
-        }
         if (Array.isArray(this.hs)) {
+          if (!this.hs[0]) throw new TypeError('JOSE Header が存在していない');
+          if (this.hs[1])
+            throw new TypeError('Flattened JWS JSON Serialization は複数署名を表現できない');
           return JWSFlattenedJSONSerializer.serialize(
             { p_b64u: this.hs[0].header.Protected_b64u(), u: this.hs[0].header.Unprotected() },
             this.m,

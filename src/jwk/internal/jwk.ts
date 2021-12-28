@@ -24,9 +24,12 @@ import {
 export { JWK, isJWK, equalsJWK, exportPubJWK };
 
 /**
- * RFC7517#4
- * JSON Web Key は暗号鍵を表現する JSON オブジェクト。
- * Kty がなんであるか、また非対称暗号鍵の場合は公開鍵か秘密鍵かで具体的な型を指定できる
+ * [仕様]RFC7517#4
+ * JSON Web Key は暗号鍵を表現する JSON オブジェクトである。
+ * JWK には共通パラメータに加えて、鍵の種類ごとに固有のパラメータがある。
+ *
+ * [実装] JWK<鍵の種類（RSAかECか対称鍵か）, 公開鍵か秘密鍵か> を表現
+ * 鍵の種類ごとに固有のパラメータは di.ts にて定義してある。
  */
 type JWK<K extends Kty = Kty, C extends KeyClass = KeyClass> = CommonJWKParams<K> &
   (K extends 'oct'

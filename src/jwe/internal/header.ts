@@ -100,17 +100,12 @@ function JWEHeaderBuilderFromSerializedJWE(
   if (algOne) {
     alg = algOne;
   } else if (algArray) {
-    switch (algArray.length) {
-      case 0:
-        throw new TypeError('JOSEHeader.alg がなかった');
-      case 1: {
-        alg = algArray[0];
-        break;
-      }
-      default: {
-        alg = [algArray[0], algArray[1], ...algArray.slice(2)];
-        break;
-      }
+    if (!algArray[0]) {
+      throw new TypeError('JOSEHeader.alg がなかった');
+    }
+    alg = algArray[0];
+    if (algArray[1]) {
+      alg = [algArray[0], algArray[1], ...algArray.slice(2)];
     }
   } else {
     throw new TypeError('JOSEHeader.alg がなかった');
@@ -487,6 +482,8 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
     }> = alg.map(() => ({ params: {}, paramNames: new Set() }));
 
     options.ru?.forEach((r, i) => {
+      const perRcpti = perRcpt[i];
+      if (!perRcpti) throw new TypeError();
       if (r.initialValue) {
         if (r.paramNames) {
           for (const n of Object.keys(r.initialValue)) {
@@ -497,15 +494,17 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
               );
             }
           }
-          r.paramNames.forEach((n) => perRcpt[i].paramNames.add(n));
+          for (const n of r.paramNames) {
+            perRcpti.paramNames.add(n);
+          }
         } else {
           Object.keys(r.initialValue).forEach((n) => {
-            if (isJOSEHeaderParamName(n)) perRcpt[i].paramNames.add(n);
+            if (isJOSEHeaderParamName(n)) perRcpti.paramNames.add(n);
           });
         }
-        perRcpt[i].params = { ...perRcpt[i].params, ...r.initialValue };
+        perRcpti.params = { ...perRcpti.params, ...r.initialValue };
       } else {
-        r.paramNames?.forEach((n) => perRcpt[i].paramNames.add(n));
+        r.paramNames?.forEach((n) => perRcpti.paramNames.add(n));
       }
     });
 
@@ -528,10 +527,10 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
   }
 
   PerRecipient(recipientIndex?: number): JWEPerRecipientUnprotectedHeader | undefined {
-    const idx = recipientIndex ?? 0;
-    if (idx > this.perRcpt.length) return undefined;
-    const entries = Object.entries(this.perRcpt[idx].params).filter(
-      ([n]) => isJOSEHeaderParamName(n) && this.perRcpt[idx].paramNames.has(n)
+    const perRcpt = this.perRcpt[recipientIndex ?? 0];
+    if (!perRcpt) return undefined;
+    const entries = Object.entries(perRcpt.params).filter(
+      ([n]) => isJOSEHeaderParamName(n) && perRcpt.paramNames.has(n)
     );
     if (entries.length === 0) return undefined;
     return Object.fromEntries(entries) as JWEPerRecipientUnprotectedHeader;
@@ -543,17 +542,17 @@ class JWEHeaderforMultiParties extends JWESharedHeader implements JWEHeader {
 
   update(v: JOSEHeaderParams<'JWE'>, recipientIndex?: number) {
     super.update(v);
-    const idx = recipientIndex ?? 0;
-    if (idx > this.perRcpt.length) return;
+    const perRcpt = this.perRcpt[recipientIndex ?? 0];
+    if (!perRcpt) return;
     Object.entries(v).forEach(([n, vv]) => {
       if (!isJOSEHeaderParamName(n)) return;
-      if (this.perRcpt[idx].paramNames.has(n)) {
-        this.perRcpt[idx].params = { ...this.perRcpt[idx].params, [n]: vv };
+      if (perRcpt.paramNames.has(n)) {
+        perRcpt.params = { ...perRcpt.params, [n]: vv };
       }
       // paramNames で配置場所が指定されていない場合は、 alg と同じ場所
-      if (this.perRcpt[idx].paramNames.has('alg')) {
-        this.perRcpt[idx].params = { ...this.perRcpt[idx].params, [n]: vv };
-        this.perRcpt[idx].paramNames.add(n);
+      if (perRcpt.paramNames.has('alg')) {
+        perRcpt.params = { ...perRcpt.params, [n]: vv };
+        perRcpt.paramNames.add(n);
       }
     });
   }

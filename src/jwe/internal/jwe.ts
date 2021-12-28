@@ -83,7 +83,7 @@ export class JWE {
   ): Promise<JWE> {
     let algPerRcpt: Alg<'JWE'> | [Alg<'JWE'>, Alg<'JWE'>, ...Alg<'JWE'>[]];
     if (Array.isArray(alg)) {
-      if (alg.length < 2) {
+      if (!alg[0] || !alg[1]) {
         throw new TypeError('alg を配列として渡す場合は長さが2以上にしてください');
       }
       algPerRcpt = [alg[0], alg[1], ...alg.slice(2)];
@@ -103,6 +103,7 @@ export class JWE {
       const list = await Promise.all(
         algPerRcpt.map(async (_a, i) => await sendCEK(keys, header.JOSE(i), keyMgmtOpt))
       );
+      if (!list[0]) throw new TypeError();
       // recipient ごとに行った Key Management の整合性チェック
       if (new Set(list.map((e) => e.cek)).size != 1) {
         throw new EvalError(`複数人に対する暗号化で異なる CEK を使おうとしている`);

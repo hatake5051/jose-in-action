@@ -74,10 +74,10 @@ function deserializeCompact(compact: JWECompactSerialization): {
   tag: JWETag;
 } {
   const l = compact.split('.');
-  if (l.length !== 5) {
+  const [h, ek, iv, c, tag] = l;
+  if (h == null || ek == null || iv == null || c == null || tag == null) {
     throw new EvalError('JWS Compact Serialization の形式ではない');
   }
-  const [h, ek, iv, c, tag] = l;
   return {
     p_b64u: h,
     ek: BASE64URL_DECODE(ek) as JWEEncryptedKey,
@@ -182,7 +182,7 @@ function deserializeJSON(json: JWEJSONSerialization): {
   return {
     c: BASE64URL_DECODE(json.ciphertext) as JWECiphertext,
     rcpt:
-      json.recipients.length === 1
+      json.recipients[0] && !json.recipients[1]
         ? {
             h: json.recipients[0].header,
             ek: json.recipients[0].encrypted_key
@@ -246,8 +246,8 @@ function serializeFlattenedJSON(
   return {
     protected: json.protected,
     unprotected: json.unprotected,
-    header: json.recipients[0].header,
-    encrypted_key: json.recipients[0].encrypted_key,
+    header: json.recipients[0]?.header,
+    encrypted_key: json.recipients[0]?.encrypted_key,
     iv: json.iv,
     aad: json.aad,
     ciphertext: json.ciphertext,
@@ -271,7 +271,7 @@ function deserializeFlattenedJSON(flat: JWEFlattenedJSONSerialization): {
   });
   return {
     ...jwe,
-    h: Array.isArray(jwe.rcpt) ? jwe.rcpt[0].h : jwe.rcpt.h,
-    ek: Array.isArray(jwe.rcpt) ? jwe.rcpt[0].ek : jwe.rcpt.ek,
+    h: Array.isArray(jwe.rcpt) ? jwe.rcpt[0]?.h : jwe.rcpt.h,
+    ek: Array.isArray(jwe.rcpt) ? jwe.rcpt[0]?.ek : jwe.rcpt.ek,
   };
 }

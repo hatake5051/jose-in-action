@@ -6,7 +6,8 @@
     "outDir": "./build",
     "moduleResolution": "Node",
     "baseUrl": "./src",
-    "removeComments": false
+    "removeComments": false,
+    "noUncheckedIndexedAccess": true
   },
   "include": ["src/**/*.ts"]
 }

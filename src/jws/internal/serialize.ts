@@ -86,10 +86,11 @@ function deserializeCompact(compact: JWSCompactSerialization): {
   s: JWSSignature;
 } {
   const c = compact.split('.');
-  if (c.length !== 3) {
+
+  const [header, payload, signature] = c;
+  if (header == null || payload == null || signature == null) {
     throw 'JWS Compact Serialization の形式ではない';
   }
-  const [header, payload, signature] = c;
   if (header === '') {
     throw 'JWS Compact Serialization では Protected Header が必須';
   }
@@ -146,7 +147,7 @@ function deserializeJSON(json: JWSJSONSerialization): {
     u: sig.header,
     sig: BASE64URL_DECODE(sig.signature) as JWSSignature,
   }));
-  return { m, hs: hslist.length === 1 ? hslist[0] : hslist };
+  return { m, hs: hslist[0] && !hslist[1] ? hslist[0] : hslist };
 }
 
 function equalsJWSJSONSerialization(l?: JWSJSONSerialization, r?: JWSJSONSerialization): boolean {
